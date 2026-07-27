@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  POS Sales Customers blueprint preset.
+-->
+<odoo noupdate="1">
+    <record id="blueprint_pos_customers" model="dashboard.blueprint">
+        <field name="name">POS Customers</field>
+        <field name="key">pos_customers</field>
+        <field name="host_model_id" ref="base.model_res_partner"/>
+        <field name="module_depends">point_of_sale</field>
+        <field name="menu_name">Customers Dashboard</field>
+        <field name="menu_parent_xmlid">point_of_sale.menu_point_root</field>
+        <field name="primary_button_label">POS Orders</field>
+        <field name="primary_action_xmlid">point_of_sale.action_pos_pos_form</field>
+        <field name="graph_model">pos.order</field>
+        <field name="graph_data_field">partner_id</field>
+        <field name="graph_measure">__count</field>
+        <field name="graph_groupby">date_order:month</field>
+        <field name="graph_caption">POS Orders</field>
+        <field name="state">published</field>
+        <field name="sequence">30</field>
+    </record>
+
+<record id="slot_pos_orders_kpi" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_pos_customers"/>
+        <field name="key">pos_orders</field>
+        <field name="name">POS Orders</field>
+        <field name="section">kpi</field>
+        <field name="sequence">10</field>
+        <field name="label">POS Order</field>
+        <field name="label_plural">POS Orders</field>
+        <field name="compute_model">pos.order</field>
+        <field name="relate_field">partner_id</field>
+        <field name="compute_domain">[('state', '!=', 'cancel')]</field>
+        <field name="action_model">pos.order</field>
+        <field name="action_domain">[('partner_id', '=', '{{id}}')]</field>
+    </record>
+
+<record id="slot_pos_bottom" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_pos_customers"/>
+        <field name="key">bottom_pos</field>
+        <field name="name">POS Orders Button</field>
+        <field name="section">bottom</field>
+        <field name="sequence">10</field>
+        <field name="label">POS Orders</field>
+        <field name="icon">fa-shopping-bag</field>
+        <field name="show_if_zero" eval="True"/>
+        <field name="compute_model">pos.order</field>
+        <field name="relate_field">partner_id</field>
+        <field name="compute_domain">[('state', '!=', 'cancel')]</field>
+        <field name="action_model">pos.order</field>
+        <field name="action_domain">[('partner_id', '=', '{{id}}')]</field>
+        <field name="module_depends">point_of_sale</field>
+    </record>
+</odoo>

@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- POS Customers fill: analysis primary, KPIs, views, reports. -->
+<odoo noupdate="1">
+    <record id="blueprint_pos_customers" model="dashboard.blueprint">
+        <field name="primary_button_label">POS Analysis</field>
+        <field name="primary_action_xmlid">point_of_sale.action_report_pos_order_all</field>
+        <field name="primary_action_domain">[]</field>
+        <field name="graph_model">report.pos.order</field>
+        <field name="graph_data_field">partner_id</field>
+        <field name="graph_measure">price_total:sum</field>
+        <field name="graph_groupby">date:month</field>
+        <field name="graph_caption">POS Sales</field>
+    </record>
+
+    <record id="scope_pos_cust_paid" model="dashboard.blueprint.scope">
+        <field name="blueprint_id" ref="blueprint_pos_customers"/>
+        <field name="sequence">10</field>
+        <field name="name">Paid / Done</field>
+        <field name="mode">include</field>
+        <field name="domain">[('state', 'in', ('paid', 'done'))]</field>
+        <field name="default_on" eval="True"/>
+    </record>
+    <record id="scope_pos_cust_mine" model="dashboard.blueprint.scope">
+        <field name="blueprint_id" ref="blueprint_pos_customers"/>
+        <field name="sequence">20</field>
+        <field name="name">My Orders</field>
+        <field name="mode">restrict</field>
+        <field name="domain">[('user_id', '=', uid)]</field>
+        <field name="default_on" eval="False"/>
+    </record>
+
+    <record id="slot_pos_orders_kpi" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_pos_customers"/>
+        <field name="key">pos_orders</field>
+        <field name="name">POS Orders</field>
+        <field name="section">kpi</field>
+        <field name="sequence">10</field>
+        <field name="label">POS Order</field>
+        <field name="label_plural">POS Orders</field>
+        <field name="compute_model">pos.order</field>
+        <field name="relate_field">partner_id</field>
+        <field name="compute_domain">[('state', '!=', 'cancel')]</field>
+        <field name="action_xmlid">point_of_sale.action_pos_pos_form</field>
+        <field name="action_domain">[('partner_id', '=', '{{id}}')]</field>
+        <field name="module_depends">point_of_sale</field>
+    </record>
+    <record id="slot_pos_kpi_refunds" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_pos_customers"/>
+        <field name="key">pos_refunds</field>
+        <field name="name">Refunds</field>
+        <field name="section">kpi</field>
+        <field name="sequence">20</field>
+        <field name="label">Refund</field>
+        <field name="label_plural">Refunds</field>
+        <field name="compute_model">pos.order</field>
+        <field name="relate_field">partner_id</field>
+        <field name="compute_domain">[('amount_total', '&lt;', 0)]</field>
+        <field name="compute_aggregator">__count</field>
+        <field name="action_xmlid">point_of_sale.action_pos_pos_form</field>
+        <field name="action_domain">[('partner_id', '=', '{{id}}'), ('amount_total', '&lt;', 0)]</field>
+        <field name="module_depends">point_of_sale</field>
+    </record>
+
+    <record id="slot_pos_bottom" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_pos_customers"/>
+        <field name="key">bottom_pos</field>
+        <field name="name">POS Orders Button</field>
+        <field name="section">bottom</field>
+        <field name="sequence">10</field>
+        <field name="label">POS Orders</field>
+        <field name="icon">fa-shopping-bag</field>
+        <field name="show_if_zero" eval="True"/>
+        <field name="compute_model">pos.order</field>
+        <field name="relate_field">partner_id</field>
+        <field name="compute_domain">[('state', '!=', 'cancel')]</field>
+        <field name="action_xmlid">point_of_sale.action_pos_pos_form</field>
+        <field name="action_domain">[('partner_id', '=', '{{id}}')]</field>
+        <field name="module_depends">point_of_sale</field>
+    </record>
+
+    <record id="slot_pos_menu_orders" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_pos_customers"/>
+        <field name="key">view_pos_orders</field>
+        <field name="name">View POS Orders</field>
+        <field name="section">menu_views</field>
+        <field name="sequence">10</field>
+        <field name="label">Orders</field>
+        <field name="show_if_zero" eval="True"/>
+        <field name="action_xmlid">point_of_sale.action_pos_pos_form</field>
+        <field name="action_domain">[('partner_id', '=', '{{id}}')]</field>
+        <field name="module_depends">point_of_sale</field>
+    </record>
+    <record id="slot_pos_menu_report" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_pos_customers"/>
+        <field name="key">report_pos</field>
+        <field name="name">Report POS</field>
+        <field name="section">menu_reports</field>
+        <field name="sequence">10</field>
+        <field name="label">POS</field>
+        <field name="show_if_zero" eval="True"/>
+        <field name="action_xmlid">point_of_sale.action_report_pos_order_all</field>
+        <field name="action_domain">[('partner_id', '=', '{{id}}')]</field>
+        <field name="module_depends">point_of_sale</field>
+    </record>
+</odoo>
