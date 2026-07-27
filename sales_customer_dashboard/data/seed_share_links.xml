@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Sales Customers <-> CRM Customers share pool (Phase A). -->
+<odoo noupdate="1">
+    <record id="blueprint_sales_customers" model="dashboard.blueprint">
+        <field name="share_link_ids" eval="[(6, 0, [
+            ref('crm_customer_dashboard.blueprint_crm_customers'),
+        ])]"/>
+    </record>
+</odoo>

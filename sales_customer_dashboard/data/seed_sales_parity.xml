@@ -1,0 +1,247 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Sales customer dashboard fill from v1 sales_customer_dashboard.
+  Soft-deps hide stock / report_sale_stock / account slots until installed.
+-->
+<odoo noupdate="1">
+    <!-- KPIs -->
+    <record id="slot_sale_to_deliver" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_sales_customers"/>
+        <field name="key">to_deliver</field>
+        <field name="name">To Deliver</field>
+        <field name="section">kpi</field>
+        <field name="sequence">20</field>
+        <field name="label">Order to Deliver</field>
+        <field name="label_plural">Orders to Deliver</field>
+        <field name="compute_model">sale.order</field>
+        <field name="relate_field">partner_id</field>
+        <!--
+          Odoo 19: qty_to_deliver lives on sale.order.line and is non-stored,
+          so it cannot be searched. Use stored sale.order.delivery_status
+          (sale_stock) — matches lines with qty_to_deliver &gt; 0.
+        -->
+        <field name="compute_domain">[('state', '=', 'sale'), ('delivery_status', '!=', 'full')]</field>
+        <field name="compute_aggregator">__count</field>
+        <field name="action_xmlid">sale.action_orders</field>
+        <field name="action_domain">[('state', '=', 'sale'), ('delivery_status', '!=', 'full'), ('partner_id', '=', '{{id}}')]</field>
+        <field name="module_depends">sale,sale_stock</field>
+    </record>
+
+    <record id="slot_sale_to_invoice" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_sales_customers"/>
+        <field name="key">to_invoice</field>
+        <field name="name">To Invoice</field>
+        <field name="section">kpi</field>
+        <field name="sequence">30</field>
+        <field name="label">Order to Invoice</field>
+        <field name="label_plural">Orders to Invoice</field>
+        <field name="compute_model">sale.order</field>
+        <field name="relate_field">partner_id</field>
+        <field name="compute_domain">[('invoice_status', '=', 'to invoice')]</field>
+        <field name="compute_aggregator">__count</field>
+        <field name="action_xmlid">sale.action_orders_to_invoice</field>
+        <field name="action_domain">[('invoice_status', '=', 'to invoice'), ('partner_id', '=', '{{id}}')]</field>
+        <field name="module_depends">sale</field>
+    </record>
+
+    <record id="slot_sale_to_upsell" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_sales_customers"/>
+        <field name="key">to_upsell</field>
+        <field name="name">To Upsell</field>
+        <field name="section">kpi</field>
+        <field name="sequence">40</field>
+        <field name="label">Order to Upsell</field>
+        <field name="label_plural">Orders to Upsell</field>
+        <field name="compute_model">sale.order</field>
+        <field name="relate_field">partner_id</field>
+        <field name="compute_domain">[('invoice_status', '=', 'upselling')]</field>
+        <field name="compute_aggregator">__count</field>
+        <field name="action_xmlid">sale.action_orders_upselling</field>
+        <field name="action_domain">[('invoice_status', '=', 'upselling'), ('partner_id', '=', '{{id}}')]</field>
+        <field name="module_depends">sale</field>
+    </record>
+
+    <!-- Bottom: deliveries (stock) -->
+    <record id="slot_sale_bottom_deliveries" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_sales_customers"/>
+        <field name="key">bottom_deliveries</field>
+        <field name="name">Deliveries Button</field>
+        <field name="section">bottom</field>
+        <field name="sequence">20</field>
+        <field name="label">Transfers</field>
+        <field name="icon">fa-truck</field>
+        <field name="show_if_zero" eval="True"/>
+        <field name="compute_model">stock.picking</field>
+        <field name="relate_field">partner_id</field>
+        <field name="compute_domain">['|', ('picking_type_id.code', '=', 'outgoing'), '&amp;', ('picking_type_id.code', '=', 'incoming'), ('return_id.picking_type_id.code', '=', 'outgoing')]</field>
+        <field name="action_xmlid">stock.action_picking_tree_outgoing</field>
+        <field name="action_domain">[('partner_id', '=', '{{id}}')]</field>
+        <field name="module_depends">sale,stock</field>
+    </record>
+
+    <!-- Top button box: follow-up due / overdue (host monetary fields). -->
+    <record id="slot_sale_box_total_due" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_sales_customers"/>
+        <field name="key">box_total_due</field>
+        <field name="name">Total Due</field>
+        <field name="section">button_box</field>
+        <field name="sequence">10</field>
+        <field name="label">Total Due</field>
+        <field name="icon">fa-list</field>
+        <field name="show_if_zero" eval="True"/>
+        <field name="groups_xmlids">account.group_account_invoice</field>
+        <field name="amount_field">total_due</field>
+        <field name="action_method">open_follow_up_report</field>
+        <field name="module_depends">account_followup,account_reports</field>
+    </record>
+    <record id="slot_sale_box_total_overdue" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_sales_customers"/>
+        <field name="key">box_total_overdue</field>
+        <field name="name">Total Overdue</field>
+        <field name="section">button_box</field>
+        <field name="sequence">20</field>
+        <field name="label">Total Overdue</field>
+        <field name="icon">fa-list</field>
+        <field name="style">danger</field>
+        <field name="show_if_zero" eval="False"/>
+        <field name="groups_xmlids">account.group_account_invoice</field>
+        <field name="amount_field">total_overdue</field>
+        <field name="action_method">open_follow_up_report</field>
+        <field name="module_depends">account_followup,account_reports</field>
+    </record>
+
+    <!-- Bottom: invoiced amount (account host field). -->
+    <record id="slot_sale_bottom_invoiced" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_sales_customers"/>
+        <field name="key">bottom_invoiced</field>
+        <field name="name">Invoiced Button</field>
+        <field name="section">bottom</field>
+        <field name="sequence">30</field>
+        <field name="label">Invoiced</field>
+        <field name="icon">fa-pencil-square-o</field>
+        <field name="show_if_zero" eval="True"/>
+        <field name="groups_xmlids">account.group_account_invoice</field>
+        <field name="amount_field">total_invoiced</field>
+        <field name="action_xmlid">account.action_move_out_invoice_type</field>
+        <field name="action_domain">[('partner_id', 'child_of', '{{id}}'), ('move_type', 'in', ('out_invoice', 'out_refund'))]</field>
+        <field name="action_context">{"default_move_type": "out_invoice", "default_partner_id": {{id}}}</field>
+        <field name="module_depends">sale,account</field>
+    </record>
+
+    <!-- View menus -->
+    <record id="slot_sale_menu_quotations" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_sales_customers"/>
+        <field name="key">view_quotations</field>
+        <field name="name">View Quotations</field>
+        <field name="section">menu_views</field>
+        <field name="sequence">10</field>
+        <field name="label">Quotations</field>
+        <field name="show_if_zero" eval="True"/>
+        <field name="action_xmlid">sale.action_quotations_with_onboarding</field>
+        <field name="action_domain">[('partner_id', '=', '{{id}}')]</field>
+        <field name="module_depends">sale</field>
+    </record>
+
+    <record id="slot_sale_menu_orders" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_sales_customers"/>
+        <field name="key">view_orders</field>
+        <field name="name">View Sales Orders</field>
+        <field name="section">menu_views</field>
+        <field name="sequence">20</field>
+        <field name="label">Sales Orders</field>
+        <field name="show_if_zero" eval="True"/>
+        <field name="action_xmlid">sale.action_orders</field>
+        <field name="action_domain">[('partner_id', '=', '{{id}}')]</field>
+        <field name="module_depends">sale</field>
+    </record>
+
+    <record id="slot_sale_menu_transfers" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_sales_customers"/>
+        <field name="key">view_transfers</field>
+        <field name="name">View Transfers</field>
+        <field name="section">menu_views</field>
+        <field name="sequence">30</field>
+        <field name="label">Transfers</field>
+        <field name="show_if_zero" eval="True"/>
+        <field name="action_xmlid">stock.action_picking_tree_all</field>
+        <field name="action_domain">[('partner_id', '=', '{{id}}'), ('picking_type_id.code', 'in', ('incoming', 'outgoing'))]</field>
+        <field name="module_depends">sale,stock</field>
+    </record>
+
+    <record id="slot_sale_menu_invoices" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_sales_customers"/>
+        <field name="key">view_invoices</field>
+        <field name="name">View Invoices</field>
+        <field name="section">menu_views</field>
+        <field name="sequence">40</field>
+        <field name="label">Invoices</field>
+        <field name="show_if_zero" eval="True"/>
+        <field name="action_xmlid">account.action_move_out_invoice_type</field>
+        <field name="action_domain">[('partner_id', '=', '{{id}}'), ('move_type', '=', 'out_invoice')]</field>
+        <field name="module_depends">sale,account</field>
+    </record>
+
+    <!-- New -->
+    <record id="slot_sale_menu_new_quotation" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_sales_customers"/>
+        <field name="key">new_quotation</field>
+        <field name="name">New Quotation</field>
+        <field name="section">menu_new</field>
+        <field name="sequence">10</field>
+        <field name="label">Quotation</field>
+        <field name="show_if_zero" eval="True"/>
+        <field name="action_xmlid">sale.action_quotations_with_onboarding</field>
+        <field name="action_context">{"default_partner_id": {{id}}}</field>
+        <field name="module_depends">sale</field>
+    </record>
+
+    <!-- Reports (sale analysis — soft enterprise/report modules optional) -->
+    <record id="slot_sale_menu_report_sales" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_sales_customers"/>
+        <field name="key">report_sales</field>
+        <field name="name">Report Sales</field>
+        <field name="section">menu_reports</field>
+        <field name="sequence">10</field>
+        <field name="label">Sales</field>
+        <field name="show_if_zero" eval="True"/>
+        <field name="action_xmlid">sale.action_order_report_all</field>
+        <field name="module_depends">sale</field>
+    </record>
+    <record id="slot_sale_menu_report_quotation" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_sales_customers"/>
+        <field name="key">report_quotation</field>
+        <field name="name">Report Quotation</field>
+        <field name="section">menu_reports</field>
+        <field name="sequence">20</field>
+        <field name="label">Quotation</field>
+        <field name="show_if_zero" eval="True"/>
+        <field name="action_xmlid">sale.action_order_report_all</field>
+        <field name="action_domain">[('partner_id', '=', '{{id}}'), ('state', 'in', ('draft', 'sent'))]</field>
+        <field name="module_depends">sale</field>
+    </record>
+    <record id="slot_sale_menu_report_transfers" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_sales_customers"/>
+        <field name="key">report_transfers</field>
+        <field name="name">Report Transfers</field>
+        <field name="section">menu_reports</field>
+        <field name="sequence">30</field>
+        <field name="label">Transfers</field>
+        <field name="show_if_zero" eval="True"/>
+        <field name="action_xmlid">stock_enterprise.stock_report_action_performance</field>
+        <field name="action_domain">[('partner_id', '=', '{{id}}')]</field>
+        <field name="module_depends">sale,stock,stock_enterprise</field>
+    </record>
+    <record id="slot_sale_menu_report_invoices" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_sales_customers"/>
+        <field name="key">report_invoices</field>
+        <field name="name">Report Invoices</field>
+        <field name="section">menu_reports</field>
+        <field name="sequence">40</field>
+        <field name="label">Invoices</field>
+        <field name="show_if_zero" eval="True"/>
+        <field name="groups_xmlids">account.group_account_invoice</field>
+        <field name="action_xmlid">account.action_account_invoice_report_all</field>
+        <field name="action_domain">[('partner_id', '=', '{{id}}')]</field>
+        <field name="module_depends">sale,account</field>
+    </record>
+</odoo>

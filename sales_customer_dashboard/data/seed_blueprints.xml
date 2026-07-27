@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Sales Customers blueprint preset.
+-->
+<odoo noupdate="1">
+    <record id="blueprint_sales_customers" model="dashboard.blueprint">
+        <field name="name">Sales Customers</field>
+        <field name="key">sales_customers</field>
+        <field name="host_model_id" ref="base.model_res_partner"/>
+        <field name="module_depends">sale</field>
+        <field name="menu_name">Customers Dashboard</field>
+        <field name="menu_parent_xmlid">sale.sale_menu_root</field>
+        <field name="menu_sequence">5</field>
+        <field name="primary_button_label">Sales Analysis</field>
+        <field name="primary_action_xmlid">sale.action_order_report_all</field>
+        <field name="graph_model">sale.report</field>
+        <field name="graph_data_field">partner_id</field>
+        <field name="graph_measure">price_subtotal:sum</field>
+        <field name="graph_groupby">date:month</field>
+        <field name="graph_domain">[]</field>
+        <field name="graph_caption">Sales</field>
+        <field name="state">published</field>
+        <field name="sequence">20</field>
+    </record>
+
+<record id="scope_sale_orders" model="dashboard.blueprint.scope">
+        <field name="blueprint_id" ref="blueprint_sales_customers"/>
+        <field name="sequence">10</field>
+        <field name="name">Sales Orders</field>
+        <field name="mode">include</field>
+        <field name="domain">[('state', 'in', ['sale', 'done'])]</field>
+        <field name="default_on" eval="True"/>
+    </record>
+
+<record id="scope_sale_quotations" model="dashboard.blueprint.scope">
+        <field name="blueprint_id" ref="blueprint_sales_customers"/>
+        <field name="sequence">20</field>
+        <field name="name">Quotations</field>
+        <field name="mode">include</field>
+        <field name="domain">[('state', 'in', ['draft', 'sent'])]</field>
+        <field name="default_on" eval="False"/>
+    </record>
+
+<record id="scope_sale_mine" model="dashboard.blueprint.scope">
+        <field name="blueprint_id" ref="blueprint_sales_customers"/>
+        <field name="sequence">30</field>
+        <field name="name">Only mine</field>
+        <field name="description">Show only sales orders you are responsible for.</field>
+        <field name="mode">restrict</field>
+        <field name="domain">[('user_id', '=', uid)]</field>
+        <field name="default_on" eval="False"/>
+    </record>
+
+<record id="slot_sale_quotations" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_sales_customers"/>
+        <field name="key">quotations</field>
+        <field name="name">Quotations</field>
+        <field name="section">kpi</field>
+        <field name="sequence">10</field>
+        <field name="label">Quotation</field>
+        <field name="label_plural">Quotations</field>
+        <field name="compute_model">sale.order</field>
+        <field name="relate_field">partner_id</field>
+        <field name="compute_domain">[('state', 'in', ('draft', 'sent'))]</field>
+        <field name="compute_aggregator">__count</field>
+        <field name="amount_aggregator">amount_total:sum</field>
+        <field name="action_xmlid">sale.action_quotations_with_onboarding</field>
+        <field name="action_domain">[('state', 'in', ('draft', 'sent')), ('partner_id', '=', '{{id}}')]</field>
+        <field name="visible_if_context">{"in_pos_app": false}</field>
+    </record>
+
+<record id="slot_sale_bottom_orders" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_sales_customers"/>
+        <field name="key">bottom_sales</field>
+        <field name="name">Sales Button</field>
+        <field name="section">bottom</field>
+        <field name="sequence">10</field>
+        <field name="label">Sales</field>
+        <field name="icon">fa-usd</field>
+        <field name="show_if_zero" eval="True"/>
+        <field name="groups_xmlids">sales_team.group_sale_salesman</field>
+        <field name="compute_model">sale.order</field>
+        <field name="relate_field">partner_id</field>
+        <field name="compute_domain">[('state', '!=', 'cancel')]</field>
+        <field name="action_xmlid">sale.act_res_partner_2_sale_order</field>
+        <field name="module_depends">sale,sales_team</field>
+    </record>
+</odoo>
