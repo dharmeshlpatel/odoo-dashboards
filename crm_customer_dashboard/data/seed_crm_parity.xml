@@ -1,0 +1,179 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  CRM-core seed fill from CRM_MIGRATION_AUDIT.md (low-risk, seed-only).
+
+  New xmlids are created on module update even under noupdate. Edits to
+  existing blueprint/condition rows are applied by migrations/19.0.1.0.4.
+-->
+<odoo noupdate="1">
+    <!-- Unassigned leads/opportunities (neutral label: v1 flips Lead/Opportunity by group) -->
+    <record id="condition_crm_unassigned" model="dashboard.condition">
+        <field name="name">Unassigned lead or opportunity</field>
+        <field name="model">crm.lead</field>
+        <field name="match">all</field>
+        <field name="module_depends">crm</field>
+        <field name="note">user_id empty. Type lead/opportunity/False lives on the slot domain (needs OR).</field>
+    </record>
+    <record id="rule_crm_unassigned_user" model="dashboard.condition.rule">
+        <field name="condition_id" ref="condition_crm_unassigned"/>
+        <field name="sequence">10</field>
+        <field name="field_name">user_id</field>
+        <field name="operator">=</field>
+        <field name="value_type">false</field>
+    </record>
+
+    <record id="slot_crm_unassigned" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_crm_customers"/>
+        <field name="key">unassigned</field>
+        <field name="name">Unassigned</field>
+        <field name="section">kpi</field>
+        <field name="sequence">10</field>
+        <!-- Default (no Leads): Opportunity wording; flips when viewer has group_use_lead. -->
+        <field name="label">Unassigned Opportunity</field>
+        <field name="label_plural">Unassigned Opportunities</field>
+        <field name="label_alt">Unassigned Lead</field>
+        <field name="label_plural_alt">Unassigned Leads</field>
+        <field name="label_alt_groups_xmlids">crm.group_use_lead</field>
+        <field name="compute_model">crm.lead</field>
+        <field name="relate_field">partner_id</field>
+        <!-- Prefix OR: (type in lead/opp) OR type empty; user_id empty via condition. -->
+        <field name="compute_domain">['|', ('type', 'in', ('lead', 'opportunity')), ('type', '=', False)]</field>
+        <field name="condition_ids" eval="[(4, ref('condition_crm_unassigned'))]"/>
+        <field name="compute_aggregator">__count</field>
+        <field name="action_xmlid">crm.crm_lead_action_pipeline</field>
+        <!--
+          The badge (compute_domain above, folded up child companies in
+          Python when include_child_records is on) and this click-through both
+          use child_of, so the number always matches what opens.
+          See CRM_MIGRATION_AUDIT.md item 10.
+        -->
+        <field name="action_domain">[('partner_id', 'child_of', '{{id}}')]</field>
+        <field name="action_context">{"search_default_unassigned_leads": 1}</field>
+        <field name="module_depends">crm</field>
+    </record>
+
+    <!--
+      View / New / Reporting: leads gated by crm.group_use_lead.
+      View Leads/Opportunities have no KPI badge, so widening them to a
+      company's child contacts (child_of) is safe: nothing else on the
+      card claims a smaller number for the same click.
+    -->
+    <record id="slot_crm_menu_view_leads" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_crm_customers"/>
+        <field name="key">view_leads</field>
+        <field name="name">View Leads</field>
+        <field name="section">menu_views</field>
+        <field name="sequence">10</field>
+        <field name="label">Leads</field>
+        <field name="show_if_zero" eval="True"/>
+        <field name="groups_xmlids">crm.group_use_lead</field>
+        <field name="action_xmlid">crm.crm_lead_all_leads</field>
+        <field name="action_domain">[('partner_id', 'child_of', '{{id}}')]</field>
+        <field name="module_depends">crm</field>
+    </record>
+
+    <record id="slot_crm_menu_new_lead" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_crm_customers"/>
+        <field name="key">new_lead</field>
+        <field name="name">New Lead</field>
+        <field name="section">menu_new</field>
+        <field name="sequence">10</field>
+        <field name="label">Lead</field>
+        <field name="show_if_zero" eval="True"/>
+        <field name="groups_xmlids">crm.group_use_lead</field>
+        <field name="action_xmlid">report_sale_crm.action_lead_form</field>
+        <field name="action_context">{"default_partner_id": {{id}}, "default_type": "lead"}</field>
+        <field name="module_depends">crm,report_sale_crm</field>
+    </record>
+
+    <record id="slot_crm_menu_new_opportunity" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_crm_customers"/>
+        <field name="key">new_opportunity</field>
+        <field name="name">New Opportunity</field>
+        <field name="section">menu_new</field>
+        <field name="sequence">20</field>
+        <field name="label">Opportunity</field>
+        <field name="show_if_zero" eval="True"/>
+        <field name="action_xmlid">report_sale_crm.action_opportunity_form</field>
+        <field name="action_context">{"default_partner_id": {{id}}, "default_type": "opportunity"}</field>
+        <field name="module_depends">crm,report_sale_crm</field>
+    </record>
+
+    <record id="slot_crm_menu_report_leads" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_crm_customers"/>
+        <field name="key">report_leads</field>
+        <field name="name">Report Leads</field>
+        <field name="section">menu_reports</field>
+        <field name="sequence">10</field>
+        <field name="label">Leads</field>
+        <field name="show_if_zero" eval="True"/>
+        <field name="groups_xmlids">crm.group_use_lead</field>
+        <field name="action_xmlid">crm.crm_opportunity_report_action_lead</field>
+        <field name="module_depends">crm</field>
+    </record>
+
+    <record id="slot_crm_menu_report_opportunities" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_crm_customers"/>
+        <field name="key">report_opportunities</field>
+        <field name="name">Report Opportunities</field>
+        <field name="section">menu_reports</field>
+        <field name="sequence">20</field>
+        <field name="label">Opportunities</field>
+        <field name="show_if_zero" eval="True"/>
+        <field name="action_xmlid">crm.crm_opportunity_report_action</field>
+        <field name="module_depends">crm</field>
+    </record>
+
+    <!-- Enterprise dashboard wins when installed (seeded as variant on the report slot). -->
+    <record id="variant_crm_report_opportunities_enterprise" model="dashboard.blueprint.slot.action.variant">
+        <field name="slot_id" ref="slot_crm_menu_report_opportunities"/>
+        <field name="sequence">10</field>
+        <field name="name">CRM Enterprise dashboard</field>
+        <field name="module_depends">crm_enterprise</field>
+        <field name="action_xmlid">crm_enterprise.crm_opportunity_action_dashboard</field>
+    </record>
+
+    <record id="slot_crm_menu_report_activities" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_crm_customers"/>
+        <field name="key">report_activities</field>
+        <field name="name">Report Activities</field>
+        <field name="section">menu_reports</field>
+        <field name="sequence">30</field>
+        <field name="label">Activities</field>
+        <field name="show_if_zero" eval="True"/>
+        <field name="action_xmlid">crm.crm_activity_report_action</field>
+        <field name="module_depends">crm</field>
+    </record>
+
+    <!-- Meetings: host-field count; domain uses = for m2m ({{id}} must be the whole RHS). -->
+    <record id="slot_crm_bottom_meetings" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_crm_customers"/>
+        <field name="key">bottom_meetings</field>
+        <field name="name">Meetings Button</field>
+        <field name="section">bottom</field>
+        <field name="sequence">20</field>
+        <field name="label">Meetings</field>
+        <field name="icon">fa-calendar</field>
+        <field name="show_if_zero" eval="True"/>
+        <field name="count_field">meeting_count</field>
+        <field name="action_xmlid">calendar.action_calendar_event</field>
+        <field name="action_domain">[('partner_ids', '=', '{{id}}')]</field>
+        <field name="action_context">{"search_default_partner_ids": [{{id}}], "default_partner_ids": [{{id}}], "partner_id": {{id}}}</field>
+        <field name="module_depends">calendar</field>
+    </record>
+
+    <!--
+      All commercial / sale Manage+bottom+stat links are owned by
+      blueprint_sales_customers and pooled via share_link_ids.
+    -->
+
+    <!-- Primary button opens the Enterprise Opportunity dashboard when present. -->
+    <record id="variant_crm_primary_enterprise" model="dashboard.blueprint.action.variant">
+        <field name="blueprint_id" ref="blueprint_crm_customers"/>
+        <field name="sequence">10</field>
+        <field name="name">CRM Enterprise dashboard</field>
+        <field name="module_depends">crm_enterprise</field>
+        <field name="action_xmlid">crm_enterprise.crm_opportunity_action_dashboard</field>
+    </record>
+
+</odoo>
