@@ -1,0 +1,18 @@
+[flake8]
+# Maximum line length
+max-line-length = 79
+
+# Ignore certain errors and warnings
+ignore = E203, E501, W503
+
+# Select the checkers to run
+select = B,C,E,F,W,T4,B9
+
+# Enable extra checking for certain types of errors
+enable-extensions = G
+
+# Set the error format
+format = %(path)s:%(row)d:%(col)d:%(code)s:%(text)s
+
+# Exclude certain files or directories
+exclude = .git,__pycache__,docs/source/conf.py,venv,env,.venv,old,build,dist

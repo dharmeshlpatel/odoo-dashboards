@@ -1,0 +1,33 @@
+name: Lint Code
+
+on: [push, pull_request]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          pip install black===25.1.0 flake8===6.1.0
+
+      - name: Show Black version
+        run: |
+          black --version
+
+      - name: Run Black
+        run: black --check --line-length 79 .
+
+      - name: Show flake8 version
+        run: |
+          flake8 --version
+
+      - name: Run flake8
+        run: flake8 --max-line-length=79
