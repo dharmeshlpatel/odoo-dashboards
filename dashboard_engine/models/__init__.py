@@ -17,4 +17,5 @@ from . import dashboard_mirror  # noqa F401
 from . import dashboard_relation_path  # noqa F401
 from . import dashboard_condition  # noqa F401
 from . import dashboard_blueprint  # noqa F401
+from . import dashboard_blueprint_create_wizard  # noqa F401
 from . import dashboard_blueprint_template  # noqa F401

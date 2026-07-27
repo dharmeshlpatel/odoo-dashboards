@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_dashboard_blueprint_create_wizard_form" model="ir.ui.view">
+        <field name="name">dashboard.blueprint.create.wizard.form</field>
+        <field name="model">dashboard.blueprint.create.wizard</field>
+        <field name="arch" type="xml">
+            <form string="New Dashboard">
+                <group>
+                    <field name="name"/>
+                    <field name="host_model_id" options="{'no_create': True}"/>
+                    <field name="key" placeholder="auto from name"/>
+                    <field name="open_studio"/>
+                </group>
+                <footer>
+                    <button name="action_create" type="object" string="Create"
+                            class="btn-primary" data-hotkey="q"/>
+                    <button string="Cancel" special="cancel" data-hotkey="z"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_dashboard_blueprint_create_wizard" model="ir.actions.act_window">
+        <field name="name">New Dashboard</field>
+        <field name="res_model">dashboard.blueprint.create.wizard</field>
+        <field name="view_mode">form</field>
+        <field name="target">new</field>
+    </record>
+</odoo>

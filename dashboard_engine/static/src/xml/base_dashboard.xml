@@ -4,6 +4,16 @@
     <t t-name="dashboard_engine.ConfigSettingsKanbanView" t-inherit="web.KanbanView" t-inherit-mode="primary">
         <xpath expr="//t[@t-set-slot='control-panel-navigation-additional']/t[@t-component]" position="before">
             <button
+                t-if="canCustomize"
+                type="button"
+                class="btn btn-primary o_button_dashboard_studio me-1"
+                data-tooltip="Customize dashboard"
+                aria-label="Customize dashboard"
+                t-on-click="onClickCustomize"
+            >
+                <i class="fa fa-magic me-1"/>Customize
+            </button>
+            <button
                 type="button"
                 class="btn btn-secondary o_button_config_settings me-1"
                 data-tooltip="Configuration"

@@ -1237,6 +1237,513 @@ class DashboardBlueprint(models.Model):
             rec._sync_generated_artifacts()
         return True
 
+    def action_open_studio(self):
+        """Open Dashboard Studio client action for this blueprint."""
+        self.ensure_one()
+        return {
+            "type": "ir.actions.client",
+            "tag": "dashboard_engine.studio",
+            "name": _("Dashboard Studio"),
+            "params": {"blueprint_id": self.id},
+            "context": {
+                "active_id": self.id,
+                "active_model": self._name,
+            },
+        }
+
+    # ------------------------------------------------------------------
+    # Dashboard Studio — payload + guided writes + catalogs
+    # ------------------------------------------------------------------
+
+    _STUDIO_SLOT_FIELDS = (
+        "id",
+        "key",
+        "name",
+        "section",
+        "sequence",
+        "label",
+        "label_plural",
+        "icon",
+        "style",
+        "show_if_zero",
+        "action_xmlid",
+        "action_method",
+        "action_model",
+        "amount_field",
+        "count_field",
+        "compute_model",
+        "relate_field",
+        "compute_domain",
+        "value_mode",
+        "module_depends",
+    )
+    _STUDIO_SLOT_WRITE_FIELDS = frozenset(
+        {
+            "label",
+            "label_plural",
+            "icon",
+            "style",
+            "show_if_zero",
+            "action_xmlid",
+            "action_method",
+            "action_model",
+            "amount_field",
+            "count_field",
+            "compute_model",
+            "relate_field",
+            "compute_domain",
+            "value_mode",
+            "module_depends",
+            "name",
+            "sequence",
+            "condition_ids",
+        }
+    )
+    _STUDIO_BP_WRITE_FIELDS = frozenset(
+        {
+            "primary_button_label",
+            "primary_action_xmlid",
+            "graph_caption",
+            "graph_measure",
+            "graph_groupby",
+            "header_title_field",
+            "header_image_field",
+        }
+    )
+    _STUDIO_HEADER_WRITE_FIELDS = frozenset(
+        {"sequence", "kind", "icon", "field_names", "separator"}
+    )
+
+    def _studio_slot_dict(self, slot):
+        data = {f: slot[f] for f in self._STUDIO_SLOT_FIELDS}
+        data["condition_ids"] = slot.condition_ids.ids
+        data["condition_names"] = slot.condition_ids.mapped("name")
+        return data
+
+    def get_studio_payload(self):
+        """JSON-friendly snapshot for the Studio OWL client action."""
+        self.ensure_one()
+        slots = [
+            self._studio_slot_dict(slot)
+            for slot in self.slot_ids.sorted(
+                lambda s: (s.section or "", s.sequence, s.id)
+            )
+        ]
+        headers = []
+        for item in self.header_line_ids.sorted("sequence"):
+            headers.append(
+                {
+                    "id": item.id,
+                    "sequence": item.sequence,
+                    "kind": item.kind,
+                    "icon": item.icon or False,
+                    "field_names": item.field_names or "",
+                    "separator": item.separator or False,
+                }
+            )
+        scopes = []
+        for scope in self.scope_ids.sorted("sequence"):
+            scopes.append(
+                {
+                    "id": scope.id,
+                    "name": scope.name,
+                    "mode": scope.mode,
+                    "default_on": scope.default_on,
+                    "sequence": scope.sequence,
+                }
+            )
+        return {
+            "id": self.id,
+            "name": self.name,
+            "key": self.key,
+            "state": self.state,
+            "host_model": self.host_model_name or "",
+            "primary_button_label": self.primary_button_label or "",
+            "primary_action_xmlid": self.primary_action_xmlid or "",
+            "graph_caption": self.graph_caption or "",
+            "graph_model": self.graph_model or "",
+            "graph_measure": self.graph_measure or "",
+            "graph_groupby": self.graph_groupby or "",
+            "header_title_field": self.header_title_field or "",
+            "header_image_field": self.header_image_field or "",
+            "slots": slots,
+            "headers": headers,
+            "scopes": scopes,
+            "advanced_action_xmlid": "dashboard_engine.action_dashboard_blueprint",
+        }
+
+    def studio_write_blueprint(self, vals):
+        """Write a whitelist of blueprint fields from Studio."""
+        self.ensure_one()
+        clean = {
+            key: value
+            for key, value in (vals or {}).items()
+            if key in self._STUDIO_BP_WRITE_FIELDS
+        }
+        if clean:
+            self.write(clean)
+        return self.get_studio_payload()
+
+    def _studio_prepare_slot_vals(self, vals):
+        clean = {}
+        for key, value in (vals or {}).items():
+            if key not in self._STUDIO_SLOT_WRITE_FIELDS:
+                continue
+            if key == "condition_ids":
+                ids = value if isinstance(value, (list, tuple)) else []
+                clean[key] = [(6, 0, [int(i) for i in ids])]
+            else:
+                clean[key] = value
+        return clean
+
+    def studio_write_slot(self, slot_id, vals):
+        self.ensure_one()
+        slot = self.slot_ids.filtered(lambda s: s.id == slot_id)[:1]
+        if not slot:
+            raise UserError(_("Unknown slot on this dashboard."))
+        clean = self._studio_prepare_slot_vals(vals)
+        if clean:
+            slot.write(clean)
+        return self.get_studio_payload()
+
+    def studio_create_slot(self, section, vals=None):
+        self.ensure_one()
+        if section not in dict(SLOT_SECTIONS):
+            raise UserError(_("Unknown card section: %s") % section)
+        vals = dict(vals or {})
+        clean = self._studio_prepare_slot_vals(vals)
+        seq = (
+            max(
+                self.slot_ids.filtered(lambda s: s.section == section).mapped(
+                    "sequence"
+                )
+                or [0]
+            )
+            + 10
+        )
+        key = vals.get("key") or "studio_%s_%s" % (section, seq)
+        label = clean.get("label") or clean.get("name") or _("New item")
+        slot_vals = {
+            "blueprint_id": self.id,
+            "section": section,
+            "sequence": seq,
+            "key": key,
+            "name": clean.get("name") or label,
+            "label": label,
+            "show_if_zero": clean.get("show_if_zero", True),
+            "style": clean.get("style") or "default",
+            "value_mode": clean.get("value_mode") or "count",
+        }
+        # Sensible defaults so Publish does not create a dead KPI/shortcut.
+        if section in ("kpi", "bottom") and not clean.get("compute_model") and not clean.get(
+            "count_field"
+        ):
+            host = self.host_model_name or "res.partner"
+            slot_vals.update(
+                {
+                    "compute_model": host,
+                    "compute_domain": "[]",
+                    "action_model": host,
+                    "label_plural": clean.get("label_plural") or label,
+                    "show_if_zero": True,
+                }
+            )
+        if section == "button_box" and not clean.get("amount_field") and not clean.get(
+            "count_field"
+        ):
+            # Host identity count is a safe placeholder until the admin picks a field.
+            slot_vals["count_field"] = "id"
+            slot_vals["value_mode"] = "count"
+        slot_vals.update(clean)
+        created = self.env["dashboard.blueprint.slot"].create(slot_vals)
+        payload = self.get_studio_payload()
+        payload["created_slot_id"] = created.id
+        return payload
+
+    def studio_unlink_slot(self, slot_id):
+        self.ensure_one()
+        slot = self.slot_ids.filtered(lambda s: s.id == slot_id)[:1]
+        if slot:
+            slot.unlink()
+        return self.get_studio_payload()
+
+    def studio_reorder_slots(self, section, ordered_ids):
+        """Rewrite sequence for slots in ``section`` to match ``ordered_ids``."""
+        self.ensure_one()
+        if section not in dict(SLOT_SECTIONS):
+            raise UserError(_("Unknown card section: %s") % section)
+        ordered_ids = [int(i) for i in (ordered_ids or [])]
+        slots = self.slot_ids.filtered(lambda s: s.section == section)
+        by_id = {s.id: s for s in slots}
+        if set(ordered_ids) != set(by_id):
+            raise UserError(_("Slot list is out of date. Reload Studio and try again."))
+        for index, slot_id in enumerate(ordered_ids):
+            by_id[slot_id].sequence = (index + 1) * 10
+        return self.get_studio_payload()
+
+    def studio_write_header_item(self, item_id, vals):
+        self.ensure_one()
+        item = self.header_line_ids.filtered(lambda h: h.id == item_id)[:1]
+        if not item:
+            raise UserError(_("Unknown header line on this dashboard."))
+        clean = {
+            key: value
+            for key, value in (vals or {}).items()
+            if key in self._STUDIO_HEADER_WRITE_FIELDS
+        }
+        if clean:
+            item.write(clean)
+        return self.get_studio_payload()
+
+    def studio_create_header_item(self, vals=None):
+        self.ensure_one()
+        vals = dict(vals or {})
+        clean = {
+            key: value
+            for key, value in vals.items()
+            if key in self._STUDIO_HEADER_WRITE_FIELDS
+        }
+        seq = max(self.header_line_ids.mapped("sequence") or [0]) + 10
+        created = self.env["dashboard.blueprint.header.item"].create(
+            {
+                "blueprint_id": self.id,
+                "sequence": clean.get("sequence", seq),
+                "kind": clean.get("kind") or "left",
+                "icon": clean.get("icon") or False,
+                "field_names": clean.get("field_names") or "",
+                "separator": clean.get("separator") or False,
+            }
+        )
+        payload = self.get_studio_payload()
+        payload["created_header_id"] = created.id
+        return payload
+
+    def studio_unlink_header_item(self, item_id):
+        self.ensure_one()
+        item = self.header_line_ids.filtered(lambda h: h.id == item_id)[:1]
+        if item:
+            item.unlink()
+        return self.get_studio_payload()
+
+    def studio_reorder_headers(self, ordered_ids):
+        self.ensure_one()
+        ordered_ids = [int(i) for i in (ordered_ids or [])]
+        items = self.header_line_ids
+        by_id = {h.id: h for h in items}
+        if set(ordered_ids) != set(by_id):
+            raise UserError(
+                _("Header list is out of date. Reload Studio and try again.")
+            )
+        for index, item_id in enumerate(ordered_ids):
+            by_id[item_id].sequence = (index + 1) * 10
+        return self.get_studio_payload()
+
+    def studio_write_scope(self, scope_id, vals):
+        self.ensure_one()
+        scope = self.scope_ids.filtered(lambda s: s.id == scope_id)[:1]
+        if not scope:
+            raise UserError(_("Unknown scope on this dashboard."))
+        clean = {}
+        vals = vals or {}
+        if "default_on" in vals:
+            clean["default_on"] = bool(vals.get("default_on"))
+        if "name" in vals and vals.get("name"):
+            clean["name"] = vals["name"]
+        if clean:
+            scope.write(clean)
+        return self.get_studio_payload()
+
+    def studio_search_actions(self, term="", limit=20):
+        """Return window actions for Studio pickers (xmlid + label)."""
+        self.ensure_one()
+        limit = min(int(limit or 20), 50)
+        Action = self.env["ir.actions.act_window"]
+        domain = [("name", "ilike", term or "")]
+        actions = Action.search(domain, limit=limit, order="name")
+        result = []
+        for action in actions:
+            xmlid = action.get_external_id().get(action.id) or ""
+            if not xmlid:
+                continue
+            result.append(
+                {
+                    "id": action.id,
+                    "xmlid": xmlid,
+                    "name": action.display_name or action.name,
+                    "res_model": action.res_model or "",
+                }
+            )
+        return result
+
+    def studio_model_fields(self, model_name=None, ttypes=None):
+        """Field catalog for host / graph / compute model pickers."""
+        self.ensure_one()
+        model_name = model_name or self.host_model_name
+        if not model_name or model_name not in self.env:
+            return []
+        Model = self.env[model_name]
+        wanted = set(ttypes) if ttypes else None
+        fields_meta = Model.fields_get()
+        rows = []
+        for name, meta in fields_meta.items():
+            if name.startswith("_"):
+                continue
+            ttype = meta.get("type")
+            if wanted and ttype not in wanted:
+                continue
+            if meta.get("deprecated"):
+                continue
+            rows.append(
+                {
+                    "name": name,
+                    "string": meta.get("string") or name,
+                    "ttype": ttype,
+                    "relation": meta.get("relation") or False,
+                }
+            )
+        rows.sort(key=lambda r: (r["string"] or "").lower())
+        return rows
+
+    def studio_condition_catalog(self):
+        self.ensure_one()
+        conditions = self.env["dashboard.condition"].search([], order="name")
+        return [{"id": c.id, "name": c.name} for c in conditions]
+
+    def studio_header_icons(self):
+        self.ensure_one()
+        return [{"value": value, "label": label} for value, label in HEADER_ICONS]
+
+    def studio_sample_records(self, term="", limit=20):
+        """Host records for the Studio live preview picker."""
+        self.ensure_one()
+        model_name = self.host_model_name
+        if not model_name or model_name not in self.env:
+            return []
+        limit = min(int(limit or 20), 40)
+        Model = self.env[model_name]
+        if term:
+            return [
+                {"id": row[0], "name": row[1]}
+                for row in Model.name_search(term, operator="ilike", limit=limit)
+            ]
+        records = Model.search([], limit=limit, order="id desc")
+        return [{"id": rec.id, "name": rec.display_name} for rec in records]
+
+    def studio_preview_payload(self, res_id=None):
+        """Live card snapshot for one host record (Wave D)."""
+        self.ensure_one()
+        empty = {
+            "ok": False,
+            "res_id": False,
+            "res_name": "",
+            "title": "",
+            "header_lines": [],
+            "primary_label": self.primary_button_label or "",
+            "graph_caption": self.graph_caption or "",
+            "slots": self._empty_slots_payload(),
+            "graph_bars": [],
+            "graph_type": False,
+            "graph_json": False,
+        }
+        model_name = self.host_model_name
+        if not model_name or model_name not in self.env:
+            return empty
+        Model = self.env[model_name]
+        if res_id:
+            record = Model.browse(int(res_id)).exists()
+        else:
+            record = Model.search([], limit=1, order="id desc")
+        if not record:
+            return empty
+
+        title_field = self.header_title_field or "display_name"
+        title = record.display_name
+        if title_field in record._fields:
+            raw = record[title_field]
+            if isinstance(raw, models.BaseModel):
+                title = raw.display_name
+            elif raw:
+                title = raw
+
+        header_lines = []
+        for item in self.header_line_ids.sorted("sequence"):
+            names = [
+                name.strip()
+                for name in (item.field_names or "").split(",")
+                if name.strip()
+            ]
+            values = []
+            for name in names:
+                if name not in record._fields:
+                    continue
+                raw = record[name]
+                if isinstance(raw, models.BaseModel):
+                    text = raw.display_name if raw else ""
+                else:
+                    text = str(raw) if raw not in (False, None) else ""
+                if text:
+                    values.append(text)
+            sep = item.separator or ", "
+            header_lines.append(
+                {
+                    "id": item.id,
+                    "kind": item.kind,
+                    "icon": item.icon or False,
+                    "text": sep.join(values),
+                }
+            )
+
+        graph_bars = []
+        graph_type = False
+        graph_json = False
+        if self._has_graph():
+            try:
+                payloads = self._build_graph_payloads(record)
+                payload = payloads.get(record.id) or {}
+                graph_type = payload.get("type") or False
+                raw_json = payload.get("json") or ""
+                if raw_json:
+                    graph_json = raw_json if isinstance(raw_json, str) else json.dumps(raw_json)
+                    data = json.loads(raw_json) if isinstance(raw_json, str) else raw_json
+                    values = data.get("values") or data.get("data") or []
+                    if isinstance(values, list):
+                        nums = []
+                        for row in values[:8]:
+                            if isinstance(row, dict):
+                                nums.append(
+                                    float(
+                                        row.get("value")
+                                        or row.get("count")
+                                        or row.get("y")
+                                        or 0
+                                    )
+                                )
+                            elif isinstance(row, (int, float)):
+                                nums.append(float(row))
+                        peak = max(nums) if nums else 0
+                        graph_bars = [
+                            int(round((n / peak) * 100)) if peak else 0 for n in nums
+                        ]
+            except Exception:
+                graph_bars = []
+                graph_json = False
+
+        return {
+            "ok": True,
+            "res_id": record.id,
+            "res_name": record.display_name,
+            "title": title,
+            "header_lines": header_lines,
+            "primary_label": self._resolved_primary_label()
+            or self.primary_button_label
+            or "",
+            "graph_caption": self.graph_caption or "",
+            "slots": self._build_slots_payload(record),
+            "graph_bars": graph_bars,
+            "graph_type": graph_type,
+            "graph_json": graph_json,
+        }
+
     def write(self, vals):
         """Unified Group By is the builder write path; legacy columns mirror it.
 
@@ -2274,6 +2781,14 @@ class DashboardBlueprint(models.Model):
                 "dashboard_engine.action_dashboard_blueprint"
             )
         return blueprint.action_open_settings()
+
+    @api.model
+    def action_open_studio_for_key(self, key):
+        """Open Dashboard Studio for a published dashboard (live kanban entry)."""
+        blueprint = self.search([("key", "=", key)], limit=1)
+        if not blueprint:
+            raise UserError(_("Dashboard not found."))
+        return blueprint.action_open_studio()
 
     def _graph_link_path(self):
         """Multi-hop link info, or falsy for direct / missing links.
