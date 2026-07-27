@@ -1,0 +1,24 @@
+# Black Configuration
+[tool.black]
+# Set line length to 88 characters (default is 88)
+line-length = 79
+
+# Specify the Python versions for compatibility
+target-version = ['py38', 'py39']
+
+# Files or directories to exclude from formatting
+exclude = '''
+/(^|/)\.git/
+/(^|/)\.hg/
+/(^|/)\.mypy_cache/
+/(^|/)\.tox/
+/(^|/)\.venv/
+/(^|/)_build/
+/(^|/)\bbuild/
+/(^|/)\bdist/
+'''
+
+# Files or directories to include for formatting
+include = '''
+\.(py|pyi|pyx|pxd|pxi)$
+'''

@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="module_category_dashboard_engine" model="ir.module.category">
+        <field name="name">Dynamic Dashboard Engine</field>
+        <field name="sequence">35</field>
+    </record>
+
+    <record id="res_groups_privilege_dashboard_engine" model="res.groups.privilege">
+        <field name="name">Dynamic Dashboard Engine</field>
+        <field name="sequence">35</field>
+        <field name="category_id" ref="module_category_dashboard_engine"/>
+    </record>
+
+    <record id="group_dashboard_engine_user" model="res.groups">
+        <field name="name">User</field>
+        <field name="sequence">10</field>
+        <field name="privilege_id" ref="res_groups_privilege_dashboard_engine"/>
+        <field name="implied_ids" eval="[(4, ref('base.group_user'))]"/>
+    </record>
+
+    <record id="group_dashboard_engine_manager" model="res.groups">
+        <field name="name">Administrator</field>
+        <field name="sequence">20</field>
+        <field name="privilege_id" ref="res_groups_privilege_dashboard_engine"/>
+        <field name="implied_ids" eval="[(4, ref('group_dashboard_engine_user'))]"/>
+        <field name="user_ids" eval="[(4, ref('base.user_root')), (4, ref('base.user_admin'))]"/>
+    </record>
+
+    <!--
+      Dashboard settings are personal: everyone edits their own row and
+      nobody else's, administrators included.
+    -->
+    <record id="rule_dashboard_user_pref_own" model="ir.rule">
+        <field name="name">Dashboard settings: own preferences only</field>
+        <field name="model_id" ref="model_dashboard_user_pref"/>
+        <field name="domain_force">[('user_id', '=', user.id)]</field>
+        <field name="global" eval="True"/>
+    </record>
+
+    <!--
+      Internal users may read published blueprints (runtime rendering uses
+      sudo anyway). Drafts stay manager-only so unfinished configs are not
+      browsable from the builder list by regular users.
+    -->
+    <record id="rule_dashboard_blueprint_published_read" model="ir.rule">
+        <field name="name">Dashboard blueprint: published readable</field>
+        <field name="model_id" ref="model_dashboard_blueprint"/>
+        <field name="domain_force">['|', ('state', '=', 'published'), ('create_uid', '=', user.id)]</field>
+        <field name="groups" eval="[(4, ref('base.group_user'))]"/>
+        <field name="perm_read" eval="True"/>
+        <field name="perm_write" eval="False"/>
+        <field name="perm_create" eval="False"/>
+        <field name="perm_unlink" eval="False"/>
+    </record>
+    <record id="rule_dashboard_blueprint_manager_all" model="ir.rule">
+        <field name="name">Dashboard blueprint: manager all</field>
+        <field name="model_id" ref="model_dashboard_blueprint"/>
+        <field name="domain_force">[(1, '=', 1)]</field>
+        <field name="groups" eval="[(4, ref('group_dashboard_engine_manager'))]"/>
+    </record>
+
+    <!--
+      Multi-company (Phase 10): a blueprint with no company_id is a shared
+      template every company's admins may configure; one with a company_id
+      set is only visible to (and editable by) that company's users. Global
+      so it ANDs with both rules above regardless of which one matched —
+      this only ever narrows, never widens, blueprint *configuration*
+      access. Runtime dashboard data safety is unaffected: it is already
+      enforced by the host/graph model's own multi-company record rules
+      (see dashboard_blueprint.py's company_id help text).
+    -->
+    <record id="rule_dashboard_blueprint_multi_company" model="ir.rule">
+        <field name="name">Dashboard blueprint: multi-company</field>
+        <field name="model_id" ref="model_dashboard_blueprint"/>
+        <field name="domain_force">
+            ['|', ('company_id', '=', False), ('company_id', 'in', company_ids)]
+        </field>
+        <field name="global" eval="True"/>
+    </record>
+</odoo>

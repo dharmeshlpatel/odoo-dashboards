@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_dashboard_relation_path_list" model="ir.ui.view">
+        <field name="name">dashboard.relation.path.list</field>
+        <field name="model">dashboard.relation.path</field>
+        <field name="arch" type="xml">
+            <list>
+                <field name="name"/>
+                <field name="source_model_id"/>
+                <field name="target_model_id"/>
+                <field name="domain_field"/>
+                <field name="hop_count"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_dashboard_relation_path_form" model="ir.ui.view">
+        <field name="name">dashboard.relation.path.form</field>
+        <field name="model">dashboard.relation.path</field>
+        <field name="arch" type="xml">
+            <form string="Relation path">
+                <sheet>
+                    <div class="oe_title">
+                        <label for="name"/>
+                        <h1>
+                            <field name="name"
+                                   placeholder="e.g. Order Line → Product → Category"/>
+                        </h1>
+                    </div>
+                    <p class="text-muted">
+                        Each step is a link to one record. Start at the model you
+                        count or chart, and finish at the model shown on the card.
+                        A two-step path such as Product then Category becomes the
+                        filter <code>product_id.categ_id</code>.
+                    </p>
+                    <group>
+                        <group>
+                            <field name="source_model_id" options="{'no_create': True}"/>
+                            <field name="source_model" invisible="1"/>
+                        </group>
+                        <group>
+                            <field name="target_model_id" options="{'no_create': True}"/>
+                            <field name="target_model" invisible="1"/>
+                            <field name="domain_field" readonly="1"/>
+                            <field name="is_direct" invisible="1"/>
+                        </group>
+                    </group>
+                    <field name="hop_ids">
+                        <list editable="bottom">
+                            <field name="sequence" widget="handle"/>
+                            <field name="current_model" column_invisible="1"/>
+                            <field name="field_id"
+                                   options="{'no_create': True}"
+                                   domain="[('model', '=', current_model),
+                                            ('ttype', '=', 'many2one')]"/>
+                        </list>
+                    </field>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_dashboard_relation_path" model="ir.actions.act_window">
+        <field name="name">Relation Paths</field>
+        <field name="res_model">dashboard.relation.path</field>
+        <field name="view_mode">list,form</field>
+    </record>
+</odoo>

@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <menuitem id="menu_dashboard_engine_root"
+              name="Dashboard Engine"
+              web_icon="dashboard_engine,static/description/icon.png"
+              sequence="25"
+              groups="dashboard_engine.group_dashboard_engine_user"/>
+
+    <menuitem id="menu_dashboard_engine_blueprints"
+              name="Blueprints"
+              parent="menu_dashboard_engine_root"
+              action="action_dashboard_blueprint"
+              sequence="10"
+              groups="dashboard_engine.group_dashboard_engine_manager"/>
+
+    <menuitem id="menu_dashboard_engine_relation_paths"
+              name="Relation Paths"
+              parent="menu_dashboard_engine_root"
+              action="action_dashboard_relation_path"
+              sequence="20"
+              active="False"
+              groups="dashboard_engine.group_dashboard_engine_manager"/>
+
+    <menuitem id="menu_dashboard_engine_conditions"
+              name="Conditions"
+              parent="menu_dashboard_engine_root"
+              action="action_dashboard_condition"
+              sequence="30"
+              groups="dashboard_engine.group_dashboard_engine_manager"/>
+
+    <menuitem id="menu_dashboard_engine_import_template"
+              name="Import Template"
+              parent="menu_dashboard_engine_root"
+              action="action_dashboard_blueprint_import_wizard"
+              sequence="40"
+              groups="dashboard_engine.group_dashboard_engine_manager"/>
+</odoo>

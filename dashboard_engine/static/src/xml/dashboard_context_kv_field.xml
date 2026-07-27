@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<templates xml:space="preserve">
+
+    <t t-name="dashboard_engine.DashboardContextKvField">
+        <div class="o_dashboard_context_kv w-100">
+            <t t-if="props.readonly">
+                <t t-foreach="state.rows" t-as="row" t-key="row_index">
+                    <t t-if="row.key">
+                        <div class="text-muted small">
+                            <code t-esc="row.key"/> = <span t-esc="row.value"/>
+                        </div>
+                    </t>
+                </t>
+                <t t-if="!hasContextKeys">
+                    <span class="text-muted">No extra context</span>
+                </t>
+            </t>
+            <t t-else="">
+                <div class="d-flex flex-column gap-1">
+                    <t t-foreach="state.rows" t-as="row" t-key="row_index">
+                        <div class="d-flex align-items-center gap-2">
+                            <input type="text"
+                                   class="o_input flex-grow-1"
+                                   placeholder="Key (e.g. search_default_my)"
+                                   t-att-value="row.key"
+                                   t-on-change="(ev) => this.onKeyInput(row_index, ev)"/>
+                            <input type="text"
+                                   class="o_input flex-grow-1"
+                                   placeholder="Value (card id token allowed)"
+                                   t-att-value="row.value"
+                                   t-on-change="(ev) => this.onValueInput(row_index, ev)"/>
+                            <button type="button"
+                                    class="btn btn-link text-danger p-0"
+                                    title="Remove"
+                                    t-on-click="() => this.removeRow(row_index)">
+                                <i class="fa fa-trash-o"/>
+                            </button>
+                        </div>
+                    </t>
+                    <button type="button" class="btn btn-link btn-sm align-self-start px-0"
+                            t-on-click="() => this.addRow()">
+                        Add context key
+                    </button>
+                </div>
+            </t>
+        </div>
+    </t>
+
+</templates>

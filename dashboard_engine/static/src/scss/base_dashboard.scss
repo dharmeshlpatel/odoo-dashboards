@@ -1,0 +1,1146 @@
+@dashboard-bg-color: white;
+
+// Slot field wrappers are o_field_json (+ o_field_dashboard_slots).
+// Collapse them so buttons/links become flex/grid children of the section
+// (menu columns, button_box, bottom_block) — same pattern for every host model.
+.o-dropdown--kanban-record-menu {
+    .container {
+        div[class*="col-"] {
+            > .o_field_widget[name="dashboard_slots"],
+            > .o_field_widget.o_field_dashboard_slots {
+                display: contents;
+            }
+
+            // Explicit link chrome (works even if display:contents is ignored).
+            .o_dashboard_menu_item {
+                @include o-kanban-dashboard-dropdown-link(
+                    $link-padding-gap: $o-kanban-dashboard-dropdown-complex-gap
+                );
+            }
+        }
+    }
+}
+
+.o_analytic_kanban_dashboard .o_kanban_renderer .o_kanban_record {
+    .oe_button_box,
+    .bottom_block {
+        > .o_field_widget[name="dashboard_slots"],
+        > .o_field_widget.o_field_dashboard_slots {
+            display: contents;
+        }
+    }
+}
+
+.o_analytic_kanban_dashboard .o_kanban_renderer {
+    --KanbanRecord-padding-v: #{$o-kanban-dashboard-vpadding};
+    --KanbanRecord-padding-h: #{$o-kanban-dashboard-hpadding};
+
+    .o_kanban_record {
+        margin-bottom: 0 !important;
+        padding-bottom: 0 !important;
+
+        &:not(.o_kanban_ghost) {
+            min-height: 150px;
+        }
+
+        @include media-breakpoint-up(sm) {
+            button.oe_kanban_action {
+                margin-bottom: 5px;
+            }
+        }
+
+        .container-fluid {
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+
+            .row.mt-auto {
+
+                // margin-bottom: auto;
+                .o_graph_barchart {
+                    margin-bottom: 15px;
+                }
+
+                .o_graph_barchart {
+                    margin-top: 15px;
+                }
+            }
+
+            .row.footer {
+                .oe_button_box {
+                    display: flex;
+                    flex-direction: row;
+
+                    &>* {
+                        flex: 1;
+                    }
+                }
+
+                .o_kanban_primary_bottom {
+                    .oe_kanban_action {
+                        margin-bottom: 0 !important;
+                    }
+                }
+            }
+        }
+
+        .o_dashboard_star {
+            font-size: 12px;
+
+            &.fa-star-o {
+                color: $o-main-color-muted;
+
+                &:hover {
+                    color: gold;
+                }
+            }
+
+            &.fa-star {
+                color: gold;
+            }
+        }
+
+        .o_dashboard_graph {
+            margin-bottom: -$o-horizontal-padding/2;
+        }
+
+        .o_field_widget.o_field_kanban_vat_activity {
+            display: block;
+        }
+    }
+
+    &.o_kanban_ungrouped {
+        @include media-breakpoint-up(sm) {
+            --KanbanRecord-width: 100vw; // Small screens: single column
+        }
+
+        @include media-breakpoint-up(md) {
+            --KanbanRecord-width: 100vw; // Medium screens: single column
+        }
+
+        @include media-breakpoint-up(lg) {
+            --KanbanRecord-width: calc(50% - 16px); // 15-inch (992px+): 2 per row
+        }
+
+        // Custom breakpoint for 1534px and up
+        @media (min-width: 1534px) {
+            --KanbanRecord-width: calc(33.33% - 16px); // 3 columns
+        }
+
+        &:has(> .o_kanban_record:nth-child(12)) {
+
+            // 3 cards per row for large screens if there are more than 5 cards (+ 6 ghost cards)
+            @include media-breakpoint-up(xxl) {
+                --KanbanRecord-width: calc(33.33% - 16px);
+            }
+        }
+    }
+
+    .o_kanban_group {
+        &:not(.o_column_folded) {
+            --KanbanGroup-width: 500px;
+        }
+    }
+
+    // .row.footer {
+    //     bottom: 0px;
+    //     display: flex;
+    //     flex: 0 0 100%;
+    // }
+
+    //@sale-table-spacing: 10px;
+
+    // Button box
+    .oe_button_box {
+        display: flex;
+        flex: 0 0 100%;
+        max-width: 100%;
+        position: relative;
+        width: 100%;
+        padding: 0px !important;
+        //margin-bottom: $o-sheet-vpadding;
+        //margin-top: -$o-sheet-vpadding;
+        //@include o-form-sheet-negative-margin;
+        text-align: right;
+        // Use box-shadow instead of border-bottom because some button boxes are
+        // empty in some cases and we do not want to see a floating border in
+        // that cases.
+        //box-shadow: inset 0 -1px 0 gray('400');
+        border-top: 1px solid gray('400');
+
+        &.o_full .oe_stat_button:not(.o_invisible_modifier)~.oe_stat_button {
+            border-left: 1px solid gray('400');
+        }
+
+        &.o_not_full .oe_stat_button {
+            border-left: 1px solid gray('400');
+        }
+
+        >.btn.oe_stat_button,
+        >.o_dropdown_more {
+            flex: 0 0 auto;
+            width: percentage(1/2); // Adapt the number of visible buttons for each screen width
+
+            @include media-breakpoint-up(md) {
+                width: percentage(1/2);
+            }
+
+            @include media-breakpoint-up(lg) {
+                width: percentage(1/2);
+            }
+
+            @include media-breakpoint-up(xl) {
+                width: percentage(1/2);
+            }
+        }
+
+        .btn.oe_stat_button {
+            border-left: 1px solid gray('400');
+            color: $o-main-text-color;
+            height: $o-statbutton-height;
+            // Use !important to avoid touch_device style
+            padding: 0 $o-statbutton-spacing 0 0 !important; // padding-left will be achieved through margin-left of content
+            text-align: center;
+            white-space: nowrap;
+            background-color: rgba(black, 0.03);
+            opacity: 0.8;
+            border-radius: 0px;
+            margin-bottom: 0; // If the button comes from a field
+
+            &:hover,
+            &:focus {
+                //background-color: rgba(black, 0.03);
+                color: inherit;
+                opacity: 1;
+            }
+
+            >.o_button_icon {
+                margin-left: $o-statbutton-spacing; // To create the button padding left (firefox bug)
+                display: inline-block;
+                vertical-align: middle;
+                line-height: $o-statbutton-height;
+                width: 20%;
+
+                &:before {
+                    font-size: 22px;
+                    vertical-align: middle;
+                }
+            }
+
+            >.o_field_percent_pie {
+                margin-left: $o-statbutton-spacing; // To create the button padding left (firefox bug)
+            }
+
+            // Some buttons only display text without using StatInfo template
+            >span {
+                @include o-text-overflow(block);
+                white-space: normal; // text on several lines if needed
+            }
+
+            >.o_stat_info,
+            >span {
+                // contains the value and text
+                display: inline-block;
+                vertical-align: middle;
+                font-weight: 500;
+
+                max-width: 70%;
+                padding-right: $o-statbutton-spacing;
+                line-height: 1.3;
+
+                >.o_stat_value,
+                >.o_stat_text {
+                    @include o-text-overflow(block);
+                    text-align: left !important;
+                }
+
+                .o_stat_value {
+                    font-weight: 700;
+                    color: $o-brand-odoo;
+                    line-height: 1.2;
+                }
+
+                .o_stat_text {
+                    line-height: 1.2;
+                }
+            }
+
+            &:not(:hover) .o_stat_info>.o_hover {
+                display: none !important;
+            }
+
+            &:hover .o_stat_info>.o_not_hover {
+                display: none !important
+            }
+
+            &.o_button_more {
+                text-align: center;
+
+                &:after {
+                    margin-left: 5px;
+                    @include o-caret-down;
+                }
+
+                &[aria-expanded="true"]:after {
+                    margin-left: 5px;
+                    @include o-caret-up;
+                }
+            }
+        }
+
+        >.o_dropdown_more {
+            @include o-position-absolute(100%, 0);
+            min-width: 0;
+            border: none;
+            border: 1px solid gray('300');
+            margin: 0;
+            padding: 0;
+
+            @include media-breakpoint-down(sm) {
+                // avoid b4 drowdown inline style
+                position: relative !important;
+                transform: none !important;
+                will-change: inherit !important;
+                margin-bottom: 20px;
+                width: 100%;
+                border-width: 0px;
+            }
+
+            >.btn.oe_stat_button {
+                width: 100%;
+                border: none;
+                border-bottom: 1px solid gray('300');
+
+                @include media-breakpoint-down(sm) {
+                    display: inline-block;
+                    width: percentage(1/3);
+                }
+            }
+        }
+
+        @mixin dropdownButtonsFix {
+            .btn.oe_stat_button.dropdown-item {
+                height: 44px !important;
+                padding: 5px 0 5px 0 !important;
+                border-left: none !important;
+
+                >.o_button_icon {
+                    line-height: normal;
+                }
+            }
+        }
+
+        // IE 11 only
+        @media all and (-ms-high-contrast:none) {
+            @include dropdownButtonsFix
+        }
+
+        // Edge only
+        @supports (display:-ms-grid) {
+            @include dropdownButtonsFix
+        }
+    }
+
+    // .o_kanban_card_header {
+    //     min-height: 63px;
+    // }
+
+    // .o_kanban_primary_bottom {
+    //     margin-top: 0px !important;
+    // }
+
+    .o_kanban_record_has_image_fill {
+        display: -webkit-box;
+        display: -webkit-flex;
+        display: flex;
+    }
+
+    // Card Styling Improvements
+    .o_kanban_record {
+        transition: transform 0.2s ease;
+
+        .dashboard_kanban_title {
+            font-size: 18px !important;
+            color: rgba(var(--link-color-rgb), var(--link-opacity, 1));
+            line-height: 1.2;
+            margin-bottom: 2px;
+        }
+
+        .dashboard_contact_info {
+            font-size: 12px !important;
+            opacity: 0.8;
+            font-weight: 500;
+            text-align: left;
+
+            i {
+                color: #714B67;
+                width: auto !important;
+                margin-right: 4px !important;
+                text-align: left;
+            }
+        }
+
+        .dashboard_tag_container {
+            .o_tag {
+                padding: 4px 12px !important;
+                border-radius: 12px !important;
+                font-weight: 600;
+                font-size: 11px;
+            }
+        }
+
+        .dashboard_kanban_image_container {
+            width: 92px !important;
+            height: 92px !important;
+            min-width: 92px !important;
+            min-height: 92px !important;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: visible;
+
+            .border-info {
+                --border-opacity: 1;
+                border: var(--border-width) var(--border-style) var(--border-color) !important;
+            }
+
+            .dashboard_kanban_image {
+                max-width: 100%;
+                max-height: 100%;
+                width: auto;
+                height: auto;
+                object-fit: contain;
+            }
+        }
+    }
+
+    &.o_kanban_ungrouped {
+        @include media-breakpoint-up(md) {
+            --KanbanRecord-width: 100% !important; // Tablet: 1 column
+        }
+
+        @include media-breakpoint-up(lg) {
+            --KanbanRecord-width: calc(50% - 16px) !important; // Desktop: 2 columns
+        }
+
+        @include media-breakpoint-up(xl) {
+            --KanbanRecord-width: calc(50% - 16px) !important; // XL: 2 columns
+        }
+
+        @include media-breakpoint-up(xxl) {
+            --KanbanRecord-width: calc(50% - 16px) !important; // XXL: 2 columns
+        }
+    }
+
+    .oe_button_box {
+        background-color: #f8f9fa;
+        border-top: 1px solid #e9ecef;
+        padding: 5px 0;
+        display: flex;
+        flex-wrap: wrap;
+
+        .btn.oe_stat_button {
+            flex: 1 1 0;
+            background: transparent !important;
+            border: none !important;
+            border-left: 1px solid #dee2e6 !important;
+            opacity: 1 !important;
+            padding: 8px 15px !important;
+            height: auto !important;
+            min-height: 44px;
+
+            &:first-child {
+                border-left: none !important;
+            }
+
+            .o_button_icon {
+                color: #714B67 !important;
+                font-size: 18px !important;
+                margin-right: 8px;
+            }
+
+            .o_stat_info {
+                .o_stat_text {
+                    text-transform: uppercase;
+                    font-size: 10px;
+                    letter-spacing: 0.5px;
+                    color: #6c757d;
+                    font-weight: 600;
+                }
+
+                .o_stat_value {
+                    color: #212529 !important;
+                    font-size: 14px;
+                    font-weight: 700;
+                }
+            }
+        }
+    }
+
+    &.o_kanban_grouped {
+        .o_kanban_record {
+            width: 100% !important;
+            min-width: 100% !important;
+
+            .bottom_block {
+                flex-wrap: wrap;
+
+                .btn {
+                    flex: 0 0 50%;
+                    border-bottom: 1px solid rgba(255, 255, 255, 0.15) !important;
+                    justify-content: center !important;
+
+                    &:nth-child(odd) {
+                        border-left: none !important;
+                    }
+
+                    &:nth-child(even) {
+                        border-left: 1px solid rgba(255, 255, 255, 0.15) !important;
+                    }
+
+                    // If the last child is odd, make it full width and centered
+                    &:last-child:nth-child(odd) {
+                        flex: 0 0 100% !important;
+                        border-left: none !important;
+                    }
+                }
+            }
+        }
+    }
+
+    .bottom_block {
+        display: flex;
+        flex: 0 0 100%;
+        max-width: 100%;
+        position: relative;
+        width: 100%;
+        padding: 0px !important;
+        background-color: #714B67;
+        border-radius: 0px !important; // Remove round shape from bottom
+        overflow: hidden;
+
+        .btn {
+            flex: 1 1 0;
+            display: flex !important;
+            flex-direction: row !important;
+            align-items: center;
+            justify-content: center !important;
+            padding: 8px 5px !important;
+            background-color: transparent !important;
+            border: none !important;
+            border-left: 1px solid rgba(255, 255, 255, 0.15) !important;
+            color: white !important;
+            border-radius: 0 !important;
+            box-shadow: none !important;
+            min-height: 48px;
+            transition: background-color 0.2s ease;
+
+            &:first-child {
+                border-left: none !important;
+            }
+
+            &:hover {
+                background-color: rgba(255, 255, 255, 0.1) !important;
+            }
+
+            .o_button_icon {
+                font-size: 18px;
+                width: 24px !important;
+                text-align: center;
+                margin-right: 8px;
+                color: white !important;
+                opacity: 0.9;
+            }
+
+            .o_stat_info {
+                display: flex;
+                flex-direction: column;
+                align-items: flex-start;
+                justify-content: center;
+                text-align: left;
+                line-height: 1.2;
+
+                .o_stat_text {
+                    font-size: 13px;
+                    font-weight: 600;
+                    color: rgba(255, 255, 255, 0.95) !important;
+                    text-transform: capitalize;
+                    white-space: nowrap;
+                }
+
+                .o_stat_value {
+                    font-size: 13px;
+                    font-weight: 800;
+                    color: white !important;
+                    margin-top: -1px;
+                }
+            }
+        }
+    }
+}
+
+// Style for the widget "dashboard_graph"
+.o_dashboard_graph {
+    position: relative;
+    margin: 16px -16px;
+
+    canvas {
+        height: 250px !important;
+    }
+}
+
+.o_image_50_cover {
+    width: 50px;
+    height: 50px;
+    object-fit: cover;
+}
+
+// .o_kanban_view.o_kanban_dashboard.o_analytic_kanban_dashboard {
+//     @sale-table-spacing: 10px;
+
+//     // Button box
+//     .oe_button_box {
+//         display: flex;
+//         flex: 0 0 100%;
+//         max-width: 100%;
+//         position: relative;
+//         width: 100%;
+//         padding: 0px !important;
+//         //margin-bottom: $o-sheet-vpadding;
+//         //margin-top: -$o-sheet-vpadding;
+//         //@include o-form-sheet-negative-margin;
+//         text-align: right;
+//         // Use box-shadow instead of border-bottom because some button boxes are
+//         // empty in some cases and we do not want to see a floating border in
+//         // that cases.
+//         //box-shadow: inset 0 -1px 0 gray('400');
+//         border-top: 1px solid gray('400');
+
+//         &.o_full .oe_stat_button:not(.o_invisible_modifier)~.oe_stat_button {
+//             border-left: 1px solid gray('400');
+//         }
+
+//         &.o_not_full .oe_stat_button {
+//             border-left: 1px solid gray('400');
+//         }
+
+//         >.btn.oe_stat_button,
+//         >.o_dropdown_more {
+//             flex: 0 0 auto;
+//             width: percentage(1/2); // Adapt the number of visible buttons for each screen width
+
+//             @include media-breakpoint-up(md) {
+//                 width: percentage(1/2);
+//             }
+
+//             @include media-breakpoint-up(lg) {
+//                 width: percentage(1/2);
+//             }
+
+//             @include media-breakpoint-up(xl) {
+//                 width: percentage(1/2);
+//             }
+//         }
+
+//         .btn.oe_stat_button {
+//             border-left: 1px solid gray('400');
+//             color: $o-main-text-color;
+//             height: $o-statbutton-height;
+//             // Use !important to avoid touch_device style
+//             padding: 0 $o-statbutton-spacing 0 0 !important; // padding-left will be achieved through margin-left of content
+//             text-align: center;
+//             white-space: nowrap;
+//             background-color: rgba(black, 0.03);
+//             opacity: 0.8;
+//             border-radius: 0px;
+//             margin-bottom: 0; // If the button comes from a field
+
+//             &:hover,
+//             &:focus {
+//                 //background-color: rgba(black, 0.03);
+//                 color: inherit;
+//                 opacity: 1;
+//             }
+
+//             >.o_button_icon {
+//                 margin-left: $o-statbutton-spacing; // To create the button padding left (firefox bug)
+//                 display: inline-block;
+//                 vertical-align: middle;
+//                 line-height: $o-statbutton-height;
+//                 width: 10%;
+
+//                 &:before {
+//                     font-size: 22px;
+//                     vertical-align: middle;
+//                 }
+//             }
+
+//             >.o_field_percent_pie {
+//                 margin-left: $o-statbutton-spacing; // To create the button padding left (firefox bug)
+//             }
+
+//             // Some buttons only display text without using StatInfo template
+//             >span {
+//                 @include o-text-overflow(block);
+//                 white-space: normal; // text on several lines if needed
+//             }
+
+//             >.o_stat_info,
+//             >span {
+//                 // contains the value and text
+//                 display: inline-block;
+//                 vertical-align: middle;
+//                 font-weight: 500;
+
+//                 max-width: 70%;
+//                 padding-right: $o-statbutton-spacing;
+//                 line-height: 1.3;
+
+//                 >.o_stat_value,
+//                 >.o_stat_text {
+//                     @include o-text-overflow(block);
+//                     text-align: left !important;
+//                 }
+
+//                 .o_stat_value {
+//                     font-weight: 700;
+//                     color: $o-brand-odoo;
+//                     line-height: 1.2;
+//                 }
+
+//                 .o_stat_text {
+//                     line-height: 1.2;
+//                 }
+//             }
+
+//             &:not(:hover) .o_stat_info>.o_hover {
+//                 display: none !important;
+//             }
+
+//             &:hover .o_stat_info>.o_not_hover {
+//                 display: none !important
+//             }
+
+//             &.o_button_more {
+//                 text-align: center;
+
+//                 &:after {
+//                     margin-left: 5px;
+//                     @include o-caret-down;
+//                 }
+
+//                 &[aria-expanded="true"]:after {
+//                     margin-left: 5px;
+//                     @include o-caret-up;
+//                 }
+//             }
+//         }
+
+//         >.o_dropdown_more {
+//             @include o-position-absolute(100%, 0);
+//             min-width: 0;
+//             border: none;
+//             border: 1px solid gray('300');
+//             margin: 0;
+//             padding: 0;
+
+//             @include media-breakpoint-down(sm) {
+//                 // avoid b4 drowdown inline style
+//                 position: relative !important;
+//                 transform: none !important;
+//                 will-change: inherit !important;
+//                 margin-bottom: 20px;
+//                 width: 100%;
+//                 border-width: 0px;
+//             }
+
+//             >.btn.oe_stat_button {
+//                 width: 100%;
+//                 border: none;
+//                 border-bottom: 1px solid gray('300');
+
+//                 @include media-breakpoint-down(sm) {
+//                     display: inline-block;
+//                     width: percentage(1/3);
+//                 }
+//             }
+//         }
+
+//         @mixin dropdownButtonsFix {
+//             .btn.oe_stat_button.dropdown-item {
+//                 height: 44px !important;
+//                 padding: 5px 0 5px 0 !important;
+//                 border-left: none !important;
+
+//                 >.o_button_icon {
+//                     line-height: normal;
+//                 }
+//             }
+//         }
+
+//         // IE 11 only
+//         @media all and (-ms-high-contrast:none) {
+//             @include dropdownButtonsFix
+//         }
+
+//         // Edge only
+//         @supports (display:-ms-grid) {
+//             @include dropdownButtonsFix
+//         }
+//     }
+
+//     .o_kanban_card_header {
+//         min-height: 63px;
+//     }
+
+//     .o_kanban_primary_bottom {
+//         margin-top: 0px !important;
+//     }
+
+//     .o_kanban_record_has_image_fill {
+//         display: -webkit-box;
+//         display: -webkit-flex;
+//         display: flex;
+//     }
+
+//     .bottom_block {
+//         display: flex;
+//         flex: 0 0 100%;
+//         max-width: 100%;
+//         position: relative;
+//         width: 100%;
+//         padding: 0px !important;
+//     }
+
+//     .bottom_block .btn-primary {
+//         display: grid;
+//         width: 100%;
+//         max-width: 100%;
+//         border-left: 1px solid gray('300');
+//     }
+
+//     .bottom_block .btn {
+//         border-radius: 0px;
+//     }
+
+//     .bottom_block .btn-primary .badge {
+//         font-size: 100%;
+//         font-weight: 600;
+//     }
+
+//     .bottom_block .btn-primary .badge-pill {
+//         padding-left: 0;
+//     }
+
+//     .o_media_object {
+//         width: 46px;
+//         height: 46px;
+//         min-width: 46px;
+//         min-height: 46px;
+//         border: 2px solid $o-brand-primary;
+//         box-shadow: inset 0 0 0 2px white;
+//         display: block !important;
+//         margin-right: 4.6px;
+//         background-size: cover;
+//         background-position: center center;
+//         background-color: white;
+//     }
+
+//     .o_text_overflow {
+//         max-width: 100%;
+//         white-space: nowrap;
+//         overflow: hidden;
+//         text-overflow: ellipsis;
+//         vertical-align: baseline;
+//         display: inline;
+//     }
+
+//     .o_kanban_record {
+//         .o_analytic_kanban_graph_section {
+//             .o_graph_linechart {
+//                 >svg {
+//                     height: 80px;
+
+//                     // X axis
+//                     g.nv-x.nv-axis {
+//                         // move the labels up, so they aren't hidden below the graph, and the lines back down.
+//                         transform: translateY(50px);
+
+//                         line {
+//                             transform: translateY(30px);
+//                         }
+
+//                         .nv-axislabel {
+//                             transform: translateY(-78px);
+//                             font-weight: bold;
+//                         }
+
+//                         // Remove max and min labels
+//                         g.nv-axisMaxMin {
+//                             display: none;
+//                         }
+
+//                         g.tick.major {
+//                             // Don't know why, but leads to strange bold text
+//                             // stroke: @odoo-brand-primary;
+
+//                             line {
+//                                 display: none;
+//                             }
+//                         }
+//                     }
+
+//                     // !important are needed because nvd3 uses inline style on elements
+
+//                     // Remove strokes
+//                     g.nv-linesWrap {
+//                         g.nv-group.nv-series-0 {
+//                             fill-opacity: 0.3 !important;
+
+//                             .nv-point {
+//                                 visibility: hidden;
+//                                 r: 3;
+//                                 fill: white;
+//                                 stroke-width: 2;
+//                             }
+//                         }
+//                     }
+//                 }
+//             }
+
+//             .o_graph_barchart {
+//                 >svg {
+//                     height: 95px;
+//                     overflow: visible;
+//                 }
+//             }
+//         }
+//     }
+
+//     &.o_kanban_ungrouped {
+//         .o_kanban_record {
+//             width: 459px;
+//         }
+//     }
+
+//     .o_kanban_group:not(.o_column_folded) {
+//         width: 570px;
+//     }
+// }
+
+// Styling for the new graph toolbar and buttons
+.o_analytic_dashboard_graph {
+    position: relative;
+    padding-top: 5px;
+
+    .o_analytic_graph_toolbar {
+        position: relative;
+        display: flex;
+        justify-content: flex-start;
+        padding: 6px 0;
+        margin-bottom: 8px;
+        z-index: 100;
+        gap: 12px; // Clear gap between groups
+        min-height: 32px;
+        
+        .btn-group {
+            background: transparent;
+            border: none;
+            padding: 0;
+            display: flex;
+            gap: 4px; // Gap between buttons within a group
+
+            .btn {
+                border: 1px solid #dee2e6;
+                background: #f8f9fa; // Individual button background
+                color: #212529; // Dark icon color
+                padding: 4px 10px;
+                font-size: 11px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                transition: all 0.1s ease;
+                border-radius: 4px;
+                height: 28px;
+                min-width: 32px;
+                
+                &:hover {
+                    background: #e9ecef;
+                    border-color: #ced4da;
+                }
+                
+                &.active {
+                    background: #e5f3f2 !important;
+                    border: 1px solid #017e84 !important;
+                    color: #212529 !important; // Icon color stays dark
+                    box-shadow: none !important;
+                    
+                    i {
+                        color: #212529 !important; // Force dark icon
+                    }
+                }
+                
+                & + .btn {
+                    margin-left: 0; // Handled by gap
+                }
+
+                i {
+                    font-size: 13px;
+                }
+            }
+        }
+    }
+
+    .o_graph_canvas_container {
+        height: 250px;
+        position: relative;
+    }
+}
+
+// Phase 9 (lazy-graph UX): transient placeholder shown while a card's chart
+// is off-screen and Chart.js hasn't been instantiated yet (see
+// AnalyticDashboardGraphField._setupLazyRender in basic_fields.js). A subtle
+// pulse hints that something is still loading, unlike the static EmptyGraph
+// (genuinely no data — same markup, no animation).
+.o_dashboard_graph_skeleton {
+    animation: o_dashboard_graph_skeleton_pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes o_dashboard_graph_skeleton_pulse {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.5;
+    }
+}
+
+// Journal-faithful polish + engine widgets
+.o_analytic_kanban_dashboard {
+    .o_analytic_graph_toolbar {
+        display: none !important;
+    }
+
+    .o_analytic_graph_caption {
+        letter-spacing: 0.04em;
+        font-size: 0.7rem !important;
+    }
+
+    .o_kanban_record [name="kanban_primary_right"] {
+        .row {
+            margin-bottom: 0.15rem;
+            align-items: baseline;
+
+            .col-auto {
+                font-variant-numeric: tabular-nums;
+            }
+        }
+
+        .o_dashboard_kpi_danger a,
+        .o_dashboard_kpi_danger .fw-bold {
+            color: var(--danger) !important;
+        }
+    }
+
+    .bottom_block .o_dashboard_stat_danger,
+    .oe_button_box .o_dashboard_stat_danger {
+        .o_button_icon,
+        .o_stat_text,
+        .o_stat_value {
+            color: var(--danger) !important;
+        }
+    }
+
+    .dashboard_kanban_title {
+        font-size: 1.25rem !important;
+        color: var(--body-color) !important;
+        line-height: 1.25;
+        margin-bottom: 2px;
+    }
+}
+
+.o_control_panel .o_button_config_settings {
+    padding: 0.25rem 0.5rem;
+
+    .fa-cog {
+        margin: 0;
+    }
+}
+
+/* Blueprint form sections — do NOT reuse `.o_setting_container` here:
+   that class is owned by the settings app and applies flex:1 to every
+   child, which wrecks embedded list column widths. */
+.o_dashboard_blueprint_section {
+    margin-bottom: 1.25rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--border-color, #dee2e6);
+
+    &:last-child {
+        border-bottom: 0;
+    }
+
+    h4 {
+        margin-bottom: 0.35rem;
+    }
+
+}
+
+// Notebook pages apply `margin-top: -$o-horizontal-padding` to the first
+// x2many list so it hugs the tabs. Our section has help text above the
+// list, so cancel that pull-up (match Odoo form specificity).
+.o_form_view .o_notebook > .tab-content > .tab-pane
+> .o_dashboard_blueprint_section:first-child
+.o_field_x2many.o_field_x2many_list .o_list_renderer {
+    margin-top: 0;
+}
+
+/* Gear popup: settings-style chrome closer to the hand-written v1 form. */
+.o_dashboard_engine_settings {
+    .o_setting_container {
+        margin-bottom: 1.25rem;
+        padding-bottom: 0.5rem;
+        border-bottom: 1px solid var(--border-color, #dee2e6);
+
+        &:last-child {
+            border-bottom: 0;
+        }
+
+        h4 {
+            margin-bottom: 0.35rem;
+        }
+
+        .o_field_widget {
+            max-width: 100%;
+        }
+    }
+
+    .o_dashboard_engine_setting_help {
+        color: var(--text-muted, #6c757d);
+        font-size: 0.875rem;
+        margin-bottom: 0.5rem;
+    }
+
+    .o_field_many2many_checkboxes {
+        .form-check {
+            margin-bottom: 0.35rem;
+        }
+    }
+
+    // Scope tick boxes: reuse stock `.o_setting_*` panes (see web's
+    // setting.scss — the single separator is already `border-left` on
+    // `.o_setting_right_pane`). Do NOT add a second border on the left
+    // pane or you get the double grey rule.
+    .o_dashboard_scope_checkboxes {
+        .o_setting_box {
+            .o_setting_right_pane {
+                cursor: pointer;
+
+                .o_form_label {
+                    font-weight: 700;
+                    margin-bottom: 0;
+                    cursor: pointer;
+                }
+            }
+        }
+    }
+}

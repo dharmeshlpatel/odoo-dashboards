@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<templates xml:space="preserve">
+
+    <t t-name="dashboard_engine.TreeEditor.RelativeDateValue">
+        <div class="d-flex flex-column gap-2">
+            <select class="o_input pe-3 text-truncate" t-on-change="(ev) => this.onTypeChange(ev)">
+                <t t-foreach="constructor.options" t-as="option" t-key="option[0]">
+                    <option class="text-black"
+                            t-att-value="option[0]"
+                            t-att-selected="option[0] === valueType"
+                            t-esc="option[1]"/>
+                </t>
+            </select>
+            <t t-if="valueType === 'custom date'">
+                <DateTimeInput
+                    value="dateValue"
+                    type="props.fieldType"
+                    onApply.bind="onDateApply"
+                />
+            </t>
+        </div>
+    </t>
+
+</templates>

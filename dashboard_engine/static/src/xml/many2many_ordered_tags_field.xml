@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+
+    <t t-name="dashboard_engine.Many2ManyOrderedTagsField">
+        <div
+            class="o_field_tags o_field_many2many_ordered_tags d-inline-flex flex-wrap align-items-center mw-100"
+            t-att-class="{'o_tags_input o_input': !props.readonly}"
+            t-ref="many2ManyTagsField"
+        >
+            <t t-foreach="displayItems" t-as="item" t-key="item.key">
+                <em
+                    t-if="item.type === 'sep'"
+                    class="o_ordered_m2m_sep o_facet_values_sep small fw-bold mx-1 opacity-50 user-select-none"
+                    t-esc="item.text"
+                />
+                <TagsList t-else="" tags="item.tags"/>
+            </t>
+            <div t-if="showM2OSelectionField" class="o_field_many2many_selection d-inline-flex w-100" t-ref="autoComplete">
+                <Many2XAutocomplete
+                    id="props.id"
+                    placeholder="tags.length ? '' : props.placeholder"
+                    resModel="relation"
+                    autoSelect="true"
+                    fieldString="string"
+                    activeActions="activeActions"
+                    update="update"
+                    quickCreate="activeActions.create ? quickCreate : null"
+                    context="props.context"
+                    getDomain.bind="getDomain"
+                    isToMany="true"
+                    nameCreateField="props.nameCreateField"
+                    searchThreshold="props.searchThreshold"
+                >
+                    <t t-set-slot="autoCompleteItem" t-slot-scope="autoCompleteItemScope">
+                        <span t-att-class="{ 'fw-bold': isSelected(autoCompleteItemScope.record) }">
+                            <span t-out="autoCompleteItemScope.label"/>
+                        </span>
+                    </t>
+                </Many2XAutocomplete>
+            </div>
+        </div>
+    </t>
+
+</templates>

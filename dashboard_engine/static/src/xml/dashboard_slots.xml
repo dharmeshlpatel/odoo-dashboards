@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+
+    <t t-name="dashboard_engine.DashboardSlotsField">
+        <!-- ⋮ menu links (View / New / Reporting columns).
+             Markup mirrors Accounting/Project: each link in its own div.
+             Field wrapper uses display:contents + o_dashboard_menu_item styles. -->
+        <t t-if="props.display === 'menu'">
+            <div t-foreach="items" t-as="item" t-key="item.key"
+                 class="o_dashboard_menu_item">
+                <a href="#" role="menuitem"
+                   t-on-click.prevent.stop="() => this.onItemClick(item)">
+                    <t t-esc="item.label"/>
+                </a>
+            </div>
+        </t>
+        <!-- Footer stat buttons -->
+        <t t-elif="props.display === 'buttons'">
+            <button t-foreach="items" t-as="item" t-key="item.key"
+                    type="button"
+                    class="btn btn-primary"
+                    t-att-class="item.style === 'danger' ? 'o_dashboard_stat_danger' : ''"
+                    t-on-click.stop="() => this.onItemClick(item)">
+                <i t-if="item.icon"
+                   t-att-class="'fa fa-fw o_button_icon ' + item.icon"
+                   role="img"
+                   t-att-aria-label="item.label"
+                   t-att-title="item.label"/>
+                <div class="o_stat_info">
+                    <span class="o_stat_text" t-esc="item.label"/>
+                    <span class="o_stat_value">
+                        <t t-if="item.amount !== undefined" t-esc="formatAmount(item)"/>
+                        <t t-else="" t-esc="item.count"/>
+                    </span>
+                </div>
+            </button>
+        </t>
+        <!-- Stat buttons in the card's button box -->
+        <t t-elif="props.display === 'button_box'">
+            <button t-foreach="items" t-as="item" t-key="item.key"
+                    type="button"
+                    class="btn oe_stat_button"
+                    t-att-class="item.style === 'danger' ? 'o_dashboard_stat_danger' : ''"
+                    t-on-click.stop="() => this.onItemClick(item)">
+                <i t-if="item.icon"
+                   t-att-class="'fa fa-fw o_button_icon ' + item.icon"
+                   role="img"
+                   t-att-aria-label="item.label"
+                   t-att-title="item.label"/>
+                <div class="o_stat_info">
+                    <span class="o_stat_text" t-esc="item.label"/>
+                    <span class="o_stat_value">
+                        <t t-if="item.amount !== undefined" t-esc="formatAmount(item)"/>
+                        <t t-else="" t-esc="item.count"/>
+                    </span>
+                </div>
+            </button>
+        </t>
+        <!-- KPI rows (right column of the card) -->
+        <t t-else="">
+            <div t-foreach="items" t-as="item" t-key="item.key"
+                 class="row"
+                 t-att-class="item.style === 'danger' ? 'o_dashboard_kpi_danger' : ''">
+                <div class="col overflow-hidden text-start">
+                    <a href="#"
+                       t-att-class="item.style === 'danger' ? 'text-danger fw-bold' : ''"
+                       t-on-click.prevent.stop="() => this.onItemClick(item)">
+                        <span>
+                            <t t-if="item.count !== undefined"><t t-esc="item.count"/> </t>
+                            <t t-esc="item.label"/>
+                        </span>
+                    </a>
+                </div>
+                <div t-if="item.amount !== undefined" class="col-auto text-end">
+                    <span dir="ltr"
+                          t-att-class="item.style === 'danger' ? 'text-danger fw-bold' : 'fw-bold'"
+                          t-esc="formatAmount(item)"/>
+                </div>
+            </div>
+        </t>
+    </t>
+
+</templates>

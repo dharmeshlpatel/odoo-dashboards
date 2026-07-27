@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+    <!-- Secondary configuration gear in the control-panel navigation cluster -->
+    <t t-name="dashboard_engine.ConfigSettingsKanbanView" t-inherit="web.KanbanView" t-inherit-mode="primary">
+        <xpath expr="//t[@t-set-slot='control-panel-navigation-additional']/t[@t-component]" position="before">
+            <button
+                type="button"
+                class="btn btn-secondary o_button_config_settings me-1"
+                data-tooltip="Configuration"
+                aria-label="Configuration"
+                t-on-click="onClickConfigSettingsLink"
+            >
+                <i class="fa fa-cog"/>
+            </button>
+        </xpath>
+    </t>
+
+    <!--
+      Shared placeholder bars (Phase 9): the same lightweight skeleton is
+      reused for two different meanings —
+        - EmptyGraph: the domain genuinely has no records (permanent).
+        - GraphLoadingSkeleton: the card hasn't scrolled into view yet, so
+          Chart.js has not been instantiated for it (transient — see
+          AnalyticDashboardGraphField's IntersectionObserver below).
+      Keeping one markup source avoids the two drifting apart visually.
+    -->
+    <t t-name="dashboard_engine.GraphSkeletonBars">
+        <div style="position: absolute; bottom: 0; left: 0; right: 0; top: 0; display: flex; align-items: flex-end; justify-content: space-around; opacity: 0.08; padding: 0 10%; pointer-events: none;">
+            <div style="width: 12%; height: 30%; background-color: currentColor; border-radius: 4px 4px 0 0;"/>
+            <div style="width: 12%; height: 70%; background-color: currentColor; border-radius: 4px 4px 0 0;"/>
+            <div style="width: 12%; height: 50%; background-color: currentColor; border-radius: 4px 4px 0 0;"/>
+            <div style="width: 12%; height: 90%; background-color: currentColor; border-radius: 4px 4px 0 0;"/>
+            <div style="width: 12%; height: 40%; background-color: currentColor; border-radius: 4px 4px 0 0;"/>
+        </div>
+    </t>
+
+    <t t-name="dashboard_engine.EmptyGraph">
+        <div class="o_analytic_kanban_graph_section text-muted position-relative"
+             style="height: 250px; display: flex; align-items: center; justify-content: center; flex-direction: column; overflow: hidden;">
+            <t t-call="dashboard_engine.GraphSkeletonBars"/>
+            <div style="z-index: 1; display: flex; align-items: center; justify-content: center; flex-direction: column; text-align: center; padding: 0 1rem;">
+                <span><i class="fa fa-line-chart fa-2x mb-2 opacity-50"/></span>
+                <span>There are no records in the underlying model that match your current filter criteria.</span>
+            </div>
+        </div>
+    </t>
+
+    <t t-name="dashboard_engine.GraphLoadingSkeleton">
+        <div class="o_analytic_kanban_graph_section o_dashboard_graph_skeleton position-relative"
+             style="height: 250px; overflow: hidden;">
+            <t t-call="dashboard_engine.GraphSkeletonBars"/>
+        </div>
+    </t>
+
+    <t t-name="AnalyticDashboardGraphField">
+        <div class="o_analytic_dashboard_graph" t-ref="root">
+            <t t-if="!state.isVisible" t-call="dashboard_engine.GraphLoadingSkeleton"/>
+            <div t-else="" class="o_graph_canvas_container">
+                <canvas t-ref="canvas"/>
+            </div>
+        </div>
+    </t>
+</templates>

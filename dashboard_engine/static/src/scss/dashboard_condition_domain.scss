@@ -1,0 +1,24 @@
+/* Conditions domain builder: use full sheet width */
+.o_form_view {
+    .o_dashboard_condition_domain,
+    .o_dashboard_condition_domain .o_cell,
+    .o_dashboard_condition_domain .o_wrap_input {
+        width: 100%;
+        max-width: 100%;
+    }
+
+    .o_field_dashboard_domain,
+    .o_field_domain.o_field_dashboard_domain {
+        display: block;
+        width: 100%;
+        max-width: 100%;
+
+        > div,
+        .o_domain_selector,
+        .o_domain_selector_debug_container,
+        .o_tree_editor {
+            width: 100%;
+            max-width: 100%;
+        }
+    }
+}

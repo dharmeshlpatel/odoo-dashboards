@@ -1,0 +1,15 @@
+.o_field_many2many_ordered_tags {
+    // Keep tags + facet-style separators on one baseline (Group By chain).
+    gap: 0.15rem;
+
+    .o_ordered_m2m_sep {
+        // Match web.SearchBar facet value separators (not a deletable pill).
+        line-height: 1.5;
+        pointer-events: none;
+    }
+
+    .o_tag {
+        // Slightly tighter than default gap-1 so Stage > Company reads as one chain.
+        margin-block: 0.1rem;
+    }
+}

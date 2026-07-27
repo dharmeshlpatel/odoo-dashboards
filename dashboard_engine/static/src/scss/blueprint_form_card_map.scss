@@ -1,0 +1,23 @@
+.o_dashboard_blueprint_card_map {
+    display: grid;
+    gap: 6px;
+    max-width: 420px;
+    margin-bottom: 1rem;
+    padding: 10px;
+    border: 1px solid var(--border-color, #c9ccd2);
+    border-radius: 6px;
+
+    .o_db_map_zone {
+        padding: 6px 8px;
+        font-size: 0.8125rem;
+        color: var(--body-color, #212529);
+        background: var(--o-view-background-color, #fff);
+        border: 1px solid var(--border-color, #c9ccd2);
+        border-radius: 4px;
+    }
+    .o_db_map_row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 6px;
+    }
+}
