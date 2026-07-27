@@ -60,15 +60,18 @@ export class DashboardStudioAction extends Component {
         this.dialog = useService("dialog");
         this.ZONES = ZONES;
         this.MANAGE_SECTIONS = MANAGE_SECTIONS;
+        this.LAYOUT_SPANS = [3, 4, 6, 8, 12];
         this.previewChartRef = useRef("previewChart");
         this._previewChart = null;
         this._dragSlotId = null;
         this.state = useState({
             zone: "kpis",
+            studioMode: "content", // content | layout | preview
             payload: null,
             selectedSlotId: null,
             selectedHeaderId: null,
             manageSection: "menu_views",
+            layoutDraft: null,
             editor: EMPTY_EDITOR(),
             catalogs: {
                 hostFields: [],
@@ -84,6 +87,7 @@ export class DashboardStudioAction extends Component {
             preview: null,
             previewLoading: false,
             dirty: false,
+            layoutDirty: false,
             loading: true,
             saving: false,
         });
@@ -225,11 +229,233 @@ export class DashboardStudioAction extends Component {
                 [[this.blueprintId]]
             );
             this.state.payload = payload;
+            this.state.layoutDraft = JSON.parse(
+                JSON.stringify(payload.layout || { version: 1, rows: [] })
+            );
+            this.state.layoutDirty = false;
             this._syncEditorFromSelection();
             this.state.dirty = false;
             await this.loadPreview();
         } finally {
             this.state.loading = false;
+        }
+    }
+
+    get layoutRows() {
+        return this.state.layoutDraft?.rows || [];
+    }
+
+    get usedLayoutWidgetTypes() {
+        const used = new Set();
+        for (const row of this.layoutRows) {
+            for (const col of row.cols || []) {
+                const t = col.widget?.type;
+                if (t && t !== "richtext") {
+                    used.add(t);
+                }
+            }
+        }
+        return used;
+    }
+
+    get layoutPalette() {
+        const labels = this.state.payload?.layout_widget_labels || {};
+        const used = this.usedLayoutWidgetTypes;
+        return Object.keys(labels)
+            .filter((t) => !used.has(t))
+            .map((t) => ({ type: t, label: labels[t] }));
+    }
+
+    layoutWidgetLabel(widgetType) {
+        const labels = this.state.payload?.layout_widget_labels || {};
+        return labels[widgetType] || widgetType;
+    }
+
+    colLabel(col) {
+        const type = col?.widget?.type;
+        return this.layoutWidgetLabel(type);
+    }
+
+    setStudioMode(mode) {
+        this.state.studioMode = mode;
+        if (mode === "preview") {
+            this.loadPreview();
+        }
+    }
+
+    markLayoutDirty() {
+        this.state.layoutDirty = true;
+    }
+
+    _newId(prefix) {
+        return `${prefix}_${Date.now().toString(36)}_${Math.floor(Math.random() * 1000)}`;
+    }
+
+    addLayoutRow() {
+        const row = { id: this._newId("r"), cols: [] };
+        this.state.layoutDraft.rows.push(row);
+        this.markLayoutDirty();
+    }
+
+    removeLayoutRow(rowId) {
+        this.state.layoutDraft.rows = this.layoutRows.filter((r) => r.id !== rowId);
+        this.markLayoutDirty();
+    }
+
+    onPaletteAddClick(ev) {
+        const widgetType = ev.currentTarget.dataset.widgetType;
+        this.addWidgetToLastRow(widgetType);
+    }
+
+    addWidgetToLastRow(widgetType) {
+        const rows = this.layoutRows;
+        if (!rows.length) {
+            return;
+        }
+        this.addWidgetToRow(rows[rows.length - 1].id, widgetType);
+    }
+
+    onAddWidgetSelect(ev) {
+        const rowId = ev.currentTarget.dataset.rowId;
+        const widgetType = ev.target.value;
+        ev.target.value = "";
+        if (widgetType) {
+            this.addWidgetToRow(rowId, widgetType);
+        }
+    }
+
+    onMoveLayoutRowUp(ev) {
+        this.moveLayoutRow(ev.currentTarget.dataset.rowId, -1);
+    }
+
+    onMoveLayoutRowDown(ev) {
+        this.moveLayoutRow(ev.currentTarget.dataset.rowId, 1);
+    }
+
+    onRemoveLayoutRow(ev) {
+        this.removeLayoutRow(ev.currentTarget.dataset.rowId);
+    }
+
+    onRemoveLayoutCol(ev) {
+        const { rowId, colId } = ev.currentTarget.dataset;
+        this.removeLayoutCol(rowId, colId);
+    }
+
+    addWidgetToRow(rowId, widgetType) {
+        if (!widgetType) {
+            return;
+        }
+        if (this.usedLayoutWidgetTypes.has(widgetType)) {
+            this.notification.add(_t("That widget is already on the page."), {
+                type: "warning",
+            });
+            return;
+        }
+        const row = this.layoutRows.find((r) => r.id === rowId);
+        if (!row) {
+            return;
+        }
+        const used = (row.cols || []).reduce((s, c) => s + (c.span || 0), 0);
+        const span = Math.min(12, Math.max(3, 12 - used)) || 12;
+        if (used + span > 12) {
+            this.notification.add(_t("This row is full (max 12 columns)."), {
+                type: "warning",
+            });
+            return;
+        }
+        row.cols.push({
+            id: this._newId("c"),
+            span,
+            widget: { type: widgetType },
+        });
+        this.markLayoutDirty();
+    }
+
+    onColSpanChange(ev) {
+        const { rowId, colId } = ev.currentTarget.dataset;
+        this.setColSpan(rowId, colId, ev.target.value);
+    }
+
+    setColSpan(rowId, colId, span) {
+        const row = this.layoutRows.find((r) => r.id === rowId);
+        const col = row?.cols?.find((c) => c.id === colId);
+        if (!col) {
+            return;
+        }
+        col.span = Number(span);
+        this.markLayoutDirty();
+    }
+
+    removeLayoutCol(rowId, colId) {
+        const row = this.layoutRows.find((r) => r.id === rowId);
+        if (!row) {
+            return;
+        }
+        row.cols = (row.cols || []).filter((c) => c.id !== colId);
+        this.markLayoutDirty();
+    }
+
+    moveLayoutRow(rowId, delta) {
+        const rows = this.layoutRows;
+        const idx = rows.findIndex((r) => r.id === rowId);
+        const next = idx + delta;
+        if (idx < 0 || next < 0 || next >= rows.length) {
+            return;
+        }
+        [rows[idx], rows[next]] = [rows[next], rows[idx]];
+        this.markLayoutDirty();
+    }
+
+    async resetLayout() {
+        const defLayout = await this.orm.call(
+            "dashboard.blueprint",
+            "studio_default_layout",
+            []
+        );
+        this.state.layoutDraft = defLayout;
+        this.markLayoutDirty();
+    }
+
+    async saveLayout() {
+        if (!this.state.layoutDirty || this.state.saving) {
+            return;
+        }
+        this.state.saving = true;
+        try {
+            const payload = await this.orm.call(
+                "dashboard.blueprint",
+                "studio_write_layout",
+                [[this.blueprintId], this.state.layoutDraft]
+            );
+            this.state.payload = payload;
+            this.state.layoutDraft = JSON.parse(JSON.stringify(payload.layout));
+            this.state.layoutDirty = false;
+            this.notification.add(_t("Layout saved"), { type: "success" });
+            await this.loadPreview();
+        } catch (error) {
+            this.notification.add(
+                error?.data?.message || error.message || _t("Layout save failed"),
+                { type: "danger" }
+            );
+        } finally {
+            this.state.saving = false;
+        }
+    }
+
+    async clearCustomLayout() {
+        this.state.saving = true;
+        try {
+            const payload = await this.orm.call(
+                "dashboard.blueprint",
+                "studio_write_layout",
+                [[this.blueprintId], false]
+            );
+            this.state.payload = payload;
+            this.state.layoutDraft = JSON.parse(JSON.stringify(payload.layout));
+            this.state.layoutDirty = false;
+            this.notification.add(_t("Reset to classic card layout"), { type: "info" });
+        } finally {
+            this.state.saving = false;
         }
     }
 
@@ -267,6 +493,11 @@ export class DashboardStudioAction extends Component {
 
     async onSampleQueryInput(ev) {
         await this.loadSamples(ev.target.value);
+    }
+
+    async onSampleSelect(ev) {
+        const raw = ev.target.value;
+        await this.selectSample(raw ? Number(raw) : false);
     }
 
     async selectSample(sampleId) {
@@ -387,6 +618,17 @@ export class DashboardStudioAction extends Component {
             value = Array.from(target.selectedOptions || []).map((o) => Number(o.value));
         }
         this.state.editor[field] = value;
+        this.markDirty();
+    }
+
+    onQuickPickHeaderField(ev) {
+        const value = ev.target.value;
+        ev.target.value = "";
+        if (!value) {
+            return;
+        }
+        const current = (this.state.editor.field_names || "").trim();
+        this.state.editor.field_names = current ? `${current}, ${value}` : value;
         this.markDirty();
     }
 

@@ -20,14 +20,20 @@
                     <span t-if="state.payload"
                           t-att-class="'o_ds_state badge ' + (state.payload.state === 'published' ? 'text-bg-success' : 'text-bg-secondary')"
                           t-esc="state.payload.state"/>
-                    <span t-if="state.dirty" class="badge text-bg-warning">Unsaved</span>
+                    <span t-if="state.dirty or state.layoutDirty" class="badge text-bg-warning">Unsaved</span>
                     <button type="button" class="btn btn-light btn-sm" t-on-click="openAdvanced" title="Open Advanced form">
                         <i class="fa fa-flask me-1"/>Advanced
                     </button>
-                    <button type="button" class="btn btn-secondary btn-sm" t-on-click="discard" t-att-disabled="state.loading or !state.dirty">
+                    <button type="button" class="btn btn-secondary btn-sm" t-on-click="discard" t-att-disabled="state.loading or (!state.dirty and !state.layoutDirty)">
                         Discard
                     </button>
+                    <button type="button" class="btn btn-primary btn-sm" t-on-click="saveLayout"
+                            t-if="state.studioMode === 'layout'"
+                            t-att-disabled="state.saving or !state.layoutDirty">
+                        <i class="fa fa-save me-1"/>Save layout
+                    </button>
                     <button type="button" class="btn btn-primary btn-sm" t-on-click="saveCurrent"
+                            t-else=""
                             t-att-disabled="state.saving or !canSave">
                         <i class="fa fa-save me-1"/>Save
                     </button>
@@ -42,7 +48,16 @@
                 </div>
             </header>
 
-            <nav class="o_ds_zones">
+            <nav class="o_ds_modes">
+                <button type="button" t-att-class="state.studioMode === 'content' ? 'active' : ''"
+                        t-on-click="() => this.setStudioMode('content')">Content</button>
+                <button type="button" t-att-class="state.studioMode === 'layout' ? 'active' : ''"
+                        t-on-click="() => this.setStudioMode('layout')">Layout</button>
+                <button type="button" t-att-class="state.studioMode === 'preview' ? 'active' : ''"
+                        t-on-click="() => this.setStudioMode('preview')">Preview</button>
+            </nav>
+
+            <nav class="o_ds_zones" t-if="state.studioMode === 'content'">
                 <t t-foreach="ZONES" t-as="zone" t-key="zone.id">
                     <button type="button" class="o_ds_zone_btn"
                             t-att-class="state.zone === zone.id ? 'active' : ''"
@@ -58,6 +73,100 @@
             </div>
 
             <div t-else="" class="o_ds_body flex-grow-1 overflow-hidden">
+                <!-- LAYOUT MODE -->
+                <div t-if="state.studioMode === 'layout'" class="o_ds_layout_mode overflow-auto p-3 w-100">
+                    <div class="d-flex flex-wrap gap-2 align-items-center mb-3">
+                        <h2 class="h5 mb-0 me-auto">Page layout</h2>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" t-on-click="addLayoutRow">
+                            <i class="fa fa-plus me-1"/>Add row
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" t-on-click="resetLayout">
+                            Reset draft to classic
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-danger"
+                                t-if="state.payload and state.payload.layout_is_custom"
+                                t-on-click="clearCustomLayout">
+                            Clear custom (use classic)
+                        </button>
+                    </div>
+                    <p class="text-muted small">
+                        Drag Odoo-native widgets into a 12-column grid. Content (KPIs, actions) is edited in the Content tab.
+                        <span t-if="state.payload and state.payload.layout_is_custom" class="badge text-bg-teal ms-1">Custom layout</span>
+                    </p>
+                    <div class="o_ds_palette mb-3" t-if="layoutPalette.length">
+                        <span class="small fw-semibold me-2">Add widget:</span>
+                        <t t-foreach="layoutPalette" t-as="pw" t-key="pw.type">
+                            <button type="button" class="btn btn-sm btn-outline-primary me-1 mb-1"
+                                    t-att-data-widget-type="pw.type"
+                                    t-on-click="onPaletteAddClick"
+                                    t-att-disabled="!layoutRows.length"
+                                    t-esc="pw.label"/>
+                        </t>
+                        <span t-if="!layoutRows.length" class="text-muted small">Add a row first.</span>
+                    </div>
+                    <t t-foreach="layoutRows" t-as="row" t-key="row.id">
+                        <div class="o_ds_layout_row card mb-2">
+                            <div class="card-header d-flex align-items-center gap-2 py-2">
+                                <strong class="small me-auto">Row</strong>
+                                <select class="form-select form-select-sm w-auto"
+                                        t-att-data-row-id="row.id"
+                                        t-on-change="onAddWidgetSelect">
+                                    <option value="">+ widget…</option>
+                                    <t t-foreach="layoutPalette" t-as="pw" t-key="pw.type + row.id">
+                                        <option t-att-value="pw.type" t-esc="pw.label"/>
+                                    </t>
+                                </select>
+                                <button type="button" class="btn btn-light btn-sm"
+                                        t-att-data-row-id="row.id"
+                                        t-on-click="onMoveLayoutRowUp"
+                                        title="Move up">
+                                    <i class="fa fa-arrow-up"/>
+                                </button>
+                                <button type="button" class="btn btn-light btn-sm"
+                                        t-att-data-row-id="row.id"
+                                        t-on-click="onMoveLayoutRowDown"
+                                        title="Move down">
+                                    <i class="fa fa-arrow-down"/>
+                                </button>
+                                <button type="button" class="btn btn-outline-danger btn-sm"
+                                        t-att-data-row-id="row.id"
+                                        t-on-click="onRemoveLayoutRow">
+                                    <i class="fa fa-trash"/>
+                                </button>
+                            </div>
+                            <div class="card-body">
+                                <div class="row g-2">
+                                    <t t-foreach="row.cols or []" t-as="col" t-key="col.id">
+                                        <div t-att-class="'col-' + (col.span or 12)">
+                                            <div class="o_ds_layout_col border rounded p-2 h-100">
+                                                <div class="fw-semibold" t-esc="colLabel(col)"/>
+                                                <div class="d-flex align-items-center gap-1 mt-2">
+                                                    <label class="small mb-0">Span</label>
+                                                    <select class="form-select form-select-sm"
+                                                            t-att-data-row-id="row.id"
+                                                            t-att-data-col-id="col.id"
+                                                            t-on-change="onColSpanChange">
+                                                        <t t-foreach="LAYOUT_SPANS" t-as="sp" t-key="sp">
+                                                            <option t-att-value="sp" t-att-selected="col.span == sp" t-esc="sp"/>
+                                                        </t>
+                                                    </select>
+                                                    <button type="button" class="btn btn-sm btn-link text-danger"
+                                                            t-att-data-row-id="row.id"
+                                                            t-att-data-col-id="col.id"
+                                                            t-on-click="onRemoveLayoutCol">Remove</button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </t>
+                                    <div t-if="!(row.cols and row.cols.length)" class="col-12 text-muted small">Empty row — add a widget.</div>
+                                </div>
+                            </div>
+                        </div>
+                    </t>
+                </div>
+
+                <!-- CONTENT / PREVIEW -->
+                <t t-else="">
                 <aside class="o_ds_map_pane">
                     <div class="o_ds_map_label d-flex align-items-center justify-content-between gap-2">
                         <span>
@@ -75,15 +184,15 @@
                                placeholder="Search sample record…"
                                t-att-value="state.sampleQuery"
                                t-on-input="onSampleQueryInput"/>
-                        <select class="form-select form-select-sm"
-                                t-on-change="(ev) => this.selectSample(Number(ev.target.value))">
-                            <option value="">— pick a record —</option>
-                            <t t-foreach="state.catalogs.samples" t-as="sample" t-key="sample.id">
-                                <option t-att-value="sample.id"
-                                        t-att-selected="state.sampleId === sample.id"
-                                        t-esc="sample.name"/>
-                            </t>
-                        </select>
+                                <select class="form-select form-select-sm"
+                                        t-on-change="onSampleSelect">
+                                    <option value="">— pick a record —</option>
+                                    <t t-foreach="state.catalogs.samples" t-as="sample" t-key="sample.id">
+                                        <option t-att-value="sample.id"
+                                                t-att-selected="state.sampleId === sample.id"
+                                                t-esc="sample.name"/>
+                                    </t>
+                                </select>
                     </div>
                     <div class="o_ds_card_map" t-att-class="hasLivePreview ? 'is-live' : ''">
                         <div t-att-class="'o_ds_card_zone o_ds_header_zone' + (state.zone === 'header' ? ' is-active' : '')"
@@ -331,7 +440,7 @@
                                 </label>
                                 <label class="o_ds_field">
                                     <span>Quick pick field</span>
-                                    <select class="form-select" t-on-change="(ev) => { this.state.editor.field_names = ev.target.value; this.markDirty(); }">
+                                    <select class="form-select" t-on-change="(ev) => this.onQuickPickHeaderField(ev)">
                                         <option value="">— append from host —</option>
                                         <t t-foreach="state.catalogs.hostFields.filter(f => ['char','text','many2one','selection'].includes(f.ttype)).slice(0,80)" t-as="f" t-key="f.name">
                                             <option t-att-value="f.name" t-esc="f.string + ' (' + f.name + ')'"/>
@@ -507,6 +616,7 @@
                         </t>
                     </div>
                 </section>
+                </t>
             </div>
         </div>
     </t>
