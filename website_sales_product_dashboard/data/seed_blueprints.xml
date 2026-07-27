@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Website Sales Products dashboard (v1 website_sales_product_dashboard → no _enterprise). -->
+<odoo noupdate="1">
+    <record id="blueprint_website_products" model="dashboard.blueprint">
+        <field name="name">Website Products</field>
+        <field name="key">website_products</field>
+        <field name="host_model_id" ref="product.model_product_product"/>
+        <field name="module_depends">website_sale,product</field>
+        <field name="menu_name">Products Dashboard</field>
+        <field name="menu_parent_xmlid">sale.sale_menu_root</field>
+        <field name="menu_sequence">50</field>
+        <field name="primary_button_label">Online Orders</field>
+        <field name="primary_action_xmlid">sale.action_orders</field>
+        <field name="primary_action_domain">[('order_line.product_id', '=', '{{id}}'), ('website_id', '!=', False)]</field>
+        <field name="graph_model">sale.order.line</field>
+        <field name="graph_data_field">product_id</field>
+        <field name="graph_measure">__count</field>
+        <field name="graph_groupby">order_id</field>
+        <field name="graph_domain">[('order_id.website_id', '!=', False)]</field>
+        <field name="graph_caption">Online Sales</field>
+        <field name="state">published</field>
+        <field name="sequence">46</field>
+    </record>
+    <record id="slot_website_prod_lines" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_website_products"/>
+        <field name="key">online_lines</field>
+        <field name="name">Online Lines</field>
+        <field name="section">kpi</field>
+        <field name="sequence">10</field>
+        <field name="label">Online Line</field>
+        <field name="label_plural">Online Lines</field>
+        <field name="compute_model">sale.order.line</field>
+        <field name="relate_field">product_id</field>
+        <field name="compute_domain">[('order_id.website_id', '!=', False)]</field>
+        <field name="compute_aggregator">__count</field>
+        <field name="action_xmlid">sale.action_orders</field>
+        <field name="action_domain">[('order_line.product_id', '=', '{{id}}'), ('website_id', '!=', False)]</field>
+        <field name="module_depends">website_sale,product</field>
+        <field name="show_if_zero" eval="True"/>
+    </record>
+    <record id="slot_website_prod_bottom" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_website_products"/>
+        <field name="key">bottom_online</field>
+        <field name="name">Online Orders Button</field>
+        <field name="section">bottom</field>
+        <field name="sequence">10</field>
+        <field name="label">Online Orders</field>
+        <field name="icon">fa-globe</field>
+        <field name="show_if_zero" eval="True"/>
+        <field name="compute_model">sale.order.line</field>
+        <field name="relate_field">product_id</field>
+        <field name="compute_domain">[('order_id.website_id', '!=', False)]</field>
+        <field name="action_xmlid">sale.action_orders</field>
+        <field name="action_domain">[('order_line.product_id', '=', '{{id}}'), ('website_id', '!=', False)]</field>
+        <field name="module_depends">website_sale,product</field>
+    </record>
+    <record id="slot_website_prod_menu_orders" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_website_products"/>
+        <field name="key">view_online_orders</field>
+        <field name="name">View Online Orders</field>
+        <field name="section">menu_views</field>
+        <field name="sequence">10</field>
+        <field name="label">Online Orders</field>
+        <field name="show_if_zero" eval="True"/>
+        <field name="action_xmlid">sale.action_orders</field>
+        <field name="action_domain">[('order_line.product_id', '=', '{{id}}'), ('website_id', '!=', False)]</field>
+        <field name="module_depends">website_sale,product</field>
+    </record>
+</odoo>
