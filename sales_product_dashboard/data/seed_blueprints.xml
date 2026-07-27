@@ -1,0 +1,141 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Sales Products dashboard (v1 sales_product_dashboard → no _enterprise). -->
+<odoo noupdate="1">
+    <record id="blueprint_sales_products" model="dashboard.blueprint">
+        <field name="name">Sales Products</field>
+        <field name="key">sales_products</field>
+        <field name="host_model_id" ref="product.model_product_product"/>
+        <field name="module_depends">sale,product</field>
+        <field name="menu_name">Products Dashboard</field>
+        <field name="menu_parent_xmlid">sale.sale_menu_root</field>
+        <field name="menu_sequence">50</field>
+        <field name="primary_button_label">Sales Analysis</field>
+        <field name="primary_action_xmlid">sale.action_order_report_all</field>
+        <field name="primary_action_domain">[]</field>
+        <field name="graph_model">sale.report</field>
+        <field name="graph_data_field">product_id</field>
+        <field name="graph_measure">price_subtotal:sum</field>
+        <field name="graph_groupby">date:month</field>
+        <field name="graph_caption">Product Sales</field>
+        <field name="state">published</field>
+        <field name="sequence">40</field>
+    </record>
+
+    <record id="scope_sales_prod_quotations" model="dashboard.blueprint.scope">
+        <field name="blueprint_id" ref="blueprint_sales_products"/>
+        <field name="sequence">10</field>
+        <field name="name">Quotations</field>
+        <field name="mode">include</field>
+        <field name="domain">[('state', 'in', ('draft', 'sent'))]</field>
+        <field name="default_on" eval="True"/>
+    </record>
+    <record id="scope_sales_prod_orders" model="dashboard.blueprint.scope">
+        <field name="blueprint_id" ref="blueprint_sales_products"/>
+        <field name="sequence">20</field>
+        <field name="name">Sales Orders</field>
+        <field name="mode">include</field>
+        <field name="domain">[('state', 'in', ('sale', 'done'))]</field>
+        <field name="default_on" eval="True"/>
+    </record>
+    <record id="scope_sales_prod_mine" model="dashboard.blueprint.scope">
+        <field name="blueprint_id" ref="blueprint_sales_products"/>
+        <field name="sequence">30</field>
+        <field name="name">My Orders</field>
+        <field name="mode">restrict</field>
+        <field name="domain">[('user_id', '=', uid)]</field>
+        <field name="default_on" eval="False"/>
+    </record>
+
+    <record id="slot_sales_prod_quotations" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_sales_products"/>
+        <field name="key">product_quotations</field>
+        <field name="name">Quotations</field>
+        <field name="section">kpi</field>
+        <field name="sequence">10</field>
+        <field name="label">Quotation line</field>
+        <field name="label_plural">Quotation lines</field>
+        <field name="compute_model">sale.order.line</field>
+        <field name="relate_field">product_id</field>
+        <field name="compute_domain">[('state', 'in', ('draft', 'sent'))]</field>
+        <field name="compute_aggregator">__count</field>
+        <field name="action_xmlid">sale.action_quotations_with_onboarding</field>
+        <field name="action_domain">[('order_line.product_id', '=', '{{id}}'), ('state', 'in', ('draft', 'sent'))]</field>
+        <field name="module_depends">sale,product</field>
+    </record>
+    <record id="slot_sales_prod_to_deliver" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_sales_products"/>
+        <field name="key">product_to_deliver</field>
+        <field name="name">To Deliver</field>
+        <field name="section">kpi</field>
+        <field name="sequence">20</field>
+        <field name="label">Order to Deliver</field>
+        <field name="label_plural">Orders to Deliver</field>
+        <field name="compute_model">sale.order.line</field>
+        <field name="relate_field">product_id</field>
+        <field name="compute_domain">[('state', '=', 'sale'), ('qty_to_deliver', '&gt;', 0)]</field>
+        <field name="compute_aggregator">__count</field>
+        <field name="action_xmlid">sale.action_orders</field>
+        <field name="action_domain">[('order_line.product_id', '=', '{{id}}'), ('state', '=', 'sale'), ('order_line.qty_to_deliver', '&gt;', 0)]</field>
+        <field name="module_depends">sale,product,stock</field>
+    </record>
+    <record id="slot_sales_prod_to_invoice" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_sales_products"/>
+        <field name="key">product_to_invoice</field>
+        <field name="name">To Invoice</field>
+        <field name="section">kpi</field>
+        <field name="sequence">30</field>
+        <field name="label">Line to Invoice</field>
+        <field name="label_plural">Lines to Invoice</field>
+        <field name="compute_model">sale.order.line</field>
+        <field name="relate_field">product_id</field>
+        <field name="compute_domain">[('invoice_status', '=', 'to invoice')]</field>
+        <field name="compute_aggregator">__count</field>
+        <field name="action_xmlid">sale.action_orders_to_invoice</field>
+        <field name="action_domain">[('order_line.product_id', '=', '{{id}}'), ('invoice_status', '=', 'to invoice')]</field>
+        <field name="module_depends">sale,product</field>
+    </record>
+    <record id="slot_sales_prod_to_upsell" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_sales_products"/>
+        <field name="key">product_to_upsell</field>
+        <field name="name">To Upsell</field>
+        <field name="section">kpi</field>
+        <field name="sequence">40</field>
+        <field name="label">Order to Upsell</field>
+        <field name="label_plural">Orders to Upsell</field>
+        <field name="compute_model">sale.order.line</field>
+        <field name="relate_field">product_id</field>
+        <field name="compute_domain">[('invoice_status', '=', 'upselling')]</field>
+        <field name="compute_aggregator">__count</field>
+        <field name="action_xmlid">sale.action_orders_upselling</field>
+        <field name="action_domain">[('order_line.product_id', '=', '{{id}}'), ('invoice_status', '=', 'upselling')]</field>
+        <field name="module_depends">sale,product</field>
+    </record>
+    <record id="slot_sales_prod_bottom" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_sales_products"/>
+        <field name="key">bottom_sales</field>
+        <field name="name">Sales Button</field>
+        <field name="section">bottom</field>
+        <field name="sequence">10</field>
+        <field name="label">Sales</field>
+        <field name="icon">fa-usd</field>
+        <field name="show_if_zero" eval="True"/>
+        <field name="compute_model">sale.order.line</field>
+        <field name="relate_field">product_id</field>
+        <field name="compute_domain">[('state', '!=', 'cancel')]</field>
+        <field name="action_xmlid">sale.action_orders</field>
+        <field name="action_domain">[('order_line.product_id', '=', '{{id}}')]</field>
+        <field name="module_depends">sale,product</field>
+    </record>
+    <record id="slot_sales_prod_menu_quotations" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_sales_products"/>
+        <field name="key">view_quotations</field>
+        <field name="name">View Quotations</field>
+        <field name="section">menu_views</field>
+        <field name="sequence">10</field>
+        <field name="label">Quotations</field>
+        <field name="show_if_zero" eval="True"/>
+        <field name="action_xmlid">sale.action_quotations_with_onboarding</field>
+        <field name="action_domain">[('order_line.product_id', '=', '{{id}}')]</field>
+        <field name="module_depends">sale,product</field>
+    </record>
+</odoo>

@@ -1,0 +1,198 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Sales Products fill from V1 sales_product_dashboard_enterprise.
+  Soft-deps hide stock / account slots until installed.
+-->
+<odoo noupdate="1">
+    <!-- Header extras -->
+    <record id="header_sales_prod_categ" model="dashboard.blueprint.header.item">
+        <field name="blueprint_id" ref="blueprint_sales_products"/>
+        <field name="sequence">30</field>
+        <field name="kind">left</field>
+        <field name="icon">fa-tag</field>
+        <field name="field_names">categ_id</field>
+    </record>
+
+    <!-- Button box: on hand / forecasted -->
+    <record id="slot_sales_prod_box_on_hand" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_sales_products"/>
+        <field name="key">box_on_hand</field>
+        <field name="name">On Hand</field>
+        <field name="section">button_box</field>
+        <field name="sequence">10</field>
+        <field name="label">On Hand</field>
+        <field name="icon">fa-cubes</field>
+        <field name="show_if_zero" eval="True"/>
+        <field name="amount_field">qty_available</field>
+        <field name="action_method">action_open_quants</field>
+        <field name="module_depends">sale,stock</field>
+    </record>
+    <record id="slot_sales_prod_box_forecasted" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_sales_products"/>
+        <field name="key">box_forecasted</field>
+        <field name="name">Forecasted</field>
+        <field name="section">button_box</field>
+        <field name="sequence">20</field>
+        <field name="label">Forecasted</field>
+        <field name="icon">fa-area-chart</field>
+        <field name="show_if_zero" eval="True"/>
+        <field name="amount_field">virtual_available</field>
+        <field name="action_method">action_product_forecast_report</field>
+        <field name="module_depends">sale,stock</field>
+    </record>
+
+    <!-- Bottom row: Sales Orders / Transfers / Invoices -->
+    <record id="slot_sales_prod_bottom_orders" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_sales_products"/>
+        <field name="key">bottom_orders</field>
+        <field name="name">Sales Orders Button</field>
+        <field name="section">bottom</field>
+        <field name="sequence">20</field>
+        <field name="label">Sales Orders</field>
+        <field name="icon">fa-shopping-cart</field>
+        <field name="show_if_zero" eval="True"/>
+        <field name="compute_model">sale.order.line</field>
+        <field name="relate_field">product_id</field>
+        <field name="compute_domain">[('state', 'in', ('sale', 'done'))]</field>
+        <field name="action_xmlid">sale.action_orders</field>
+        <field name="action_domain">[('order_line.product_id', '=', '{{id}}'), ('state', 'in', ('sale', 'done'))]</field>
+        <field name="module_depends">sale,product</field>
+    </record>
+    <record id="slot_sales_prod_bottom_transfers" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_sales_products"/>
+        <field name="key">bottom_transfers</field>
+        <field name="name">Transfers Button</field>
+        <field name="section">bottom</field>
+        <field name="sequence">30</field>
+        <field name="label">Transfers</field>
+        <field name="icon">fa-truck</field>
+        <field name="show_if_zero" eval="True"/>
+        <field name="compute_model">stock.move</field>
+        <field name="relate_field">product_id</field>
+        <field name="compute_domain">[('picking_id.picking_type_id.code', 'in', ('incoming', 'outgoing')), ('state', '!=', 'cancel')]</field>
+        <field name="action_xmlid">stock.action_picking_tree_all</field>
+        <field name="action_domain">[('move_ids.product_id', '=', '{{id}}'), ('picking_type_id.code', 'in', ('incoming', 'outgoing'))]</field>
+        <field name="module_depends">sale,stock</field>
+    </record>
+    <record id="slot_sales_prod_bottom_invoices" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_sales_products"/>
+        <field name="key">bottom_invoices</field>
+        <field name="name">Invoices Button</field>
+        <field name="section">bottom</field>
+        <field name="sequence">40</field>
+        <field name="label">Invoices</field>
+        <field name="icon">fa-pencil-square-o</field>
+        <field name="show_if_zero" eval="True"/>
+        <field name="groups_xmlids">account.group_account_invoice</field>
+        <field name="compute_model">account.move.line</field>
+        <field name="relate_field">product_id</field>
+        <field name="compute_domain">[('move_id.move_type', 'in', ('out_invoice', 'out_refund')), ('move_id.state', '!=', 'cancel')]</field>
+        <field name="action_xmlid">account.action_move_out_invoice_type</field>
+        <field name="action_domain">[('invoice_line_ids.product_id', '=', '{{id}}'), ('move_type', 'in', ('out_invoice', 'out_refund'))]</field>
+        <field name="module_depends">sale,account</field>
+    </record>
+
+    <!-- Manage → Views -->
+    <record id="slot_sales_prod_menu_orders" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_sales_products"/>
+        <field name="key">view_orders</field>
+        <field name="name">View Sales Orders</field>
+        <field name="section">menu_views</field>
+        <field name="sequence">20</field>
+        <field name="label">Sales Orders</field>
+        <field name="show_if_zero" eval="True"/>
+        <field name="action_xmlid">sale.action_orders</field>
+        <field name="action_domain">[('order_line.product_id', '=', '{{id}}')]</field>
+        <field name="module_depends">sale,product</field>
+    </record>
+    <record id="slot_sales_prod_menu_transfers" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_sales_products"/>
+        <field name="key">view_transfers</field>
+        <field name="name">View Transfers</field>
+        <field name="section">menu_views</field>
+        <field name="sequence">30</field>
+        <field name="label">Transfers</field>
+        <field name="show_if_zero" eval="True"/>
+        <field name="action_xmlid">stock.action_picking_tree_all</field>
+        <field name="action_domain">[('move_ids.product_id', '=', '{{id}}'), ('picking_type_id.code', 'in', ('incoming', 'outgoing'))]</field>
+        <field name="module_depends">sale,stock</field>
+    </record>
+    <record id="slot_sales_prod_menu_invoices" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_sales_products"/>
+        <field name="key">view_invoices</field>
+        <field name="name">View Invoices</field>
+        <field name="section">menu_views</field>
+        <field name="sequence">40</field>
+        <field name="label">Invoices</field>
+        <field name="show_if_zero" eval="True"/>
+        <field name="groups_xmlids">account.group_account_invoice</field>
+        <field name="action_xmlid">account.action_move_out_invoice_type</field>
+        <field name="action_domain">[('invoice_line_ids.product_id', '=', '{{id}}'), ('move_type', 'in', ('out_invoice', 'out_refund'))]</field>
+        <field name="module_depends">sale,account</field>
+    </record>
+
+    <!-- Manage → New -->
+    <record id="slot_sales_prod_menu_new_quotation" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_sales_products"/>
+        <field name="key">new_quotation</field>
+        <field name="name">New Quotation</field>
+        <field name="section">menu_new</field>
+        <field name="sequence">10</field>
+        <field name="label">Quotation</field>
+        <field name="show_if_zero" eval="True"/>
+        <field name="action_xmlid">sale.action_quotations_with_onboarding</field>
+        <field name="action_context">{"default_order_line": [[0, 0, {"product_id": {{id}}]}]}</field>
+        <field name="module_depends">sale,product</field>
+    </record>
+
+    <!-- Manage → Reports -->
+    <record id="slot_sales_prod_menu_report_sales" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_sales_products"/>
+        <field name="key">report_sales</field>
+        <field name="name">Report Sales</field>
+        <field name="section">menu_reports</field>
+        <field name="sequence">10</field>
+        <field name="label">Sales</field>
+        <field name="show_if_zero" eval="True"/>
+        <field name="action_xmlid">sale.action_order_report_all</field>
+        <field name="action_domain">[('product_id', '=', '{{id}}')]</field>
+        <field name="module_depends">sale,product</field>
+    </record>
+    <record id="slot_sales_prod_menu_report_quotation" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_sales_products"/>
+        <field name="key">report_quotation</field>
+        <field name="name">Report Quotation</field>
+        <field name="section">menu_reports</field>
+        <field name="sequence">20</field>
+        <field name="label">Quotations</field>
+        <field name="show_if_zero" eval="True"/>
+        <field name="action_xmlid">sale.action_order_report_quotation_salesteam</field>
+        <field name="action_domain">[('product_id', '=', '{{id}}')]</field>
+        <field name="module_depends">sale,product</field>
+    </record>
+    <record id="slot_sales_prod_menu_report_orders" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_sales_products"/>
+        <field name="key">report_orders</field>
+        <field name="name">Report Sales Orders</field>
+        <field name="section">menu_reports</field>
+        <field name="sequence">30</field>
+        <field name="label">Sales Orders</field>
+        <field name="show_if_zero" eval="True"/>
+        <field name="action_xmlid">sale.action_order_report_so_salesteam</field>
+        <field name="action_domain">[('product_id', '=', '{{id}}')]</field>
+        <field name="module_depends">sale,product</field>
+    </record>
+    <record id="slot_sales_prod_menu_report_invoices" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_sales_products"/>
+        <field name="key">report_invoices</field>
+        <field name="name">Report Invoices</field>
+        <field name="section">menu_reports</field>
+        <field name="sequence">40</field>
+        <field name="label">Invoices</field>
+        <field name="show_if_zero" eval="True"/>
+        <field name="groups_xmlids">account.group_account_invoice</field>
+        <field name="action_xmlid">account.action_account_invoice_report_all</field>
+        <field name="action_domain">[('product_id', '=', '{{id}}')]</field>
+        <field name="module_depends">sale,account</field>
+    </record>
+</odoo>
