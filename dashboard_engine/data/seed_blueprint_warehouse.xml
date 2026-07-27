@@ -1,6 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<!--
-  Warehouse seed is created in post_init_hook when stock is installed,
-  so this file only documents the intended key. Kept for manifest order.
--->
-<odoo/>

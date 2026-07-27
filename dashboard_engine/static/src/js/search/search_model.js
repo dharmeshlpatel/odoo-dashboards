@@ -136,6 +136,12 @@ patch(SearchModel.prototype, {
             );
 
             if (!item) {
+                // graph_groupbys can come from a different model than the
+                // opened action (e.g. sale.report vs sale.order). createNewGroupBy
+                // destructures field.string and crashes when the field is absent.
+                if (!this.searchViewFields?.[fieldName]) {
+                    continue;
+                }
                 item = this.createNewGroupBy(fieldName, { interval });
             }
 

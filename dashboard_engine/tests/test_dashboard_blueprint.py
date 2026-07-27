@@ -1676,7 +1676,7 @@ class TestDashboardBlueprintEngine(TransactionCase):
 
     def test_seeded_overdue_condition_has_relative_deadline(self):
         condition = self.env.ref(
-            "dashboard_engine.condition_crm_overdue_opportunity",
+            "crm_customer_dashboard.condition_crm_overdue_opportunity",
             raise_if_not_found=False,
         )
         if not condition:
@@ -1686,7 +1686,7 @@ class TestDashboardBlueprintEngine(TransactionCase):
         ).mapped("relative_when")
         self.assertEqual(whens, ["today"])
         slot = self.env.ref(
-            "dashboard_engine.slot_crm_overdue_opportunities",
+            "crm_customer_dashboard.slot_crm_overdue_opportunities",
             raise_if_not_found=False,
         )
         if slot and condition._is_applicable():
@@ -1695,7 +1695,7 @@ class TestDashboardBlueprintEngine(TransactionCase):
     def test_seeded_crm_parity_slots_exist(self):
         """CRM-core seed fill: unassigned, menus, meetings, primary defaults."""
         bp = self.env.ref(
-            "dashboard_engine.blueprint_crm_customers", raise_if_not_found=False
+            "crm_customer_dashboard.blueprint_crm_customers", raise_if_not_found=False
         )
         if not bp:
             self.skipTest("CRM customers blueprint seed missing")
@@ -1713,8 +1713,19 @@ class TestDashboardBlueprintEngine(TransactionCase):
             "bottom_meetings",
         ):
             self.assertIn(key, owned, f"missing CRM-owned parity slot {key}")
+        meetings = bp.slot_ids.filtered(lambda s: s.key == "bottom_meetings")
+        self.assertEqual(meetings.count_field, "meeting_count")
+        report_opp = bp.slot_ids.filtered(lambda s: s.key == "report_opportunities")
+        self.assertTrue(report_opp.action_variant_ids)
+        unassigned = bp.slot_ids.filtered(lambda s: s.key == "unassigned")
+        self.assertEqual(unassigned.label, "Unassigned Opportunity")
+        self.assertEqual(unassigned.label_alt, "Unassigned Lead")
+        self.assertEqual(unassigned.label_alt_groups_xmlids, "crm.group_use_lead")
         # Commercial sale slots are owned by Sales and pooled via share.
+        if not bp.share_link_ids.filtered(lambda b: b.key == "sales_customers"):
+            return
         effective = set(bp._effective_slots().mapped("key"))
+        owned = set(bp.slot_ids.mapped("key"))
         for key in (
             "box_total_due",
             "box_total_overdue",
@@ -1733,24 +1744,16 @@ class TestDashboardBlueprintEngine(TransactionCase):
         ):
             self.assertIn(key, effective, f"missing shared commercial slot {key}")
             self.assertNotIn(key, owned, f"CRM must not own shared commercial {key}")
-        meetings = bp.slot_ids.filtered(lambda s: s.key == "bottom_meetings")
-        self.assertEqual(meetings.count_field, "meeting_count")
         due = bp._effective_slots().filtered(lambda s: s.key == "box_total_due")
         self.assertEqual(due.section, "button_box")
         self.assertEqual(due.amount_field, "total_due")
         invoiced = bp._effective_slots().filtered(lambda s: s.key == "bottom_invoiced")
         self.assertEqual(invoiced.amount_field, "total_invoiced")
-        report_opp = bp.slot_ids.filtered(lambda s: s.key == "report_opportunities")
-        self.assertTrue(report_opp.action_variant_ids)
-        unassigned = bp.slot_ids.filtered(lambda s: s.key == "unassigned")
-        self.assertEqual(unassigned.label, "Unassigned Opportunity")
-        self.assertEqual(unassigned.label_alt, "Unassigned Lead")
-        self.assertEqual(unassigned.label_alt_groups_xmlids, "crm.group_use_lead")
 
     def test_unassigned_label_flips_with_group_use_lead(self):
         """KPI wording matches v1: Lead(s) when Uses Leads, else Opportunity(ies)."""
         slot = self.env.ref(
-            "dashboard_engine.slot_crm_unassigned", raise_if_not_found=False
+            "crm_customer_dashboard.slot_crm_unassigned", raise_if_not_found=False
         )
         group = self.env.ref("crm.group_use_lead", raise_if_not_found=False)
         if not slot or not group:
@@ -1792,7 +1795,7 @@ class TestDashboardBlueprintEngine(TransactionCase):
     def test_slot_action_strips_inherited_search_defaults(self):
         """Base action search defaults must not override the slot domain."""
         slot = self.env.ref(
-            "dashboard_engine.slot_crm_open_opportunities", raise_if_not_found=False
+            "crm_customer_dashboard.slot_crm_open_opportunities", raise_if_not_found=False
         )
         action = self.env.ref("crm.crm_lead_action_pipeline", raise_if_not_found=False)
         if not slot or not action:
@@ -1848,7 +1851,7 @@ class TestDashboardBlueprintEngine(TransactionCase):
     def test_crm_primary_action_hierarchy_leaf_uses_child_of(self):
         """Primary action links back to a company's own child contacts too."""
         bp = self.env.ref(
-            "dashboard_engine.blueprint_crm_customers", raise_if_not_found=False
+            "crm_customer_dashboard.blueprint_crm_customers", raise_if_not_found=False
         )
         if not bp:
             self.skipTest("CRM customers blueprint seed missing")
@@ -1861,12 +1864,12 @@ class TestDashboardBlueprintEngine(TransactionCase):
         """Every CRM slot's click-through widens to child_of, matching the
         badge count, which is folded up in Python by _apply_aggregate."""
         for xmlid in (
-            "dashboard_engine.slot_crm_menu_opportunities",
-            "dashboard_engine.slot_crm_menu_view_leads",
-            "dashboard_engine.slot_crm_unassigned",
-            "dashboard_engine.slot_crm_open_opportunities",
-            "dashboard_engine.slot_crm_overdue_opportunities",
-            "dashboard_engine.slot_crm_bottom_opportunities",
+            "crm_customer_dashboard.slot_crm_menu_opportunities",
+            "crm_customer_dashboard.slot_crm_menu_view_leads",
+            "crm_customer_dashboard.slot_crm_unassigned",
+            "crm_customer_dashboard.slot_crm_open_opportunities",
+            "crm_customer_dashboard.slot_crm_overdue_opportunities",
+            "crm_customer_dashboard.slot_crm_bottom_opportunities",
         ):
             slot = self.env.ref(xmlid, raise_if_not_found=False)
             if not slot:
@@ -1877,7 +1880,7 @@ class TestDashboardBlueprintEngine(TransactionCase):
         """A grandchild folds all the way up to whichever ancestor is
         actually a visible card, using two queries regardless of depth."""
         bp = self.env.ref(
-            "dashboard_engine.blueprint_crm_customers", raise_if_not_found=False
+            "crm_customer_dashboard.blueprint_crm_customers", raise_if_not_found=False
         )
         if not bp:
             self.skipTest("CRM customers blueprint seed missing")
@@ -1907,10 +1910,10 @@ class TestDashboardBlueprintEngine(TransactionCase):
         once include_child_records is on, with a query cost that doesn't grow
         with the number of cards on the page."""
         bp = self.env.ref(
-            "dashboard_engine.blueprint_crm_customers", raise_if_not_found=False
+            "crm_customer_dashboard.blueprint_crm_customers", raise_if_not_found=False
         )
         slot = self.env.ref(
-            "dashboard_engine.slot_crm_bottom_opportunities", raise_if_not_found=False
+            "crm_customer_dashboard.slot_crm_bottom_opportunities", raise_if_not_found=False
         )
         if not bp or not slot or "crm.lead" not in self.env:
             self.skipTest("CRM customers blueprint/slot seed missing")
@@ -1959,10 +1962,10 @@ class TestDashboardBlueprintEngine(TransactionCase):
 
     def test_primary_label_flips_with_the_reference_scope(self):
         bp = self.env.ref(
-            "dashboard_engine.blueprint_crm_customers", raise_if_not_found=False
+            "crm_customer_dashboard.blueprint_crm_customers", raise_if_not_found=False
         )
         scope = self.env.ref(
-            "dashboard_engine.scope_crm_pipeline", raise_if_not_found=False
+            "crm_customer_dashboard.scope_crm_pipeline", raise_if_not_found=False
         )
         if not bp or not scope:
             self.skipTest("CRM customers blueprint seed missing")
@@ -1976,10 +1979,10 @@ class TestDashboardBlueprintEngine(TransactionCase):
     def test_primary_action_domain_matches_card_graph(self):
         """Pipeline Analysis opens the same slice the mini-chart counts."""
         bp = self.env.ref(
-            "dashboard_engine.blueprint_crm_customers", raise_if_not_found=False
+            "crm_customer_dashboard.blueprint_crm_customers", raise_if_not_found=False
         )
         pipeline = self.env.ref(
-            "dashboard_engine.scope_crm_pipeline", raise_if_not_found=False
+            "crm_customer_dashboard.scope_crm_pipeline", raise_if_not_found=False
         )
         if not bp or not pipeline or "crm.lead" not in self.env:
             self.skipTest("CRM customers blueprint seed missing")
@@ -2010,14 +2013,71 @@ class TestDashboardBlueprintEngine(TransactionCase):
             ctx.get("graph_groupbys"),
             settings.get("groupbys") or [settings["groupby"]],
         )
-        self.assertEqual(ctx.get("graph_measure"), settings["measure"])
+        self.assertEqual(
+            ctx.get("graph_measure"),
+            self.env["dashboard.blueprint"]._odoo_view_measure_name(
+                settings["measure"]
+            ),
+        )
+
+    def test_primary_action_skips_graph_ctx_when_model_mismatch(self):
+        """Line-model groupbys must not be pushed onto header-order search."""
+        bp = self.env.ref(
+            "pos_sales_product_dashboard.blueprint_pos_products",
+            raise_if_not_found=False,
+        )
+        if not bp or "product.product" not in self.env or "pos.order" not in self.env:
+            self.skipTest("POS products blueprint seed missing")
+        product = self.env["product.product"].search([], limit=1)
+        if not product:
+            self.skipTest("No product.product available")
+        action = self.env["dashboard.blueprint"].execute_primary_action(
+            bp.key, "product.product", product.id
+        )
+        self.assertTrue(action)
+        self.assertEqual(action.get("res_model"), "pos.order")
+        ctx = action.get("context") or {}
+        self.assertNotIn("graph_groupbys", ctx, ctx)
+        self.assertNotIn("graph_measure", ctx, ctx)
+        self.assertEqual(ctx.get("dashboard_blueprint_key"), bp.key)
+
+    def test_primary_action_opens_sales_report_graph(self):
+        """Sales Analysis opens sale.report graph filtered by product_id."""
+        bp = self.env.ref(
+            "sales_product_dashboard.blueprint_sales_products",
+            raise_if_not_found=False,
+        )
+        if not bp or "product.product" not in self.env or "sale.report" not in self.env:
+            self.skipTest("Sales products blueprint seed missing")
+        product = self.env["product.product"].search([], limit=1)
+        if not product:
+            self.skipTest("No product.product available")
+        action = self.env["dashboard.blueprint"].execute_primary_action(
+            bp.key, "product.product", product.id
+        )
+        self.assertTrue(action)
+        self.assertEqual(action.get("res_model"), "sale.report")
+        view_mode = action.get("view_mode") or ""
+        self.assertTrue(
+            view_mode.startswith("graph")
+            or (action.get("views") and action["views"][0][1] == "graph"),
+            action.get("views") or view_mode,
+        )
+        domain = action.get("domain") or []
+        self.assertIn(("product_id", "=", product.id), domain)
+        ctx = action.get("context") or {}
+        self.assertIn("graph_groupbys", ctx)
+        self.assertEqual(ctx.get("graph_measure"), "price_subtotal")
+        self.assertEqual(ctx.get("pivot_measures"), ["price_subtotal"])
+        self.assertIn(ctx.get("graph_mode"), ("bar", "line"))
+        self.env["sale.report"].search(domain, limit=1)
 
     def test_restrict_scope_domain_empty_until_ticked(self):
         bp = self.env.ref(
-            "dashboard_engine.blueprint_crm_customers", raise_if_not_found=False
+            "crm_customer_dashboard.blueprint_crm_customers", raise_if_not_found=False
         )
         mine = self.env.ref(
-            "dashboard_engine.scope_crm_mine", raise_if_not_found=False
+            "crm_customer_dashboard.scope_crm_mine", raise_if_not_found=False
         )
         if not bp or not mine:
             self.skipTest("CRM customers blueprint seed missing")
@@ -2201,13 +2261,13 @@ class TestDashboardBlueprintEngine(TransactionCase):
         """Ticking 'Only mine' on the CRM dashboard narrows the KPI badge
         count and its click-through domain, matching the graph."""
         bp = self.env.ref(
-            "dashboard_engine.blueprint_crm_customers", raise_if_not_found=False
+            "crm_customer_dashboard.blueprint_crm_customers", raise_if_not_found=False
         )
         mine = self.env.ref(
-            "dashboard_engine.scope_crm_mine", raise_if_not_found=False
+            "crm_customer_dashboard.scope_crm_mine", raise_if_not_found=False
         )
         slot = self.env.ref(
-            "dashboard_engine.slot_crm_bottom_opportunities", raise_if_not_found=False
+            "crm_customer_dashboard.slot_crm_bottom_opportunities", raise_if_not_found=False
         )
         if not bp or not mine or not slot or "crm.lead" not in self.env:
             self.skipTest("CRM customers blueprint/slot seed missing")
@@ -2255,7 +2315,7 @@ class TestDashboardBlueprintEngine(TransactionCase):
 
     def test_seeded_sales_parity_slots_exist(self):
         bp = self.env.ref(
-            "dashboard_engine.blueprint_sales_customers", raise_if_not_found=False
+            "sales_customer_dashboard.blueprint_sales_customers", raise_if_not_found=False
         )
         if not bp:
             self.skipTest("Sales customers blueprint seed missing")
@@ -2279,17 +2339,17 @@ class TestDashboardBlueprintEngine(TransactionCase):
             "report_invoices",
         ):
             self.assertIn(key, keys, f"missing sales parity slot {key}")
-        # CRM-owned meetings + Website/POS extras via the customer share pool.
+        share_keys = set(bp.share_link_ids.mapped("key"))
+        # Phase A: customer packs share CRM↔Sales only (POS↔Website stay engine-side).
+        if "crm_customers" not in share_keys:
+            return
+        self.assertIn("crm_customers", share_keys)
         effective = set(bp._effective_slots().mapped("key"))
         self.assertIn("bottom_meetings", effective)
-        share_keys = set(bp.share_link_ids.mapped("key"))
-        self.assertTrue(
-            {"crm_customers", "website_customers", "pos_customers"} <= share_keys
-        )
 
     def test_seeded_pos_parity_slots_exist(self):
         bp = self.env.ref(
-            "dashboard_engine.blueprint_pos_customers", raise_if_not_found=False
+            "pos_sales_customer_dashboard.blueprint_pos_customers", raise_if_not_found=False
         )
         if not bp:
             self.skipTest("POS customers blueprint seed missing")
@@ -2299,8 +2359,8 @@ class TestDashboardBlueprintEngine(TransactionCase):
         self.assertIn("view_pos_orders", keys)
         self.assertTrue(bp.scope_ids)
         effective = set(bp._effective_slots().mapped("key"))
-        self.assertIn("bottom_sales", effective)
-        self.assertIn("bottom_meetings", effective)
+        # Phase A: POS shares with Website only (not CRM/Sales commercial pool).
+        self.assertTrue(bp.share_link_ids.filtered(lambda b: b.key == "website_customers"))
 
     def test_modules_installed_is_memoized_per_request(self):
         Blueprint = self.env["dashboard.blueprint"]
@@ -2316,7 +2376,7 @@ class TestDashboardBlueprintEngine(TransactionCase):
     def test_internal_user_can_render_published_blueprint_without_engine_acl(self):
         """Salespeople must see card payloads without the engine User group."""
         bp = self.env.ref(
-            "dashboard_engine.blueprint_crm_customers", raise_if_not_found=False
+            "crm_customer_dashboard.blueprint_crm_customers", raise_if_not_found=False
         )
         if not bp:
             self.skipTest("CRM customers blueprint seed missing")
@@ -2343,7 +2403,12 @@ class TestDashboardBlueprintEngine(TransactionCase):
 class TestDashboardBlueprint(TransactionCase):
     def test_slot_ui_number_source_inference(self):
         Slot = self.env["dashboard.blueprint.slot"]
-        bp = self.env.ref("dashboard_engine.blueprint_crm_customers")
+        bp = self.env.ref(
+            "crm_customer_dashboard.blueprint_crm_customers",
+            raise_if_not_found=False,
+        )
+        if not bp:
+            self.skipTest("crm_customer_dashboard not installed")
         related = Slot.new(
             {
                 "blueprint_id": bp.id,

@@ -2657,10 +2657,10 @@ class DashboardBlueprint(models.Model):
 
         label = bp._resolved_primary_label()
         settings = bp._effective_graph_settings()
-        domain = bp._primary_action_domain(record, settings)
 
         # Prefer an existing window/graph action when configured.
         primary_xmlid = bp._resolved_primary_action_xmlid()
+        result = False
         if primary_xmlid:
             try:
                 action = self.env.ref(primary_xmlid).sudo()
@@ -2673,12 +2673,19 @@ class DashboardBlueprint(models.Model):
                 )
                 result = False
             if result:
+                action_model = result.get("res_model")
+                domain = bp._primary_action_domain(
+                    record, settings, action_model=action_model
+                )
                 existing = result.get("domain") or []
                 if isinstance(existing, str):
                     existing = bp._safe_domain(existing)
                 result["domain"] = bp._merge_domains(existing, domain)
                 result["context"] = bp._primary_action_context(
-                    record, settings, result.get("context")
+                    record,
+                    settings,
+                    result.get("context"),
+                    action_model=action_model,
                 )
                 if label:
                     result["name"] = label
@@ -2690,6 +2697,9 @@ class DashboardBlueprint(models.Model):
         path = bp._graph_link_path()
         path_str, _source = bp._resolve_graph_path_string()
         default_link = relation_first_hop(path_str) if path_str else False
+        domain = bp._primary_action_domain(
+            record, settings, action_model=bp.graph_model
+        )
         return {
             "type": "ir.actions.act_window",
             "name": label or bp.name,
@@ -2698,29 +2708,101 @@ class DashboardBlueprint(models.Model):
             "view_mode": "graph,list,form",
             "domain": domain,
             "context": {
-                **bp._primary_action_context(record, settings),
+                **bp._primary_action_context(
+                    record, settings, action_model=bp.graph_model
+                ),
                 f"default_{default_link}": record.id if default_link else False,
             },
             "target": "current",
         }
 
-    def _primary_action_domain(self, record, settings=None):
+    def _field_path_exists_on(self, model_name, field_path):
+        """True when ``field_path`` (possibly dotted) resolves on ``model_name``."""
+        if not model_name or model_name not in self.env or not field_path:
+            return False
+        if not isinstance(field_path, str) or field_path in (".id", "id"):
+            return field_path == "id"
+        model = self.env[model_name]
+        parts = field_path.split(".")
+        for index, part in enumerate(parts):
+            if part not in model._fields:
+                return False
+            field = model._fields[part]
+            if index < len(parts) - 1:
+                if not getattr(field, "relational", False):
+                    return False
+                model = self.env[field.comodel_name]
+        return True
+
+    def _domain_leaf_valid_on(self, model_name, leaf):
+        if not isinstance(leaf, (list, tuple)) or len(leaf) != 3:
+            return True
+        return self._field_path_exists_on(model_name, leaf[0])
+
+    def _sanitize_domain_for_model(self, domain, model_name):
+        """Drop leaves whose field path is missing on ``model_name``.
+
+        Used when the primary action targets a different model than the
+        mini-chart (e.g. ``sale.order`` vs ``sale.report``), so graph
+        host fields like ``product_id`` are not applied blindly.
+        """
+        if not domain:
+            return []
+        if not model_name or model_name not in self.env:
+            return list(domain)
+        Model = self.env[model_name]
+        try:
+            fields.Domain(domain).optimize(Model)
+            return list(domain)
+        except ValueError:
+            pass
+        cleaned = []
+        for item in domain:
+            if isinstance(item, str) and item in ("!", "|", "&"):
+                cleaned.append(item)
+            elif isinstance(item, (list, tuple)) and len(item) == 3:
+                if self._domain_leaf_valid_on(model_name, item):
+                    cleaned.append(tuple(item))
+            else:
+                cleaned.append(item)
+        try:
+            return list(fields.Domain(cleaned).optimize(Model))
+        except Exception:
+            return [
+                item
+                for item in cleaned
+                if isinstance(item, (list, tuple)) and len(item) == 3
+            ]
+
+    def _primary_action_domain(self, record, settings=None, action_model=None):
         """Domain for the card's main button — same slice as the mini-chart.
 
         Combines the blueprint's static primary domain, the host link
         (``child_of`` when hierarchy is on), and the viewer's effective
         graph domain (include/restrict scopes, periods, custom filter).
+
+        When ``action_model`` differs from ``graph_model``, graph host
+        leaves that are invalid on the opened model are dropped; packs
+        should then set ``primary_action_domain`` (e.g.
+        ``order_line.product_id`` on ``sale.order``).
         """
         self.ensure_one()
         if settings is None:
             settings = self._effective_graph_settings()
         domain = self._eval_domain_with_record(self.primary_action_domain, record)
         leaf = self._primary_host_leaf(record)
-        if leaf:
+        if leaf and (
+            not action_model or self._domain_leaf_valid_on(action_model, leaf)
+        ):
             domain = list(domain) + [leaf]
-        return self._merge_domains(domain, settings.get("domain") or [])
+        merged = self._merge_domains(domain, settings.get("domain") or [])
+        if action_model:
+            return self._sanitize_domain_for_model(merged, action_model)
+        return merged
 
-    def _primary_action_context(self, record, settings=None, base_context=None):
+    def _primary_action_context(
+        self, record, settings=None, base_context=None, action_model=None
+    ):
         """Context for the card's main button.
 
         Drops ``search_default_*`` keys from the base action so their UI
@@ -2743,9 +2825,19 @@ class DashboardBlueprint(models.Model):
         ctx.update(
             self._eval_context_with_record(self.primary_action_context, record)
         )
-        if self.graph_model and self.graph_model in self.env:
+        # Only mirror graph groupbys/measure when the opened action uses the
+        # same model as the mini-chart. Otherwise SearchModel.createNewGroupBy
+        # receives fields that are not on the target search view and OWL
+        # crashes on `const { string } = field` (field undefined).
+        if (
+            self.graph_model
+            and self.graph_model in self.env
+            and (not action_model or action_model == self.graph_model)
+        ):
             groupby = settings.get("groupby")
-            measure = settings.get("measure")
+            # Blueprint stores ``field:aggregator`` for read_group; Odoo
+            # Graph/Pivot context expects the bare field name.
+            measure = self._odoo_view_measure_name(settings.get("measure"))
             groupbys = settings.get("groupbys") or ([groupby] if groupby else [])
             if groupbys:
                 ctx["graph_groupbys"] = groupbys
@@ -2754,9 +2846,28 @@ class DashboardBlueprint(models.Model):
                 ctx["pivot_measures"] = (
                     [measure] if measure != "__count" else []
                 )
+            # Match the mini-chart (bar vs line). Card type is computed on
+            # the host; fall back to the same <6-points → bar rule.
+            graph_mode = False
+            if "dashboard_graph_type" in record._fields:
+                graph_mode = record.dashboard_graph_type
+            if not graph_mode:
+                payloads = self._build_graph_payloads(record)
+                graph_mode = (payloads.get(record.id) or {}).get("type")
+            if graph_mode:
+                ctx["graph_mode"] = graph_mode
         ctx["dashboard_blueprint_key"] = self.key
         ctx["active_id"] = record.id
         return ctx
+
+    @api.model
+    def _odoo_view_measure_name(self, measure):
+        """Strip ``:aggregator`` so Graph/Pivot can resolve ``fields[measure]``."""
+        if not measure:
+            return measure
+        if measure == "__count" or ":" not in measure:
+            return measure
+        return measure.partition(":")[0]
 
     def _resolved_primary_action_xmlid(self):
         """Primary action xmlid: first installed variant, else the default."""
