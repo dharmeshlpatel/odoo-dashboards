@@ -159,3 +159,65 @@ class TestDashboardStudio(TransactionCase):
         self.assertTrue(bp.slot_ids.filtered(lambda s: s.key == "starter_kpi"))
         self.assertEqual(action["tag"], "dashboard_engine.studio")
         self.assertEqual(action["params"]["blueprint_id"], bp.id)
+
+    def test_studio_layout_default_and_validate(self):
+        bp = self._studio_blueprint()
+        default = bp.studio_default_layout()
+        self.assertEqual(default["version"], 1)
+        self.assertTrue(default["rows"])
+        payload = bp.get_studio_payload()
+        self.assertFalse(payload["layout_is_custom"])
+        self.assertEqual(payload["layout"]["version"], 1)
+        with self.assertRaises(UserError):
+            bp.studio_write_layout(
+                {
+                    "version": 1,
+                    "rows": [
+                        {
+                            "id": "r1",
+                            "cols": [
+                                {
+                                    "id": "c1",
+                                    "span": 15,
+                                    "widget": {"type": "kpis"},
+                                }
+                            ],
+                        }
+                    ],
+                }
+            )
+
+    def test_studio_layout_publish_order(self):
+        bp = self._studio_blueprint()
+        bp.write(
+            {
+                "graph_model": "res.partner",
+                "graph_measure": "__count",
+                "graph_groupby": "id",
+            }
+        )
+        layout = {
+            "version": 1,
+            "rows": [
+                {
+                    "id": "r1",
+                    "cols": [
+                        {"id": "c1", "span": 12, "widget": {"type": "kpis"}},
+                    ],
+                },
+                {
+                    "id": "r2",
+                    "cols": [
+                        {"id": "c2", "span": 12, "widget": {"type": "primary"}},
+                    ],
+                },
+            ],
+        }
+        bp.studio_write_layout(layout)
+        self.assertTrue(bp.studio_layout)
+        bp.action_publish()
+        arch = bp.generated_view_id.arch_db
+        kpi_pos = arch.find('data-studio-widget="kpis"')
+        primary_pos = arch.find('data-studio-widget="primary"')
+        self.assertGreater(kpi_pos, 0)
+        self.assertGreater(primary_pos, kpi_pos)

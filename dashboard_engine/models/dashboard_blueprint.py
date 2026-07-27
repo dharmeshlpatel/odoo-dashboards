@@ -94,6 +94,20 @@ HEADER_SEPARATORS = [
     (" ", "Acme Paris"),
 ]
 
+# Wave F Layout Studio — known Odoo-native card widgets (no free HTML).
+STUDIO_LAYOUT_WIDGETS = frozenset(
+    {"header", "primary", "graph", "kpis", "totals", "shortcuts", "manage"}
+)
+STUDIO_LAYOUT_WIDGET_LABELS = {
+    "header": "Header",
+    "primary": "Primary button",
+    "graph": "Chart",
+    "kpis": "KPIs",
+    "totals": "Totals",
+    "shortcuts": "Shortcuts",
+    "manage": "Manage menu",
+}
+
 
 class DashboardBlueprint(models.Model):
     _name = "dashboard.blueprint"
@@ -1106,6 +1120,10 @@ class DashboardBlueprint(models.Model):
     pref_ids = fields.One2many(
         "dashboard.user.pref", "blueprint_id", string="User preferences"
     )
+    studio_layout = fields.Json(
+        string="Studio Layout",
+        help="Wave F page grid (JSON). Empty uses the classic fixed card shell.",
+    )
 
     generated_view_id = fields.Many2one("ir.ui.view", readonly=True, copy=False)
     generated_action_id = fields.Many2one(
@@ -1370,7 +1388,152 @@ class DashboardBlueprint(models.Model):
             "headers": headers,
             "scopes": scopes,
             "advanced_action_xmlid": "dashboard_engine.action_dashboard_blueprint",
+            "layout": self.studio_layout or self._default_studio_layout(),
+            "layout_is_custom": bool(self.studio_layout),
+            "layout_widget_labels": dict(STUDIO_LAYOUT_WIDGET_LABELS),
         }
+
+    @api.model
+    def _default_studio_layout(self):
+        """Classic card composition as Layout Studio schema v1."""
+        return {
+            "version": 1,
+            "rows": [
+                {
+                    "id": "r_header",
+                    "cols": [
+                        {
+                            "id": "c_header",
+                            "span": 12,
+                            "widget": {"type": "header"},
+                        }
+                    ],
+                },
+                {
+                    "id": "r_main",
+                    "cols": [
+                        {
+                            "id": "c_primary",
+                            "span": 7,
+                            "widget": {"type": "primary"},
+                        },
+                        {
+                            "id": "c_kpis",
+                            "span": 5,
+                            "widget": {"type": "kpis"},
+                        },
+                    ],
+                },
+                {
+                    "id": "r_graph",
+                    "cols": [
+                        {
+                            "id": "c_graph",
+                            "span": 12,
+                            "widget": {"type": "graph"},
+                        }
+                    ],
+                },
+                {
+                    "id": "r_footer",
+                    "cols": [
+                        {
+                            "id": "c_totals",
+                            "span": 6,
+                            "widget": {"type": "totals"},
+                        },
+                        {
+                            "id": "c_shortcuts",
+                            "span": 6,
+                            "widget": {"type": "shortcuts"},
+                        },
+                    ],
+                },
+                {
+                    "id": "r_manage",
+                    "cols": [
+                        {
+                            "id": "c_manage",
+                            "span": 12,
+                            "widget": {"type": "manage"},
+                        }
+                    ],
+                },
+            ],
+        }
+
+    @api.model
+    def studio_default_layout(self):
+        """Public RPC for Layout Studio Reset."""
+        return self._default_studio_layout()
+
+    def _validate_studio_layout(self, layout):
+        """Raise UserError if layout is not a valid Wave F schema."""
+        if not layout:
+            return
+        if not isinstance(layout, dict):
+            raise UserError(_("Layout must be a JSON object."))
+        if layout.get("version") != 1:
+            raise UserError(_("Unsupported layout version."))
+        rows = layout.get("rows")
+        if not isinstance(rows, list) or not rows:
+            raise UserError(_("Layout needs at least one row."))
+        seen_types = set()
+        for row in rows:
+            if not isinstance(row, dict) or not row.get("id"):
+                raise UserError(_("Each layout row needs an id."))
+            cols = row.get("cols") or []
+            if not isinstance(cols, list) or not cols:
+                raise UserError(_("Each layout row needs at least one column."))
+            span_sum = 0
+            for col in cols:
+                if not isinstance(col, dict) or not col.get("id"):
+                    raise UserError(_("Each layout column needs an id."))
+                try:
+                    span = int(col.get("span") or 0)
+                except (TypeError, ValueError) as exc:
+                    raise UserError(_("Column span must be an integer.")) from exc
+                if span < 1 or span > 12:
+                    raise UserError(_("Column span must be between 1 and 12."))
+                span_sum += span
+                widget = col.get("widget") or {}
+                wtype = widget.get("type")
+                if wtype == "richtext":
+                    # Reserved hook — ignored at publish time in Wave F.
+                    continue
+                if wtype not in STUDIO_LAYOUT_WIDGETS:
+                    raise UserError(_("Unknown layout widget: %s") % wtype)
+                if wtype in seen_types:
+                    raise UserError(
+                        _("Widget “%s” can only appear once on the page.")
+                        % STUDIO_LAYOUT_WIDGET_LABELS.get(wtype, wtype)
+                    )
+                seen_types.add(wtype)
+            if span_sum < 1 or span_sum > 12:
+                raise UserError(
+                    _("Row “%s”: column spans must add up to at most 12 (got %s).")
+                    % (row.get("id"), span_sum)
+                )
+
+    def studio_write_layout(self, layout):
+        """Persist Layout Studio grid (or clear with falsy layout)."""
+        self.ensure_one()
+        if not layout:
+            self.studio_layout = False
+        else:
+            # Drop empty draft rows so Save after “Add row” alone does not fail.
+            if isinstance(layout, dict) and isinstance(layout.get("rows"), list):
+                layout = {
+                    **layout,
+                    "rows": [
+                        row
+                        for row in layout["rows"]
+                        if isinstance(row, dict) and (row.get("cols") or [])
+                    ],
+                }
+            self._validate_studio_layout(layout)
+            self.studio_layout = layout
+        return self.get_studio_payload()
 
     def studio_write_blueprint(self, vals):
         """Write a whitelist of blueprint fields from Studio."""
@@ -1806,6 +1969,7 @@ class DashboardBlueprint(models.Model):
             "header_image_field",
             "header_image_style",
             "header_line_ids",
+            "studio_layout",
         }
         if sync_fields.intersection(vals):
             for rec in self.filtered(lambda b: b.state == "published"):
@@ -2255,34 +2419,116 @@ class DashboardBlueprint(models.Model):
                 </div>{tag_block}
             </div>"""
 
-    def _kanban_arch(self):
+    def _layout_widget_arch(self, widget_type, key, caption):
+        """Return inner HTML for one Layout Studio widget type."""
+        self.ensure_one()
+        if widget_type == "header":
+            return self._header_arch()
+        if widget_type == "primary":
+            return f"""
+                <div name="kanban_primary_left">
+                    <button type="object" name="action_dashboard_engine_primary"
+                            class="btn btn-primary"
+                            context="{{'dashboard_blueprint_key': '{key}'}}">
+                        <field name="dashboard_primary_label"/>
+                    </button>
+                </div>"""
+        if widget_type == "kpis":
+            return f"""
+                <div name="kanban_primary_right">
+                    <field name="dashboard_slots" widget="dashboard_slots"
+                           options="{{'display': 'kpis'}}"/>
+                </div>"""
+        if widget_type == "graph":
+            return f"""
+                <t t-if="record.dashboard_graph_data.raw_value">
+                    <div class="o_analytic_kanban_graph_section w-100">
+                        <div t-if="'{caption}'"
+                             class="o_analytic_graph_caption text-uppercase text-muted small fw-bold mb-1">
+                            {caption}
+                        </div>
+                        <field name="dashboard_graph_data"
+                               widget="analytic_dashboard_graph"
+                               t-att-graph_type="record.dashboard_graph_type.raw_value"/>
+                    </div>
+                </t>
+                <t t-else="">
+                    <t t-call="dashboard_engine.EmptyGraph"/>
+                </t>"""
+        if widget_type == "totals":
+            return f"""
+                <div class="oe_button_box" name="button_box">
+                    <field name="dashboard_slots" widget="dashboard_slots"
+                           options="{{'display': 'button_box'}}"/>
+                </div>"""
+        if widget_type == "shortcuts":
+            return f"""
+                <div class="o_kanban_primary_bottom bottom_block">
+                    <field name="dashboard_slots" widget="dashboard_slots"
+                           options="{{'display': 'buttons'}}"/>
+                </div>"""
+        if widget_type == "manage":
+            return """
+                <div class="container-fluid px-0">
+                    <div class="row">
+                        <div class="col-4" name="kanban_manage_views">
+                            <h5 class="o_kanban_card_manage_title">
+                                <span role="separator">View</span>
+                            </h5>
+                            <field name="dashboard_slots" widget="dashboard_slots"
+                                   options="{'display': 'menu', 'section': 'views'}"/>
+                        </div>
+                        <div class="col-4" name="kanban_manage_new">
+                            <h5 class="o_kanban_card_manage_title">
+                                <span role="separator">New</span>
+                            </h5>
+                            <field name="dashboard_slots" widget="dashboard_slots"
+                                   options="{'display': 'menu', 'section': 'new'}"/>
+                        </div>
+                        <div class="col-4" name="kanban_manage_reports">
+                            <h5 class="o_kanban_card_manage_title">
+                                <span role="separator">Reporting</span>
+                            </h5>
+                            <field name="dashboard_slots" widget="dashboard_slots"
+                                   options="{'display': 'menu', 'section': 'reports'}"/>
+                        </div>
+                    </div>
+                </div>"""
+        return ""
+
+    def _kanban_arch_from_layout(self, layout):
+        """Compose card body from Layout Studio rows/cols."""
         self.ensure_one()
         key = self.key
         caption = self.graph_caption or ""
-        host = self.env.get(self.host_model_name)
-        highlight = ""
-        declared = [
-            "id",
-            "dashboard_graph_data",
-            "dashboard_graph_type",
-            "dashboard_slots",
-            "dashboard_primary_label",
-        ]
-        if host is not None and "color" in host._fields:
-            highlight = ' highlight_color="color"'
-            declared.append("color")
-        for name in self._header_field_names():
-            if name not in declared and (host is None or name in host._fields):
-                declared.append(name)
-        fields_arch = "\n    ".join(
-            '<field name="%s"/>' % name for name in declared
-        )
+        rows_html = []
+        for row in layout.get("rows") or []:
+            cols_html = []
+            for col in row.get("cols") or []:
+                widget = col.get("widget") or {}
+                wtype = widget.get("type")
+                if wtype == "richtext" or wtype not in STUDIO_LAYOUT_WIDGETS:
+                    continue
+                span = int(col.get("span") or 12)
+                inner = self._layout_widget_arch(wtype, key, caption)
+                cols_html.append(
+                    f'<div class="col-{span} mb-3" data-studio-widget="{wtype}">'
+                    f"{inner}</div>"
+                )
+            if cols_html:
+                rows_html.append(
+                    f'<div class="row" data-studio-row="{row.get("id") or ""}">'
+                    f'{"".join(cols_html)}</div>'
+                )
+        body = "\n".join(rows_html) or self._legacy_card_body_arch()
+        return body
+
+    def _legacy_card_body_arch(self):
+        """Classic fixed card body (pre–Layout Studio)."""
+        self.ensure_one()
+        key = self.key
+        caption = self.graph_caption or ""
         return f"""
-<kanban create="false" can_open="0" class="o_analytic_kanban_dashboard"{highlight}
-        js_class="analytic_dashboard_config_settings_kanban">
-    {fields_arch}
-    <templates>
-        <t t-name="card">{self._header_arch()}
             <div class="mt-3 p-0 container-fluid">
                 <div class="row">
                     <div class="col mb-3 mb-sm-0" name="kanban_primary_left">
@@ -2323,7 +2569,61 @@ class DashboardBlueprint(models.Model):
                                options="{{'display': 'buttons'}}"/>
                     </div>
                 </div>
-            </div>
+            </div>"""
+
+    def _kanban_arch(self):
+        self.ensure_one()
+        host = self.env.get(self.host_model_name)
+        highlight = ""
+        declared = [
+            "id",
+            "dashboard_graph_data",
+            "dashboard_graph_type",
+            "dashboard_slots",
+            "dashboard_primary_label",
+        ]
+        if host is not None and "color" in host._fields:
+            highlight = ' highlight_color="color"'
+            declared.append("color")
+        for name in self._header_field_names():
+            if name not in declared and (host is None or name in host._fields):
+                declared.append(name)
+        fields_arch = "\n    ".join(
+            '<field name="%s"/>' % name for name in declared
+        )
+
+        layout = self.studio_layout
+        if layout:
+            try:
+                self._validate_studio_layout(layout)
+                # Header may be a grid widget; if not present, keep classic top header.
+                types_used = {
+                    (col.get("widget") or {}).get("type")
+                    for row in layout.get("rows") or []
+                    for col in row.get("cols") or []
+                }
+                if "header" in types_used:
+                    card_inner = (
+                        f'<div class="p-0 container-fluid">'
+                        f"{self._kanban_arch_from_layout(layout)}</div>"
+                    )
+                else:
+                    card_inner = (
+                        f"{self._header_arch()}"
+                        f'<div class="mt-3 p-0 container-fluid">'
+                        f"{self._kanban_arch_from_layout(layout)}</div>"
+                    )
+            except UserError:
+                card_inner = f"{self._header_arch()}{self._legacy_card_body_arch()}"
+        else:
+            card_inner = f"{self._header_arch()}{self._legacy_card_body_arch()}"
+
+        return f"""
+<kanban create="false" can_open="0" class="o_analytic_kanban_dashboard"{highlight}
+        js_class="analytic_dashboard_config_settings_kanban">
+    {fields_arch}
+    <templates>
+        <t t-name="card">{card_inner}
         </t>
         <t t-name="menu">
             <div class="container">
