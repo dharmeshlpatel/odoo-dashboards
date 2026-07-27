@@ -1,0 +1,127 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Warehouse dashboard fill. -->
+<odoo noupdate="1">
+    <record id="blueprint_warehouse_overview" model="dashboard.blueprint">
+        <field name="primary_button_label">Transfer Analysis</field>
+        <field name="primary_action_xmlid">stock.action_picking_tree_all</field>
+        <field name="primary_action_domain">[('picking_type_id.warehouse_id', '=', '{{id}}')]</field>
+        <field name="graph_domain">[]</field>
+    </record>
+
+    <record id="slot_wh_kpi_receipts" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_warehouse_overview"/>
+        <field name="key">receipts</field>
+        <field name="name">Receipts</field>
+        <field name="section">kpi</field>
+        <field name="sequence">20</field>
+        <field name="label">Receipt</field>
+        <field name="label_plural">Receipts</field>
+        <field name="compute_model">stock.picking</field>
+        <field name="compute_domain">[('picking_type_id.warehouse_id', '=', {{id}}), ('picking_type_id.code', '=', 'incoming'), ('state', 'not in', ('done', 'cancel'))]</field>
+        <field name="compute_aggregator">__count</field>
+        <field name="action_xmlid">stock.action_picking_tree_incoming</field>
+        <field name="action_domain">[('picking_type_id.warehouse_id', '=', '{{id}}'), ('state', 'not in', ('done', 'cancel'))]</field>
+        <field name="show_if_zero" eval="True"/>
+        <field name="module_depends">stock</field>
+    </record>
+    <record id="slot_wh_kpi_deliveries" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_warehouse_overview"/>
+        <field name="key">deliveries</field>
+        <field name="name">Deliveries</field>
+        <field name="section">kpi</field>
+        <field name="sequence">30</field>
+        <field name="label">Delivery</field>
+        <field name="label_plural">Deliveries</field>
+        <field name="compute_model">stock.picking</field>
+        <field name="compute_domain">[('picking_type_id.warehouse_id', '=', {{id}}), ('picking_type_id.code', '=', 'outgoing'), ('state', 'not in', ('done', 'cancel'))]</field>
+        <field name="compute_aggregator">__count</field>
+        <field name="action_xmlid">stock.action_picking_tree_outgoing</field>
+        <field name="action_domain">[('picking_type_id.warehouse_id', '=', '{{id}}'), ('state', 'not in', ('done', 'cancel'))]</field>
+        <field name="show_if_zero" eval="True"/>
+        <field name="module_depends">stock</field>
+    </record>
+    <record id="slot_wh_kpi_internal" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_warehouse_overview"/>
+        <field name="key">internal</field>
+        <field name="name">Internal</field>
+        <field name="section">kpi</field>
+        <field name="sequence">40</field>
+        <field name="label">Internal Transfer</field>
+        <field name="label_plural">Internal Transfers</field>
+        <field name="compute_model">stock.picking</field>
+        <field name="compute_domain">[('picking_type_id.warehouse_id', '=', {{id}}), ('picking_type_id.code', '=', 'internal'), ('state', 'not in', ('done', 'cancel'))]</field>
+        <field name="compute_aggregator">__count</field>
+        <field name="action_xmlid">stock.action_picking_tree_internal</field>
+        <field name="action_domain">[('picking_type_id.warehouse_id', '=', '{{id}}'), ('state', 'not in', ('done', 'cancel'))]</field>
+        <field name="show_if_zero" eval="True"/>
+        <field name="module_depends">stock</field>
+    </record>
+
+    <record id="slot_wh_bottom_receipts" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_warehouse_overview"/>
+        <field name="key">bottom_receipts</field>
+        <field name="name">Receipts Button</field>
+        <field name="section">bottom</field>
+        <field name="sequence">20</field>
+        <field name="label">Receipts</field>
+        <field name="icon">fa-download</field>
+        <field name="show_if_zero" eval="True"/>
+        <field name="compute_model">stock.picking</field>
+        <field name="compute_domain">[('picking_type_id.warehouse_id', '=', {{id}}), ('picking_type_id.code', '=', 'incoming')]</field>
+        <field name="action_xmlid">stock.action_picking_tree_incoming</field>
+        <field name="action_domain">[('picking_type_id.warehouse_id', '=', '{{id}}')]</field>
+        <field name="module_depends">stock</field>
+    </record>
+    <record id="slot_wh_bottom_deliveries" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_warehouse_overview"/>
+        <field name="key">bottom_deliveries</field>
+        <field name="name">Deliveries Button</field>
+        <field name="section">bottom</field>
+        <field name="sequence">30</field>
+        <field name="label">Deliveries</field>
+        <field name="icon">fa-upload</field>
+        <field name="show_if_zero" eval="True"/>
+        <field name="compute_model">stock.picking</field>
+        <field name="compute_domain">[('picking_type_id.warehouse_id', '=', {{id}}), ('picking_type_id.code', '=', 'outgoing')]</field>
+        <field name="action_xmlid">stock.action_picking_tree_outgoing</field>
+        <field name="action_domain">[('picking_type_id.warehouse_id', '=', '{{id}}')]</field>
+        <field name="module_depends">stock</field>
+    </record>
+
+    <record id="slot_wh_menu_receipts" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_warehouse_overview"/>
+        <field name="key">view_receipts</field>
+        <field name="name">View Receipts</field>
+        <field name="section">menu_views</field>
+        <field name="sequence">20</field>
+        <field name="label">Receipts</field>
+        <field name="show_if_zero" eval="True"/>
+        <field name="action_xmlid">stock.action_picking_tree_incoming</field>
+        <field name="action_domain">[('picking_type_id.warehouse_id', '=', '{{id}}')]</field>
+        <field name="module_depends">stock</field>
+    </record>
+    <record id="slot_wh_menu_deliveries" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_warehouse_overview"/>
+        <field name="key">view_deliveries</field>
+        <field name="name">View Deliveries</field>
+        <field name="section">menu_views</field>
+        <field name="sequence">30</field>
+        <field name="label">Deliveries</field>
+        <field name="show_if_zero" eval="True"/>
+        <field name="action_xmlid">stock.action_picking_tree_outgoing</field>
+        <field name="action_domain">[('picking_type_id.warehouse_id', '=', '{{id}}')]</field>
+        <field name="module_depends">stock</field>
+    </record>
+    <record id="slot_wh_menu_report" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_warehouse_overview"/>
+        <field name="key">report_transfers</field>
+        <field name="name">Report Transfers</field>
+        <field name="section">menu_reports</field>
+        <field name="sequence">10</field>
+        <field name="label">Transfers</field>
+        <field name="show_if_zero" eval="True"/>
+        <field name="action_xmlid">stock_enterprise.stock_report_action_performance</field>
+        <field name="action_domain">[('warehouse_id', '=', '{{id}}')]</field>
+        <field name="module_depends">stock,stock_enterprise</field>
+    </record>
+</odoo>

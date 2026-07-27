@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Warehouse dashboard (v1 stock_dashboard → warehouse_dashboard, no _enterprise).
+  Odoo 19 stock.picking has no warehouse_id; link via picking_type_id.warehouse_id
+  in domains (engine relate_field must be a direct field).
+-->
+<odoo noupdate="1">
+    <record id="blueprint_warehouse_overview" model="dashboard.blueprint">
+        <field name="name">Warehouse Overview</field>
+        <field name="key">warehouse_overview</field>
+        <field name="host_model_id" ref="stock.model_stock_warehouse"/>
+        <field name="module_depends">stock</field>
+        <field name="menu_name">Warehouses Dashboard</field>
+        <field name="menu_parent_xmlid">stock.menu_stock_root</field>
+        <field name="menu_sequence">5</field>
+        <field name="primary_button_label">Transfers</field>
+        <field name="primary_action_xmlid">stock.action_picking_tree_all</field>
+        <field name="graph_model">stock.picking</field>
+        <field name="graph_data_field"></field>
+        <field name="graph_measure">__count</field>
+        <field name="graph_groupby">scheduled_date:month</field>
+        <field name="graph_domain">[]</field>
+        <field name="graph_caption">Transfers</field>
+        <field name="state">published</field>
+        <field name="sequence">50</field>
+    </record>
+    <record id="slot_wh_pickings" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_warehouse_overview"/>
+        <field name="key">pickings</field>
+        <field name="name">Transfers</field>
+        <field name="section">kpi</field>
+        <field name="sequence">10</field>
+        <field name="label">Transfer</field>
+        <field name="label_plural">Transfers</field>
+        <field name="compute_model">stock.picking</field>
+        <field name="compute_domain">[('picking_type_id.warehouse_id', '=', {{id}})]</field>
+        <field name="compute_aggregator">__count</field>
+        <field name="action_xmlid">stock.action_picking_tree_all</field>
+        <field name="action_domain">[('picking_type_id.warehouse_id', '=', '{{id}}')]</field>
+        <field name="show_if_zero" eval="True"/>
+        <field name="module_depends">stock</field>
+    </record>
+    <record id="slot_wh_menu_transfers" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_warehouse_overview"/>
+        <field name="key">view_transfers</field>
+        <field name="name">View Transfers</field>
+        <field name="section">menu_views</field>
+        <field name="sequence">10</field>
+        <field name="label">Transfers</field>
+        <field name="show_if_zero" eval="True"/>
+        <field name="action_xmlid">stock.action_picking_tree_all</field>
+        <field name="action_domain">[('picking_type_id.warehouse_id', '=', '{{id}}')]</field>
+        <field name="module_depends">stock</field>
+    </record>
+    <record id="slot_wh_bottom" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_warehouse_overview"/>
+        <field name="key">bottom_transfers</field>
+        <field name="name">Transfers Button</field>
+        <field name="section">bottom</field>
+        <field name="sequence">10</field>
+        <field name="label">Transfers</field>
+        <field name="icon">fa-truck</field>
+        <field name="show_if_zero" eval="True"/>
+        <field name="compute_model">stock.picking</field>
+        <field name="compute_domain">[('picking_type_id.warehouse_id', '=', {{id}})]</field>
+        <field name="action_xmlid">stock.action_picking_tree_all</field>
+        <field name="action_domain">[('picking_type_id.warehouse_id', '=', '{{id}}')]</field>
+        <field name="module_depends">stock</field>
+    </record>
+</odoo>

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo noupdate="1">
+    <record id="blueprint_warehouse_overview" model="dashboard.blueprint">
+        <field name="header_title_field">name</field>
+        <field name="header_image_style">avatar</field>
+    </record>
+    <record id="header_wh_code" model="dashboard.blueprint.header.item">
+        <field name="blueprint_id" ref="blueprint_warehouse_overview"/>
+        <field name="sequence">10</field>
+        <field name="kind">subtitle</field>
+        <field name="field_names">code</field>
+    </record>
+</odoo>
