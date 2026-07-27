@@ -1,0 +1,297 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  CRM Salespersons dashboard on res.users.
+
+  Customer-parity of crm_customer_dashboard with user_id as the card link
+  (partner_id / child_of → user_id / =). Independent of crm_customer_dashboard.
+
+  Skipped vs customers: unassigned KPI (no salesperson owns user_id=False),
+  Sales share pool (different host), partner child hierarchy.
+-->
+<odoo noupdate="1">
+    <!-- Overdue condition (self-contained; same rules as CRM customers pack). -->
+    <record id="condition_crm_sp_overdue_opportunity" model="dashboard.condition">
+        <field name="name">Overdue open opportunity</field>
+        <field name="model">crm.lead</field>
+        <field name="match">all</field>
+        <field name="module_depends">crm</field>
+        <field name="note">Deadline before today, still open, type opportunity.</field>
+    </record>
+    <record id="rule_crm_sp_overdue_type" model="dashboard.condition.rule">
+        <field name="condition_id" ref="condition_crm_sp_overdue_opportunity"/>
+        <field name="sequence">10</field>
+        <field name="field_name">type</field>
+        <field name="operator">=</field>
+        <field name="value_type">static</field>
+        <field name="value_char">opportunity</field>
+    </record>
+    <record id="rule_crm_sp_overdue_open" model="dashboard.condition.rule">
+        <field name="condition_id" ref="condition_crm_sp_overdue_opportunity"/>
+        <field name="sequence">20</field>
+        <field name="field_name">date_closed</field>
+        <field name="operator">=</field>
+        <field name="value_type">false</field>
+    </record>
+    <record id="rule_crm_sp_overdue_deadline" model="dashboard.condition.rule">
+        <field name="condition_id" ref="condition_crm_sp_overdue_opportunity"/>
+        <field name="sequence">30</field>
+        <field name="field_name">date_deadline</field>
+        <field name="operator">&lt;</field>
+        <field name="value_type">relative_date</field>
+        <field name="relative_when">today</field>
+    </record>
+
+    <record id="blueprint_crm_salespersons" model="dashboard.blueprint">
+        <field name="name">CRM Salespersons</field>
+        <field name="key">crm_salespersons</field>
+        <field name="host_model_id" ref="base.model_res_users"/>
+        <field name="module_depends">crm</field>
+        <field name="menu_name">Salespersons Dashboard</field>
+        <field name="menu_parent_xmlid">crm.crm_menu_root</field>
+        <field name="menu_sequence">6</field>
+        <field name="primary_button_label">Pipeline Analysis</field>
+        <field name="primary_action_xmlid">crm.crm_lead_action_pipeline</field>
+        <field name="primary_label_alt">Leads Analysis</field>
+        <field name="graph_model">crm.lead</field>
+        <field name="graph_data_field">user_id</field>
+        <field name="graph_measure">__count</field>
+        <field name="graph_groupby">stage_id</field>
+        <field name="graph_domain">[]</field>
+        <field name="graph_caption">Open pipeline</field>
+        <field name="include_child_records" eval="False"/>
+        <field name="state">published</field>
+        <field name="sequence">15</field>
+    </record>
+
+    <!-- Scopes: My Pipeline (viewer restrict) + Pipeline / Leads includes -->
+    <record id="scope_crm_sp_mine" model="dashboard.blueprint.scope">
+        <field name="blueprint_id" ref="blueprint_crm_salespersons"/>
+        <field name="sequence">10</field>
+        <field name="name">My Pipeline</field>
+        <field name="description">Show only opportunities that are assigned to you.</field>
+        <field name="mode">restrict</field>
+        <field name="domain">[('user_id', '=', uid)]</field>
+        <field name="default_on" eval="False"/>
+    </record>
+    <record id="scope_crm_sp_pipeline" model="dashboard.blueprint.scope">
+        <field name="blueprint_id" ref="blueprint_crm_salespersons"/>
+        <field name="sequence">20</field>
+        <field name="name">Pipeline</field>
+        <field name="description">Include opportunity-related records in the dashboard analysis.</field>
+        <field name="mode">include</field>
+        <field name="domain">[('type', '=', 'opportunity')]</field>
+        <field name="default_on" eval="True"/>
+    </record>
+    <record id="scope_crm_sp_leads" model="dashboard.blueprint.scope">
+        <field name="blueprint_id" ref="blueprint_crm_salespersons"/>
+        <field name="sequence">30</field>
+        <field name="name">Leads</field>
+        <field name="description">Include lead-related records in the dashboard analysis.</field>
+        <field name="mode">include</field>
+        <field name="domain">[('type', '=', 'lead')]</field>
+        <field name="default_on" eval="False"/>
+    </record>
+
+    <record id="blueprint_crm_salespersons" model="dashboard.blueprint">
+        <field name="primary_label_alt_scope_id" ref="scope_crm_sp_pipeline"/>
+        <field name="primary_label_alt">Leads Analysis</field>
+    </record>
+
+    <!-- KPIs -->
+    <record id="slot_crm_sp_open" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_crm_salespersons"/>
+        <field name="key">open_opportunities</field>
+        <field name="name">Open Opportunities</field>
+        <field name="section">kpi</field>
+        <field name="sequence">20</field>
+        <field name="label">Open Opportunity</field>
+        <field name="label_plural">Open Opportunities</field>
+        <field name="compute_model">crm.lead</field>
+        <field name="relate_field">user_id</field>
+        <field name="compute_domain">[('type', '=', 'opportunity'), ('probability', '&lt;', 100), ('active', '=', True)]</field>
+        <field name="compute_aggregator">__count</field>
+        <field name="amount_aggregator">expected_revenue:sum</field>
+        <field name="action_xmlid">crm.crm_lead_action_pipeline</field>
+        <field name="action_domain">[('type', '=', 'opportunity'), ('probability', '&lt;', 100), ('active', '=', True), ('user_id', '=', '{{id}}')]</field>
+        <field name="action_context">{"default_type": "opportunity", "default_user_id": {{id}}}</field>
+        <field name="module_depends">crm</field>
+    </record>
+
+    <record id="slot_crm_sp_overdue" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_crm_salespersons"/>
+        <field name="key">overdue_opportunities</field>
+        <field name="name">Overdue Opportunities</field>
+        <field name="section">kpi</field>
+        <field name="sequence">30</field>
+        <field name="label">Overdue Opportunity</field>
+        <field name="label_plural">Overdue Opportunities</field>
+        <field name="style">danger</field>
+        <field name="compute_model">crm.lead</field>
+        <field name="relate_field">user_id</field>
+        <field name="compute_domain">[]</field>
+        <field name="condition_ids" eval="[(4, ref('condition_crm_sp_overdue_opportunity'))]"/>
+        <field name="compute_aggregator">__count</field>
+        <field name="amount_aggregator">expected_revenue:sum</field>
+        <field name="action_xmlid">crm.crm_lead_action_pipeline</field>
+        <field name="action_domain">[('user_id', '=', '{{id}}')]</field>
+        <field name="action_context">{"default_type": "opportunity", "default_user_id": {{id}}}</field>
+        <field name="module_depends">crm</field>
+    </record>
+
+    <!-- Manage · Views -->
+    <record id="slot_crm_sp_menu_view_leads" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_crm_salespersons"/>
+        <field name="key">view_leads</field>
+        <field name="name">View Leads</field>
+        <field name="section">menu_views</field>
+        <field name="sequence">10</field>
+        <field name="label">Leads</field>
+        <field name="show_if_zero" eval="True"/>
+        <field name="groups_xmlids">crm.group_use_lead</field>
+        <field name="action_xmlid">crm.crm_lead_all_leads</field>
+        <field name="action_domain">[('user_id', '=', '{{id}}')]</field>
+        <field name="module_depends">crm</field>
+    </record>
+
+    <record id="slot_crm_sp_menu_opportunities" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_crm_salespersons"/>
+        <field name="key">view_opportunities</field>
+        <field name="name">View Opportunities</field>
+        <field name="section">menu_views</field>
+        <field name="sequence">20</field>
+        <field name="label">Opportunities</field>
+        <field name="show_if_zero" eval="True"/>
+        <field name="action_xmlid">crm.crm_lead_action_pipeline</field>
+        <field name="action_domain">[('user_id', '=', '{{id}}')]</field>
+        <field name="module_depends">crm</field>
+    </record>
+
+    <!-- Manage · New -->
+    <record id="slot_crm_sp_menu_new_lead" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_crm_salespersons"/>
+        <field name="key">new_lead</field>
+        <field name="name">New Lead</field>
+        <field name="section">menu_new</field>
+        <field name="sequence">10</field>
+        <field name="label">Lead</field>
+        <field name="show_if_zero" eval="True"/>
+        <field name="groups_xmlids">crm.group_use_lead</field>
+        <field name="action_xmlid">report_sale_crm.action_lead_form</field>
+        <field name="action_context">{"default_user_id": {{id}}, "default_type": "lead"}</field>
+        <field name="module_depends">crm,report_sale_crm</field>
+    </record>
+
+    <record id="slot_crm_sp_menu_new_opportunity" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_crm_salespersons"/>
+        <field name="key">new_opportunity</field>
+        <field name="name">New Opportunity</field>
+        <field name="section">menu_new</field>
+        <field name="sequence">20</field>
+        <field name="label">Opportunity</field>
+        <field name="show_if_zero" eval="True"/>
+        <field name="action_xmlid">report_sale_crm.action_opportunity_form</field>
+        <field name="action_context">{"default_user_id": {{id}}, "default_type": "opportunity"}</field>
+        <field name="module_depends">crm,report_sale_crm</field>
+    </record>
+
+    <!-- Manage · Reports -->
+    <record id="slot_crm_sp_menu_report_leads" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_crm_salespersons"/>
+        <field name="key">report_leads</field>
+        <field name="name">Report Leads</field>
+        <field name="section">menu_reports</field>
+        <field name="sequence">10</field>
+        <field name="label">Leads</field>
+        <field name="show_if_zero" eval="True"/>
+        <field name="groups_xmlids">crm.group_use_lead</field>
+        <field name="action_xmlid">crm.crm_opportunity_report_action_lead</field>
+        <field name="action_context">{"search_default_user_id": [{{id}}]}</field>
+        <field name="module_depends">crm</field>
+    </record>
+
+    <record id="slot_crm_sp_menu_report_opportunities" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_crm_salespersons"/>
+        <field name="key">report_opportunities</field>
+        <field name="name">Report Opportunities</field>
+        <field name="section">menu_reports</field>
+        <field name="sequence">20</field>
+        <field name="label">Opportunities</field>
+        <field name="show_if_zero" eval="True"/>
+        <field name="action_xmlid">crm.crm_opportunity_report_action</field>
+        <field name="action_context">{"search_default_user_id": [{{id}}]}</field>
+        <field name="module_depends">crm</field>
+    </record>
+
+    <record id="variant_crm_sp_report_opportunities_enterprise" model="dashboard.blueprint.slot.action.variant">
+        <field name="slot_id" ref="slot_crm_sp_menu_report_opportunities"/>
+        <field name="sequence">10</field>
+        <field name="name">CRM Enterprise dashboard</field>
+        <field name="module_depends">crm_enterprise</field>
+        <field name="action_xmlid">crm_enterprise.crm_opportunity_action_dashboard</field>
+    </record>
+
+    <record id="slot_crm_sp_menu_report_activities" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_crm_salespersons"/>
+        <field name="key">report_activities</field>
+        <field name="name">Report Activities</field>
+        <field name="section">menu_reports</field>
+        <field name="sequence">30</field>
+        <field name="label">Activities</field>
+        <field name="show_if_zero" eval="True"/>
+        <field name="action_xmlid">crm.crm_activity_report_action</field>
+        <field name="action_context">{"search_default_user_id": [{{id}}]}</field>
+        <field name="module_depends">crm</field>
+    </record>
+
+    <!-- Footer -->
+    <record id="slot_crm_sp_bottom" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_crm_salespersons"/>
+        <field name="key">bottom_opportunities</field>
+        <field name="name">Opportunities Button</field>
+        <field name="section">bottom</field>
+        <field name="sequence">10</field>
+        <field name="label">Opportunities</field>
+        <field name="icon">fa-star</field>
+        <field name="show_if_zero" eval="True"/>
+        <field name="groups_xmlids">sales_team.group_sale_salesman</field>
+        <field name="compute_model">crm.lead</field>
+        <field name="relate_field">user_id</field>
+        <field name="compute_domain">[('type', '=', 'opportunity')]</field>
+        <field name="action_xmlid">crm.crm_lead_action_pipeline</field>
+        <field name="action_domain">[('user_id', '=', '{{id}}'), ('type', '=', 'opportunity')]</field>
+        <field name="action_context">{"search_default_user_id": [{{id}}], "default_user_id": {{id}}, "default_type": "opportunity"}</field>
+        <field name="module_depends">crm,sales_team</field>
+    </record>
+
+    <!--
+      Meetings: V1 counted the salesperson partner's calendar meetings.
+      Engine count_field must live on host; res.users has no stock meeting_count.
+      Use calendar.event.user_id (responsible) as the closest seed-only link.
+    -->
+    <record id="slot_crm_sp_bottom_meetings" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_crm_salespersons"/>
+        <field name="key">bottom_meetings</field>
+        <field name="name">Meetings Button</field>
+        <field name="section">bottom</field>
+        <field name="sequence">20</field>
+        <field name="label">Meetings</field>
+        <field name="icon">fa-calendar</field>
+        <field name="show_if_zero" eval="True"/>
+        <field name="compute_model">calendar.event</field>
+        <field name="relate_field">user_id</field>
+        <field name="compute_domain">[('active', '=', True)]</field>
+        <field name="compute_aggregator">__count</field>
+        <field name="action_xmlid">calendar.action_calendar_event</field>
+        <field name="action_domain">[('user_id', '=', '{{id}}')]</field>
+        <field name="action_context">{"default_user_id": {{id}}}</field>
+        <field name="module_depends">calendar</field>
+    </record>
+
+    <record id="variant_crm_sp_primary_enterprise" model="dashboard.blueprint.action.variant">
+        <field name="blueprint_id" ref="blueprint_crm_salespersons"/>
+        <field name="sequence">10</field>
+        <field name="name">CRM Enterprise dashboard</field>
+        <field name="module_depends">crm_enterprise</field>
+        <field name="action_xmlid">crm_enterprise.crm_opportunity_action_dashboard</field>
+    </record>
+</odoo>
