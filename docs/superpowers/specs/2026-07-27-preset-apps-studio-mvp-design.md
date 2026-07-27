@@ -2,8 +2,9 @@
 
 **Date:** 2026-07-27  
 **Module family:** `odoo-dashboards-19.1-v2`  
-**Status:** Draft — awaiting user review  
-**Decision owners:** Product + Odoo architect (agreed in chat 2026-07-27)
+**Status:** Approved for implementation  
+
+**Scope note:** Phase A (preset module split) and Phase B (Studio UI) are separate implementation plans. Phase A plan: `docs/superpowers/plans/2026-07-27-preset-apps-phase-a.md`.
 
 ## Positioning (one line)
 
@@ -19,9 +20,10 @@
 
 ```text
 ┌─────────────────────────────────────────────────────────┐
-│  Apps (install)                                          │
-│  crm_customer_dashboard / sales_customer_dashboard / …   │
-│  → hard depends + XML presets (dashboard.blueprint…)     │
+│  Apps (install) — one module per dashboard preset                 │
+│  crm_customer_dashboard / sales_customer_dashboard /              │
+│  crm_salesperson_dashboard / (later sales_salesperson_…)          │
+│  → hard depends + XML presets (dashboard.blueprint…)              │
 └───────────────────────────┬─────────────────────────────┘
                             │ writes / ships records
 ┌───────────────────────────▼─────────────────────────────┐
@@ -49,30 +51,44 @@ Engine = logic only. Each business dashboard is its own installable app.
 | Module | Role |
 |---|---|
 | `dashboard_engine` | Models, security, OWL runtime widgets, Studio (Phase B), Blueprint form (Advanced), generic conditions/periods helpers |
-| `crm_customer_dashboard` | `depends`: `dashboard_engine`, `crm` (+ report modules as needed); CRM Customers (+ salesperson if in scope) blueprint XML, share links with Sales when both installed |
-| `sales_customer_dashboard` | Same pattern for Sales |
-| Later | `pos_…`, `website_…`, warehouse, enterprise overlays — same thin-data pattern |
+| `crm_customer_dashboard` | `depends`: `dashboard_engine`, `crm`, `report_sale_crm` (when actions need it); CRM **Customers** blueprint XML + share links with Sales |
+| `sales_customer_dashboard` | `depends`: `dashboard_engine`, `sale`; Sales **Customers** blueprint XML + share links with CRM |
+| `crm_salesperson_dashboard` | `depends`: `dashboard_engine`, `crm`, `report_sale_crm` (if needed); CRM **Salespersons** blueprint XML (`res.users` host) |
+| Later | `sales_salesperson_dashboard`, `pos_…`, `website_…`, warehouse, enterprise overlays — **one preset app per dashboard**, same thin-data pattern |
 
-Naming may follow V1 (`crm_customer_dashboard`) for market familiarity; technical XMLIDs can stay `dashboard_engine.*` during migration or move to the new module namespace with a migration script — **pick one namespace strategy in the implementation plan** (prefer new module xmlids + one-shot migrate).
+**One dashboard = one Apps module.** Do not nest salesperson presets inside customer modules.
+
+Naming follows V1 app names (`crm_customer_dashboard`, `crm_salesperson_dashboard`, …) for market familiarity.
+
+### V1 shared shells — not ported
+
+| V1 module | V2 |
+|---|---|
+| `customer_dashboard` | **Not needed** — engine owns shared card shell/runtime |
+| `salesperson_dashboard` | **Not needed** — same reason; salesperson apps depend on `dashboard_engine` only (+ business apps / report_* ) |
 
 ### What leaves the engine
 
-- Seed blueprints and parity XML currently under `dashboard_engine/data/seed_*.xml` that are app-specific (CRM, Sales, POS, Website, warehouse headers tied to those apps).
+- Seed blueprints and parity XML currently under `dashboard_engine/data/seed_*.xml` that are app-specific (CRM customers, CRM salespersons, Sales customers, and later POS/Website).
 - Soft “activate when crm installed” as the **primary** delivery mechanism for those presets.
 
 ### What stays in the engine
 
-- Generic conditions that are reusable (e.g. overdue patterns) if still model-agnostic.
+- Generic conditions that are reusable (e.g. overdue patterns) if still model-agnostic — **or** move CRM-only conditions with the CRM customer pack when they only serve CRM seeds (`seed_conditions.xml` today is CRM-only → move with `crm_customer_dashboard`).
 - Graph period catalog data if generic.
-- Empty / demo-free install: engine alone shows **no** CRM menu dashboard until a preset app is installed.
+- Empty / demo-free install: engine alone shows **no** CRM/Sales dashboard menus until preset apps are installed.
+- POS/Website seeds remain in the engine until their own preset modules are extracted (follow-up plan).
 
 ### Hard depends
 
-Preset apps use real `depends` on business apps (and report modules where V1 had them: e.g. `report_crm`, `report_sale`, …) so missing apps never leave half-broken soft seeds.
+Preset apps use real `depends` on `dashboard_engine` + business apps. Add V1-style report modules when the preset’s actions/xmlids need them:
+
+- CRM customer / CRM salesperson: `report_sale_crm` (already symlinked in V2)
+- Sales customer: `sale` only for Phase A unless/until `report_sale_stock` exists on the V2 addons path; keep stock/account slots soft-gated via `module_depends` in XML
 
 ### Share Links
 
-Preserved. CRM ↔ Sales pooling stays data (`share_link_ids`) owned by the preset modules’ XML / post-init, not duplicated slot copies.
+Preserved. CRM Customers ↔ Sales Customers pooling stays data (`share_link_ids`) owned by those preset modules’ XML. Salesperson dashboards are separate host (`res.users`) and are **not** in the customer share pool unless a later plan adds that.
 
 ## Phase B — Studio MVP (path A only)
 
@@ -119,16 +135,17 @@ All mutations go through ORM on existing models (`dashboard.blueprint`, `dashboa
 
 ## Success criteria
 
-1. Install `dashboard_engine` alone → no CRM Customers dashboard menu.
+1. Install `dashboard_engine` alone → no CRM Customers / Sales Customers / CRM Salespersons dashboard menus.
 2. Install `crm_customer_dashboard` (CRM present) → CRM Customers dashboard works as today.
+2b. Install `crm_salesperson_dashboard` → CRM Salespersons dashboard works independently (does not require the Customers pack).
 3. Non-tech admin with Studio access can change a KPI label / add a footer shortcut and see it after Publish without opening the Blueprint form.
-4. Share Links between CRM and Sales presets still pools KPIs / footers / Manage menu; Header + Primary stay local.
+4. Share Links between CRM and Sales **customer** presets still pools KPIs / footers / Manage menu; Header + Primary stay local. Salesperson packs stay outside that customer pool unless a later plan adds it.
 5. Positioning test: buyer understands “customer card dashboards,” not “any page builder.”
 
 ## Delivery order
 
 1. **Spec approved** (this document).  
-2. **Implementation plan: Phase A** — extract CRM (+ Sales) seeds into modules; strip engine seeds; migrate xmlids; upgrade path.  
+2. **Implementation plan: Phase A** — extract CRM Customers, Sales Customers, and CRM Salespersons into separate modules; strip engine seeds; migrate xmlids; upgrade path.  
 3. **Ship Phase A** and verify parity on `:19005`.  
 4. **Implementation plan: Phase B** — Studio MVP OWL on presets.  
 5. **Ship Phase B** MVP; gather admin feedback before blank-create or free-canvas.
@@ -142,18 +159,27 @@ Do not start Phase B UI before Phase A packaging is stable (Studio must open rea
 | Xmlid / noupdate migration breaks existing DBs | Dedicated pre/post migrations; keep keys (`crm_customers`) stable |
 | Studio becomes a second incomplete form | Zone-limited MVP; Advanced = existing form |
 | Scope creep toward Kisolve | Explicit non-goals; review every “free layout” request against positioning |
-| Too many thin modules at once | Phase A starts with CRM + Sales only; POS/Website in a follow-up |
+| Too many thin modules at once | Phase A starts with CRM Customers + Sales Customers + CRM Salespersons; POS/Website later |
+
+## V1 shared shells — not ported
+
+| V1 module | V2 |
+|---|---|
+| `customer_dashboard` | **Not needed** — engine owns shared customer-card shell/runtime |
+| `salesperson_dashboard` | **Not needed** — engine owns shared salesperson-card shell/runtime |
+
+V1 needed those Hidden base modules because every app xpath’d a shared kanban view. In V2, `dashboard_engine` already fills that role. Preset apps depend on `dashboard_engine` + business apps (+ `report_*` when required) only.
 
 ## Open points (resolve in Phase A plan)
 
-1. Exact technical module names (`crm_customer_dashboard` vs `dashboard_crm_customers`).  
-2. Whether salesperson blueprint lives in CRM module or a sibling.  
-3. Xmlid namespace migration vs keep `dashboard_engine.*` xmlids with data files moved (simpler upgrades, slightly odd ownership).
-
-**Recommendation for open point 3:** keep stable `dashboard_engine.*` xmlids initially while moving file ownership to preset modules via `noupdate` data in the new module that uses the same xmlids through careful migration — **or** new xmlids + rewrite `ir.model.data`. Prefer **same keys + migrate module assignment** so menus/actions survive. Detail in Phase A plan.
+1. Exact technical module names — **resolved:** V1-style `crm_customer_dashboard`, `sales_customer_dashboard`, `crm_salesperson_dashboard`, …  
+2. Salesperson placement — **resolved:** **individual module** per salesperson dashboard (not nested inside customer packs).  
+3. Xmlid namespace: prefer reassigning `ir_model_data.module` while keeping the name part; document in the Phase A plan.
 
 ## Related docs
 
 - Form UX: `2026-07-27-blueprint-full-form-ux-design.md`  
+- Phase A plan: `2026-07-27-preset-apps-phase-a.md`  
 - Prototype: workspace canvas `blueprint-full-form-ux-prototype.canvas.tsx`  
-- V1 reference: `odoo-dashboards-19.1/crm_customer_dashboard` (and siblings)
+- V1 reference: `customer_dashboard` / `salesperson_dashboard` (shared shells — **not** ported); `crm_customer_dashboard` / `crm_salesperson_dashboard_enterprise` / `sales_customer_dashboard`
+
