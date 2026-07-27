@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Website Sales Customers fill. -->
+<odoo noupdate="1">
+    <record id="blueprint_website_customers" model="dashboard.blueprint">
+        <field name="primary_button_label">Online Sales Analysis</field>
+        <field name="primary_action_xmlid">sale.action_order_report_all</field>
+        <field name="primary_action_domain">[('website_id', '!=', False)]</field>
+        <field name="graph_model">sale.report</field>
+        <field name="graph_data_field">partner_id</field>
+        <field name="graph_measure">price_subtotal:sum</field>
+        <field name="graph_groupby">date:month</field>
+        <field name="graph_domain">[('website_id', '!=', False)]</field>
+        <field name="graph_caption">Online Sales</field>
+    </record>
+
+    <record id="slot_website_kpi_quotations" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_website_customers"/>
+        <field name="key">website_quotations</field>
+        <field name="name">Quotations</field>
+        <field name="section">kpi</field>
+        <field name="sequence">15</field>
+        <field name="label">Quotation</field>
+        <field name="label_plural">Quotations</field>
+        <field name="compute_model">sale.order</field>
+        <field name="relate_field">partner_id</field>
+        <field name="compute_domain">[('website_id', '!=', False), ('state', 'in', ('draft', 'sent'))]</field>
+        <field name="compute_aggregator">__count</field>
+        <field name="action_xmlid">sale.action_quotations_with_onboarding</field>
+        <field name="action_domain">[('partner_id', '=', '{{id}}'), ('website_id', '!=', False), ('state', 'in', ('draft', 'sent'))]</field>
+        <field name="module_depends">website_sale</field>
+    </record>
+    <record id="slot_website_kpi_to_invoice" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_website_customers"/>
+        <field name="key">website_to_invoice</field>
+        <field name="name">To Invoice</field>
+        <field name="section">kpi</field>
+        <field name="sequence">25</field>
+        <field name="label">Order to Invoice</field>
+        <field name="label_plural">Orders to Invoice</field>
+        <field name="compute_model">sale.order</field>
+        <field name="relate_field">partner_id</field>
+        <field name="compute_domain">[('website_id', '!=', False), ('invoice_status', '=', 'to invoice')]</field>
+        <field name="compute_aggregator">__count</field>
+        <field name="action_xmlid">sale.action_orders_to_invoice</field>
+        <field name="action_domain">[('partner_id', '=', '{{id}}'), ('website_id', '!=', False), ('invoice_status', '=', 'to invoice')]</field>
+        <field name="module_depends">website_sale</field>
+    </record>
+
+    <record id="slot_website_bottom_invoices" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_website_customers"/>
+        <field name="key">bottom_invoices</field>
+        <field name="name">Invoices Button</field>
+        <field name="section">bottom</field>
+        <field name="sequence">20</field>
+        <field name="label">Invoices</field>
+        <field name="icon">fa-pencil-square-o</field>
+        <field name="show_if_zero" eval="True"/>
+        <field name="groups_xmlids">account.group_account_invoice</field>
+        <field name="compute_model">account.move</field>
+        <field name="relate_field">partner_id</field>
+        <field name="compute_domain">[('move_type', 'in', ('out_invoice', 'out_refund')), ('state', '!=', 'cancel')]</field>
+        <field name="action_xmlid">account.action_move_out_invoice_type</field>
+        <field name="action_domain">[('partner_id', '=', '{{id}}'), ('move_type', 'in', ('out_invoice', 'out_refund'))]</field>
+        <field name="module_depends">website_sale,account</field>
+    </record>
+
+    <record id="slot_website_menu_orders" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_website_customers"/>
+        <field name="key">view_orders</field>
+        <field name="name">View Orders</field>
+        <field name="section">menu_views</field>
+        <field name="sequence">20</field>
+        <field name="label">Orders</field>
+        <field name="show_if_zero" eval="True"/>
+        <field name="action_xmlid">sale.action_orders</field>
+        <field name="action_domain">[('partner_id', '=', '{{id}}'), ('website_id', '!=', False)]</field>
+        <field name="module_depends">website_sale</field>
+    </record>
+    <record id="slot_website_menu_report" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_website_customers"/>
+        <field name="key">report_online</field>
+        <field name="name">Report Online Sales</field>
+        <field name="section">menu_reports</field>
+        <field name="sequence">10</field>
+        <field name="label">Online Sales</field>
+        <field name="show_if_zero" eval="True"/>
+        <field name="action_xmlid">sale.action_order_report_all</field>
+        <field name="action_domain">[('partner_id', '=', '{{id}}'), ('website_id', '!=', False)]</field>
+        <field name="module_depends">website_sale</field>
+    </record>
+    <record id="slot_website_menu_new_quotation" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_website_customers"/>
+        <field name="key">new_quotation</field>
+        <field name="name">New Quotation</field>
+        <field name="section">menu_new</field>
+        <field name="sequence">10</field>
+        <field name="label">Quotation</field>
+        <field name="show_if_zero" eval="True"/>
+        <field name="action_xmlid">sale.action_quotations_with_onboarding</field>
+        <field name="action_context">{"default_partner_id": {{id}}}</field>
+        <field name="module_depends">website_sale</field>
+    </record>
+</odoo>
