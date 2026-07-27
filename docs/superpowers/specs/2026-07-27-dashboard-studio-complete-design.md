@@ -8,7 +8,7 @@
 
 ## Positioning (one line)
 
-> Non-technical admins redesign installed **customer/salesperson card** dashboards visually — add/remove/reorder KPIs, shortcuts, totals, menus; configure chart and scopes — then Publish. Not a free-form page builder.
+> Non-technical admins redesign installed **customer/salesperson card** dashboards visually — content in Studio, then (Wave F) **rearrange the same Odoo-native widgets** on a page grid. Not a generic HTML page builder.
 
 ## Problem
 
@@ -19,7 +19,7 @@ The Blueprint form is complete but too technical. Studio MVP today only edits la
 | Choice | Decision |
 |--------|----------|
 | Product shape | **A — Complete Card Studio**, then **B — Live WYSIWYG preview** |
-| Free-form page builder | **Out** (Kisolve lane) |
+| Free-form HTML page builder | **Out** — Wave F is **Layout Studio** (grid of known widgets); see `2026-07-27-dashboard-layout-studio-design.md` |
 | Source of truth | `dashboard.blueprint` + slots / headers / scopes — no second layout store |
 | Advanced form | Remains for partners / raw domains / technical fields |
 | Blank dashboard wizard | Out of Waves C–D (optional later Wave E) |
