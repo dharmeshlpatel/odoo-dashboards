@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- POS Sales Products dashboard (v1 pos_sales_product_dashboard → no _enterprise). -->
+<odoo noupdate="1">
+    <record id="blueprint_pos_products" model="dashboard.blueprint">
+        <field name="name">POS Products</field>
+        <field name="key">pos_products</field>
+        <field name="host_model_id" ref="product.model_product_product"/>
+        <field name="module_depends">point_of_sale,product</field>
+        <field name="menu_name">Products Dashboard</field>
+        <field name="menu_parent_xmlid">point_of_sale.menu_point_root</field>
+        <field name="menu_sequence">50</field>
+        <field name="primary_button_label">POS Orders</field>
+        <field name="primary_action_xmlid">point_of_sale.action_pos_pos_form</field>
+        <field name="primary_action_domain">[('lines.product_id', '=', '{{id}}')]</field>
+        <field name="graph_model">pos.order.line</field>
+        <field name="graph_data_field">product_id</field>
+        <field name="graph_measure">__count</field>
+        <field name="graph_groupby">order_id</field>
+        <field name="graph_caption">POS Sales</field>
+        <field name="state">published</field>
+        <field name="sequence">45</field>
+    </record>
+    <record id="slot_pos_prod_lines" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_pos_products"/>
+        <field name="key">pos_lines</field>
+        <field name="name">POS Lines</field>
+        <field name="section">kpi</field>
+        <field name="sequence">10</field>
+        <field name="label">POS Line</field>
+        <field name="label_plural">POS Lines</field>
+        <field name="compute_model">pos.order.line</field>
+        <field name="relate_field">product_id</field>
+        <field name="compute_domain">[]</field>
+        <field name="compute_aggregator">__count</field>
+        <field name="action_model">pos.order</field>
+        <field name="action_domain">[('lines.product_id', '=', '{{id}}')]</field>
+        <field name="module_depends">point_of_sale,product</field>
+        <field name="show_if_zero" eval="True"/>
+    </record>
+    <record id="slot_pos_prod_bottom" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_pos_products"/>
+        <field name="key">bottom_pos</field>
+        <field name="name">POS Orders Button</field>
+        <field name="section">bottom</field>
+        <field name="sequence">10</field>
+        <field name="label">POS Orders</field>
+        <field name="icon">fa-shopping-bag</field>
+        <field name="show_if_zero" eval="True"/>
+        <field name="compute_model">pos.order.line</field>
+        <field name="relate_field">product_id</field>
+        <field name="compute_domain">[]</field>
+        <field name="action_model">pos.order</field>
+        <field name="action_domain">[('lines.product_id', '=', '{{id}}')]</field>
+        <field name="module_depends">point_of_sale,product</field>
+    </record>
+    <record id="slot_pos_prod_menu_orders" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_pos_products"/>
+        <field name="key">view_pos_orders</field>
+        <field name="name">View POS Orders</field>
+        <field name="section">menu_views</field>
+        <field name="sequence">10</field>
+        <field name="label">POS Orders</field>
+        <field name="show_if_zero" eval="True"/>
+        <field name="action_xmlid">point_of_sale.action_pos_pos_form</field>
+        <field name="action_domain">[('lines.product_id', '=', '{{id}}')]</field>
+        <field name="module_depends">point_of_sale,product</field>
+    </record>
+</odoo>
