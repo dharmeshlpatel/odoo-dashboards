@@ -1,0 +1,20 @@
+# -*- coding: utf-8 -*-
+# Part of GritXi. See LICENSE file for full copyright and licensing details.
+{
+    "name": "Sales Salespersons Dashboard",
+    "version": "19.0.1.0.2",
+    "category": "Sales",
+    "summary": "Sales Salespersons kanban dashboard preset for Dynamic Dashboard Engine",
+    "author": "GritXi Technologies Pvt. Ltd.",
+    "website": "https://www.gritxi.com/",
+    "depends": ["dashboard_engine", "sale"],
+    "data": [
+        "data/seed_blueprints.xml",
+        "data/seed_blueprint_headers.xml",
+        "data/seed_sales_salesperson_parity.xml",
+    ],
+    "installable": True,
+    "application": False,
+    "license": "Other proprietary",
+    "post_init_hook": "post_init_hook",
+}

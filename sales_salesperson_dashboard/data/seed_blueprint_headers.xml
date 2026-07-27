@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo noupdate="1">
+    <record id="blueprint_sales_salespersons" model="dashboard.blueprint">
+        <field name="header_title_field">name</field>
+        <field name="header_image_field">image_128</field>
+        <field name="header_image_style">avatar</field>
+    </record>
+    <record id="header_sale_sp_login" model="dashboard.blueprint.header.item">
+        <field name="blueprint_id" ref="blueprint_sales_salespersons"/>
+        <field name="sequence">10</field>
+        <field name="kind">subtitle</field>
+        <field name="field_names">login</field>
+    </record>
+    <record id="header_sale_sp_email" model="dashboard.blueprint.header.item">
+        <field name="blueprint_id" ref="blueprint_sales_salespersons"/>
+        <field name="sequence">20</field>
+        <field name="kind">left</field>
+        <field name="icon">fa-envelope</field>
+        <field name="field_names">email</field>
+    </record>
+</odoo>
