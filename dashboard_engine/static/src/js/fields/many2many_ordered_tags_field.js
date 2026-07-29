@@ -25,11 +25,22 @@ export class Many2ManyOrderedTagsField extends Many2ManyTagsField {
     static props = {
         ...Many2ManyTagsField.props,
         separator: { type: [String, Boolean], optional: true },
+        labelFormat: { type: String, optional: true },
     };
     static defaultProps = {
         ...Many2ManyTagsField.defaultProps,
         separator: ">",
     };
+
+    getTagProps(record) {
+        const props = super.getTagProps(record);
+        if (this.props.labelFormat === "string_name") {
+            const label = record.data.field_description || record.data.display_name;
+            const tech = record.data.name;
+            props.text = tech ? `${label} (${tech})` : label;
+        }
+        return props;
+    }
 
     /**
      * Resolved separator text, or null when separators are disabled.
@@ -99,6 +110,21 @@ export class Many2ManyOrderedTagsField extends Many2ManyTagsField {
 export const many2ManyOrderedTagsField = {
     ...many2ManyTagsField,
     component: Many2ManyOrderedTagsField,
+    relatedFields: (fieldInfo) => {
+        const options = fieldInfo?.options || {};
+        const base =
+            typeof many2ManyTagsField.relatedFields === "function"
+                ? many2ManyTagsField.relatedFields(fieldInfo)
+                : [{ name: "display_name", type: "char" }];
+        if (options.label_format === "string_name") {
+            return [
+                ...base,
+                { name: "name", type: "char" },
+                { name: "field_description", type: "char" },
+            ];
+        }
+        return base;
+    },
     extractProps(fieldInfo, dynamicInfo) {
         const props = many2ManyTagsField.extractProps(fieldInfo, dynamicInfo);
         const options = fieldInfo.options || {};
@@ -106,6 +132,9 @@ export const many2ManyOrderedTagsField = {
             props.separator = options.separator;
         } else {
             props.separator = ">";
+        }
+        if (options.label_format) {
+            props.labelFormat = options.label_format;
         }
         return props;
     },

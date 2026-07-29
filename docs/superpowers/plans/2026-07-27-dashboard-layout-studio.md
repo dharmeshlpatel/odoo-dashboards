@@ -63,7 +63,7 @@
 
 **Files:** Studio JS / XML / SCSS
 
-- [x] Mode tabs: Content | Layout | Preview (Preview = existing live sample map)
+- [x] Mode tabs: Content | Layout (live sample is ambient on Content map + Layout strip; Preview tab removed)
 - [x] Layout canvas: list rows; each col shows widget chip + span control
 - [x] Actions: Add row, set span, move widget up/down or drag between cells, remove widget from layout (content remains in blueprint), Reset to default
 - [x] Palette of missing widget types

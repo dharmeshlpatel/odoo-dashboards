@@ -6,40 +6,130 @@
             <t t-if="props.readonly">
                 <t t-foreach="state.rows" t-as="row" t-key="row_index">
                     <t t-if="row.key">
-                        <div class="text-muted small">
-                            <code t-esc="row.key"/> = <span t-esc="row.value"/>
+                        <div class="o_dashboard_context_kv_readonly text-muted small mb-2">
+                            <div class="fw-bold text-dark" t-esc="row.key"/>
+                            <div>
+                                <span class="badge text-bg-light border me-1" t-esc="typeLabel(row.valueType)"/>
+                                <span t-esc="readonlySummary(row)"/>
+                            </div>
                         </div>
                     </t>
                 </t>
                 <t t-if="!hasContextKeys">
-                    <span class="text-muted">No extra context</span>
+                    <span class="text-muted">No action defaults yet</span>
                 </t>
             </t>
             <t t-else="">
-                <div class="d-flex flex-column gap-1">
+                <p class="text-muted small mb-2">
+                    Set values passed when this action opens. No technical JSON required.
+                </p>
+                <div class="d-flex flex-column gap-2">
                     <t t-foreach="state.rows" t-as="row" t-key="row_index">
-                        <div class="d-flex align-items-center gap-2">
-                            <input type="text"
-                                   class="o_input flex-grow-1"
-                                   placeholder="Key (e.g. search_default_my)"
-                                   t-att-value="row.key"
-                                   t-on-change="(ev) => this.onKeyInput(row_index, ev)"/>
-                            <input type="text"
-                                   class="o_input flex-grow-1"
-                                   placeholder="Value (card id token allowed)"
-                                   t-att-value="row.value"
-                                   t-on-change="(ev) => this.onValueInput(row_index, ev)"/>
-                            <button type="button"
-                                    class="btn btn-link text-danger p-0"
-                                    title="Remove"
-                                    t-on-click="() => this.removeRow(row_index)">
-                                <i class="fa fa-trash-o"/>
-                            </button>
+                        <div class="o_dashboard_context_kv_row">
+                            <div class="o_dashboard_context_kv_head d-flex align-items-start gap-2 mb-2">
+                                <div class="flex-grow-1">
+                                    <label class="form-label small mb-0">Context name</label>
+                                    <input type="text"
+                                           class="o_input w-100"
+                                           placeholder="e.g. default_type"
+                                           t-att-value="row.key"
+                                           t-on-change="(ev) => this.onKeyInput(row_index, ev)"/>
+                                </div>
+                                <div style="min-width: 14rem;">
+                                    <label class="form-label small mb-0">How to set the value</label>
+                                    <select class="o_input w-100"
+                                            t-on-change="(ev) => this.onTypeChange(row_index, ev)">
+                                        <t t-foreach="VALUE_TYPES" t-as="vt" t-key="vt.value">
+                                            <option t-att-value="vt.value"
+                                                    t-att-selected="row.valueType === vt.value"
+                                                    t-esc="vt.label"/>
+                                        </t>
+                                    </select>
+                                </div>
+                                <button type="button"
+                                        class="btn btn-link text-danger p-0 mt-3"
+                                        title="Remove this default"
+                                        t-on-click="() => this.removeRow(row_index)">
+                                    <i class="fa fa-trash-o"/>
+                                </button>
+                            </div>
+
+                            <t t-if="row.valueType === 'fixed'">
+                                <label class="form-label small mb-0">Value</label>
+                                <input type="text"
+                                       class="o_input w-100"
+                                       placeholder="e.g. opportunity"
+                                       t-att-value="row.fixedValue"
+                                       t-on-change="(ev) => this.onFixedInput(row_index, ev)"/>
+                            </t>
+
+                            <t t-elif="row.valueType === 'record_id'">
+                                <p class="text-muted small mb-1">
+                                    Uses the id of the customer (or card) the user clicked.
+                                </p>
+                                <label class="form-check mb-0">
+                                    <input type="checkbox" class="form-check-input"
+                                           t-att-checked="row.asList"
+                                           t-on-change="(ev) => this.onAsListChange(row_index, ev)"/>
+                                    <span class="form-check-label">Pass as a list (needed for some filters)</span>
+                                </label>
+                            </t>
+
+                            <t t-else="">
+                                <p class="text-muted small mb-2">
+                                    Rules are checked from top to bottom. The first matching group wins.
+                                </p>
+                                <t t-foreach="row.groupRules" t-as="rule" t-key="rule_index">
+                                    <div class="o_dashboard_context_kv_rule mb-2">
+                                        <div class="d-flex justify-content-between align-items-center mb-1">
+                                            <span class="small fw-bold">Group rule <t t-esc="rule_index + 1"/></span>
+                                            <button type="button" class="btn btn-link btn-sm text-danger p-0"
+                                                    t-on-click="() => this.removeGroupRule(row_index, rule_index)">
+                                                Remove rule
+                                            </button>
+                                        </div>
+                                        <label class="form-label small mb-0">When the user is in this group</label>
+                                        <div class="position-relative mb-1">
+                                            <input type="text"
+                                                   class="o_input w-100"
+                                                   placeholder="Search groups by name…"
+                                                   t-att-value="rule.groupLabel or rule.groupXmlid"
+                                                   t-on-input="(ev) => this.onGroupSearchInput(row_index, rule_index, ev)"/>
+                                            <div t-if="getGroupHits(row_index, rule_index).length"
+                                                 class="o_dashboard_context_kv_hits list-group shadow-sm">
+                                                <button type="button"
+                                                        class="list-group-item list-group-item-action py-1"
+                                                        t-foreach="getGroupHits(row_index, rule_index)"
+                                                        t-as="hit" t-key="hit.xmlid"
+                                                        t-on-mousedown.prevent="() => this.pickGroup(row_index, rule_index, hit)">
+                                                    <t t-esc="hit.name"/>
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <label class="form-label small mb-0">Use this value</label>
+                                        <input type="text"
+                                               class="o_input w-100"
+                                               placeholder="e.g. lead"
+                                               t-att-value="rule.value"
+                                               t-on-change="(ev) => this.onRuleValueInput(row_index, rule_index, ev)"/>
+                                    </div>
+                                </t>
+                                <button type="button" class="btn btn-link btn-sm px-0 mb-2"
+                                        t-on-click="() => this.addGroupRule(row_index)">
+                                    Add another group rule
+                                </button>
+                                <label class="form-label small mb-0">Otherwise use</label>
+                                <input type="text"
+                                       class="o_input w-100"
+                                       placeholder="e.g. opportunity"
+                                       t-att-value="row.elseValue"
+                                       t-on-change="(ev) => this.onElseValueInput(row_index, ev)"/>
+                            </t>
                         </div>
                     </t>
-                    <button type="button" class="btn btn-link btn-sm align-self-start px-0"
+                    <button type="button" class="btn btn-secondary btn-sm align-self-start"
                             t-on-click="() => this.addRow()">
-                        Add context key
+                        Add action default
                     </button>
                 </div>
             </t>

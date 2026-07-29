@@ -10,7 +10,8 @@ literals or typed tokens::
     {"__de__": "group_value", "default": "opportunity",
      "map": [{"groups": ["crm.group_use_lead"], "value": "lead"}]}
 
-Compile at render time via :func:`compile_domain_tree` — never ``safe_eval``.
+Compile at render time via :func:`compile_domain_tree` or
+:func:`compile_context_value` — never ``safe_eval`` for tokens.
 """
 from __future__ import annotations
 
@@ -139,6 +140,42 @@ def resolve_token(tok, env, record=None, model_name=None, field_name=None):
     raise ValidationError(
         "Unknown dashboard condition token %(kind)s." % {"kind": kind}
     )
+
+
+def compile_context_value(value, env, record=None, model_name=None):
+    """Resolve ``__de__`` tokens inside an action-context tree.
+
+    Used for blueprint ``primary_action_context`` and slot ``action_context``.
+    Nested dicts/lists are walked; token dicts are replaced with concrete
+    values. A skipped token becomes ``False``.
+    """
+    if is_token(value):
+        resolved = resolve_token(
+            value, env, record=record, model_name=model_name
+        )
+        return False if resolved is _SKIP else resolved
+    if isinstance(value, dict):
+        return {
+            key: compile_context_value(
+                item, env, record=record, model_name=model_name
+            )
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [
+            compile_context_value(
+                item, env, record=record, model_name=model_name
+            )
+            for item in value
+        ]
+    if isinstance(value, tuple):
+        return tuple(
+            compile_context_value(
+                item, env, record=record, model_name=model_name
+            )
+            for item in value
+        )
+    return value
 
 
 def _resolve_relative_date(tok, env, model_name, field_name):

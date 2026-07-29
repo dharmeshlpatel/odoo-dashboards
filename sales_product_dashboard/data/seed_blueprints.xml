@@ -17,6 +17,12 @@
         <field name="graph_measure">price_subtotal:sum</field>
         <field name="graph_groupby">date:month</field>
         <field name="graph_caption">Product Sales</field>
+        <field name="lens_my_enabled" eval="True"/>
+        <field name="lens_my_default" eval="True"/>
+        <field name="lens_my_label">My Products</field>
+        <field name="lens_kpis_enabled" eval="True"/>
+        <field name="lens_kpis_default" eval="True"/>
+        <field name="lens_kpis_label">With KPIs</field>
         <field name="state">published</field>
         <field name="sequence">40</field>
     </record>

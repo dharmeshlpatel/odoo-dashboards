@@ -10,14 +10,14 @@
               name="Blueprints"
               parent="menu_dashboard_engine_root"
               action="action_dashboard_blueprint"
-              sequence="10"
+              sequence="5"
               groups="dashboard_engine.group_dashboard_engine_manager"/>
 
     <menuitem id="menu_dashboard_engine_create"
               name="New Dashboard"
               parent="menu_dashboard_engine_root"
               action="action_dashboard_blueprint_create_wizard"
-              sequence="5"
+              sequence="15"
               groups="dashboard_engine.group_dashboard_engine_studio"/>
 
     <menuitem id="menu_dashboard_engine_relation_paths"

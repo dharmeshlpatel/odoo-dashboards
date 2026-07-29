@@ -10,7 +10,12 @@
                         <div class="o_ds_subtitle text-muted">
                             Visual card editor
                             <t t-if="state.payload">
-                                · <t t-esc="state.payload.host_model"/>
+                                · <button type="button" class="btn btn-link btn-sm p-0 align-baseline o_ds_setup_chip"
+                                          t-on-click="openSetupMode"
+                                          t-att-title="headerChipHost + ' · ' + headerChipMenu">
+                                    <t t-esc="headerChipHost"/>
+                                    · <t t-esc="headerChipMenu"/>
+                                </button>
                                 · <t t-esc="state.payload.key"/>
                             </t>
                         </div>
@@ -20,17 +25,22 @@
                     <span t-if="state.payload"
                           t-att-class="'o_ds_state badge ' + (state.payload.state === 'published' ? 'text-bg-success' : 'text-bg-secondary')"
                           t-esc="state.payload.state"/>
-                    <span t-if="state.dirty or state.layoutDirty" class="badge text-bg-warning">Unsaved</span>
+                    <span t-if="state.dirty or state.layoutDirty or state.setupDirty" class="badge text-bg-warning">Unsaved</span>
                     <button type="button" class="btn btn-light btn-sm" t-on-click="openAdvanced" title="Open Advanced form">
                         <i class="fa fa-flask me-1"/>Advanced
                     </button>
-                    <button type="button" class="btn btn-secondary btn-sm" t-on-click="discard" t-att-disabled="state.loading or (!state.dirty and !state.layoutDirty)">
+                    <button type="button" class="btn btn-secondary btn-sm" t-on-click="discard" t-att-disabled="state.loading or (!state.dirty and !state.layoutDirty and !state.setupDirty)">
                         Discard
                     </button>
                     <button type="button" class="btn btn-primary btn-sm" t-on-click="saveLayout"
                             t-if="state.studioMode === 'layout'"
                             t-att-disabled="state.saving or !state.layoutDirty">
                         <i class="fa fa-save me-1"/>Save layout
+                    </button>
+                    <button type="button" class="btn btn-primary btn-sm" t-on-click="saveSetup"
+                            t-elif="state.studioMode === 'setup'"
+                            t-att-disabled="state.saving or !state.setupDirty">
+                        <i class="fa fa-save me-1"/>Save
                     </button>
                     <button type="button" class="btn btn-primary btn-sm" t-on-click="saveCurrent"
                             t-else=""
@@ -49,12 +59,12 @@
             </header>
 
             <nav class="o_ds_modes">
+                <button type="button" t-att-class="state.studioMode === 'setup' ? 'active' : ''"
+                        t-on-click="() => this.setStudioMode('setup')">Setup</button>
                 <button type="button" t-att-class="state.studioMode === 'content' ? 'active' : ''"
                         t-on-click="() => this.setStudioMode('content')">Content</button>
                 <button type="button" t-att-class="state.studioMode === 'layout' ? 'active' : ''"
                         t-on-click="() => this.setStudioMode('layout')">Layout</button>
-                <button type="button" t-att-class="state.studioMode === 'preview' ? 'active' : ''"
-                        t-on-click="() => this.setStudioMode('preview')">Preview</button>
             </nav>
 
             <nav class="o_ds_zones" t-if="state.studioMode === 'content'">
@@ -73,6 +83,173 @@
             </div>
 
             <div t-else="" class="o_ds_body flex-grow-1 overflow-hidden">
+                <!-- SETUP MODE -->
+                <div t-if="state.studioMode === 'setup'" class="o_ds_setup_mode overflow-auto p-3 w-100">
+                    <div t-if="state.setupBanner" class="alert alert-warning d-flex align-items-center justify-content-between py-2 mb-3">
+                        <span>
+                            Cleared <strong t-esc="state.setupBanner.count"/> invalid host reference(s) after the model change.
+                        </span>
+                        <button type="button" class="btn-close" t-on-click="dismissSetupBanner"/>
+                    </div>
+                    <div class="o_ds_setup_grid">
+                        <section class="o_ds_setup_card">
+                            <h2 class="h5 mb-3">Dashboard</h2>
+                            <div class="mb-3">
+                                <label class="form-label">Host model</label>
+                                <div t-if="state.payload.host_editable" class="o_ds_setup_picker">
+                                    <div class="form-control bg-light mb-1" t-esc="state.setup.host_model_label or '—'"/>
+                                    <input type="text" class="form-control form-control-sm"
+                                           placeholder="Search models…"
+                                           t-att-value="state.setupQuery.host"
+                                           data-kind="host"
+                                           t-on-input="onSetupSearchInput"
+                                           t-on-focus="onSetupSearchFocus"
+                                           t-on-blur="onSetupSearchBlur"/>
+                                    <div t-if="state.setupResults.host.length" class="o_ds_setup_results list-group mt-1">
+                                        <button type="button" class="list-group-item list-group-item-action py-1"
+                                                t-foreach="state.setupResults.host" t-as="row" t-key="row.id"
+                                                t-att-data-id="row.id" t-att-data-name="row.name"
+                                                t-on-mousedown.prevent="pickSetupHost">
+                                            <t t-esc="row.name"/>
+                                            <span class="text-muted small ms-1" t-esc="row.model"/>
+                                        </button>
+                                    </div>
+                                </div>
+                                <t t-else="">
+                                    <div class="form-control bg-light" t-esc="state.setup.host_model_label or '—'"/>
+                                    <p class="form-text mb-0">Unpublish to change host, or use Advanced.</p>
+                                </t>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Required apps</label>
+                                <div class="o_ds_setup_picker">
+                                <div class="o_ds_setup_chips mb-1">
+                                    <span t-foreach="moduleChips" t-as="chip" t-key="chip.id" class="badge text-bg-light border me-1 mb-1">
+                                        <t t-esc="chip.name"/>
+                                        <button type="button" class="btn-close btn-close-sm ms-1"
+                                                t-att-data-id="chip.id" t-on-click="removeSetupModule"/>
+                                    </span>
+                                </div>
+                                <input type="text" class="form-control form-control-sm"
+                                       placeholder="Search apps…"
+                                       t-att-value="state.setupQuery.module"
+                                       data-kind="module"
+                                       t-on-input="onSetupSearchInput"
+                                       t-on-focus="onSetupSearchFocus"
+                                       t-on-blur="onSetupSearchBlur"/>
+                                <div t-if="state.setupResults.module.length" class="o_ds_setup_results list-group mt-1">
+                                    <button type="button" class="list-group-item list-group-item-action py-1"
+                                            t-foreach="state.setupResults.module" t-as="row" t-key="row.id"
+                                            t-att-data-id="row.id" t-att-data-name="row.name"
+                                            t-on-mousedown.prevent="pickSetupModule">
+                                        <t t-esc="row.name"/>
+                                        <span class="text-muted small ms-1" t-esc="row.technical"/>
+                                    </button>
+                                </div>
+                                </div>
+                            </div>
+                            <div class="mb-3" t-if="state.payload.multi_company">
+                                <label class="form-label">Company</label>
+                                <div class="o_ds_setup_picker">
+                                <div class="d-flex gap-2 align-items-center mb-1">
+                                    <div class="form-control bg-light flex-grow-1" t-esc="state.setup.company_name or 'All companies'"/>
+                                    <button type="button" class="btn btn-sm btn-outline-secondary"
+                                            t-if="state.setup.company_id" t-on-click="clearSetupCompany">Clear</button>
+                                </div>
+                                <input type="text" class="form-control form-control-sm"
+                                       placeholder="Search companies…"
+                                       t-att-value="state.setupQuery.company"
+                                       data-kind="company"
+                                       t-on-input="onSetupSearchInput"
+                                       t-on-focus="onSetupSearchFocus"
+                                       t-on-blur="onSetupSearchBlur"/>
+                                <div t-if="state.setupResults.company.length" class="o_ds_setup_results list-group mt-1">
+                                    <button type="button" class="list-group-item list-group-item-action py-1"
+                                            t-foreach="state.setupResults.company" t-as="row" t-key="row.id"
+                                            t-att-data-id="row.id" t-att-data-name="row.name"
+                                            t-on-mousedown.prevent="pickSetupCompany">
+                                        <t t-esc="row.name"/>
+                                    </button>
+                                </div>
+                                </div>
+                            </div>
+                            <div class="mb-0">
+                                <label class="form-label">Share links</label>
+                                <div class="o_ds_setup_picker">
+                                <div class="o_ds_setup_chips mb-1">
+                                    <span t-foreach="shareChips" t-as="chip" t-key="chip.id" class="badge text-bg-light border me-1 mb-1">
+                                        <t t-esc="chip.name"/>
+                                        <button type="button" class="btn-close btn-close-sm ms-1"
+                                                t-att-data-id="chip.id" t-on-click="removeSetupShare"/>
+                                    </span>
+                                </div>
+                                <input type="text" class="form-control form-control-sm"
+                                       placeholder="Search dashboards (same host)…"
+                                       t-att-value="state.setupQuery.share"
+                                       data-kind="share"
+                                       t-on-input="onSetupSearchInput"
+                                       t-on-focus="onSetupSearchFocus"
+                                       t-on-blur="onSetupSearchBlur"/>
+                                <div t-if="state.setupResults.share.length" class="o_ds_setup_results list-group mt-1">
+                                    <button type="button" class="list-group-item list-group-item-action py-1"
+                                            t-foreach="state.setupResults.share" t-as="row" t-key="row.id"
+                                            t-att-data-id="row.id" t-att-data-name="row.name"
+                                            t-on-mousedown.prevent="pickSetupShare">
+                                        <t t-esc="row.name"/>
+                                    </button>
+                                </div>
+                                </div>
+                            </div>
+                        </section>
+                        <section class="o_ds_setup_card">
+                            <h2 class="h5 mb-3">Menu</h2>
+                            <div class="mb-3">
+                                <label class="form-label">Menu name</label>
+                                <input type="text" class="form-control"
+                                       t-att-value="state.setup.menu_name"
+                                       t-on-input="onSetupMenuNameInput"/>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Parent menu</label>
+                                <div class="o_ds_setup_picker">
+                                <div class="d-flex gap-2 align-items-center mb-1">
+                                    <div class="form-control bg-light flex-grow-1" t-esc="state.setup.menu_parent_name or 'Dashboard Engine root'"/>
+                                    <button type="button" class="btn btn-sm btn-outline-secondary"
+                                            t-if="state.setup.menu_parent_id" t-on-click="clearSetupMenuParent">Clear</button>
+                                </div>
+                                <input type="text" class="form-control form-control-sm"
+                                       placeholder="Search menus…"
+                                       t-att-value="state.setupQuery.menu"
+                                       data-kind="menu"
+                                       t-on-input="onSetupSearchInput"
+                                       t-on-focus="onSetupSearchFocus"
+                                       t-on-blur="onSetupSearchBlur"/>
+                                <div t-if="state.setupResults.menu.length" class="o_ds_setup_results list-group mt-1">
+                                    <button type="button" class="list-group-item list-group-item-action py-1"
+                                            t-foreach="state.setupResults.menu" t-as="row" t-key="row.id"
+                                            t-att-data-id="row.id" t-att-data-name="row.name"
+                                            t-on-mousedown.prevent="pickSetupMenu">
+                                        <t t-esc="row.name"/>
+                                    </button>
+                                </div>
+                                </div>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Sequence</label>
+                                <input type="number" class="form-control" style="max-width: 8rem"
+                                       t-att-value="state.setup.menu_sequence"
+                                       t-on-input="onSetupMenuSequenceInput"/>
+                            </div>
+                            <p class="text-muted small mb-0">
+                                Key: <code t-esc="state.payload.key"/>
+                                <t t-if="state.payload.generated_menu_name">
+                                    · Live menu: <t t-esc="state.payload.generated_menu_name"/>
+                                </t>
+                            </p>
+                        </section>
+                    </div>
+                </div>
+
                 <!-- LAYOUT MODE -->
                 <div t-if="state.studioMode === 'layout'" class="o_ds_layout_mode overflow-auto p-3 w-100">
                     <div class="d-flex flex-wrap gap-2 align-items-center mb-3">
@@ -89,8 +266,29 @@
                             Clear custom (use classic)
                         </button>
                     </div>
+                    <div class="o_ds_layout_live_strip d-flex flex-wrap align-items-center gap-2 mb-3 p-2 border rounded">
+                        <span class="small fw-semibold text-muted me-1">Live sample</span>
+                        <select class="form-select form-select-sm w-auto"
+                                t-on-change="onSampleSelect">
+                            <option value="">— pick a record —</option>
+                            <t t-foreach="state.catalogs.samples" t-as="sample" t-key="'lay'+sample.id">
+                                <option t-att-value="sample.id"
+                                        t-att-selected="state.sampleId === sample.id"
+                                        t-esc="sample.name"/>
+                            </t>
+                        </select>
+                        <span class="small text-muted" t-if="hasLivePreview">
+                            <t t-esc="previewTitle"/>
+                            <t t-if="kpisPreview.length">
+                                · <t t-esc="kpisPreview.length"/> KPIs live
+                            </t>
+                        </span>
+                        <span class="small text-muted" t-else="">Pick a host record to verify values after Publish.</span>
+                    </div>
                     <p class="text-muted small">
-                        Drag Odoo-native widgets into a 12-column grid. Content (KPIs, actions) is edited in the Content tab.
+                        Arrange Odoo-native widgets on a 12-column grid. Content (KPIs, actions) is edited in the Content tab.
+                        Manage (View / New / Reporting) always stays in the card ⋮ menu.
+                        Layout order applies on the live kanban after Save layout + Publish.
                         <span t-if="state.payload and state.payload.layout_is_custom" class="badge text-bg-teal ms-1">Custom layout</span>
                     </p>
                     <div class="o_ds_palette mb-3" t-if="layoutPalette.length">
@@ -116,23 +314,26 @@
                                         <option t-att-value="pw.type" t-esc="pw.label"/>
                                     </t>
                                 </select>
-                                <button type="button" class="btn btn-light btn-sm"
+                                <div class="o_ds_struct_actions btn-group" role="group">
+                                <button type="button" class="btn btn-sm btn-outline-secondary"
                                         t-att-data-row-id="row.id"
                                         t-on-click="onMoveLayoutRowUp"
                                         title="Move up">
                                     <i class="fa fa-arrow-up"/>
                                 </button>
-                                <button type="button" class="btn btn-light btn-sm"
+                                <button type="button" class="btn btn-sm btn-outline-secondary"
                                         t-att-data-row-id="row.id"
                                         t-on-click="onMoveLayoutRowDown"
                                         title="Move down">
                                     <i class="fa fa-arrow-down"/>
                                 </button>
-                                <button type="button" class="btn btn-outline-danger btn-sm"
+                                <button type="button" class="btn btn-sm btn-outline-secondary o_ds_btn_danger"
                                         t-att-data-row-id="row.id"
-                                        t-on-click="onRemoveLayoutRow">
-                                    <i class="fa fa-trash"/>
+                                        t-on-click="onRemoveLayoutRow"
+                                        title="Remove row">
+                                    <i class="fa fa-trash-o"/>
                                 </button>
+                                </div>
                             </div>
                             <div class="card-body">
                                 <div class="row g-2">
@@ -165,13 +366,13 @@
                     </t>
                 </div>
 
-                <!-- CONTENT / PREVIEW -->
-                <t t-else="">
+                <!-- CONTENT (edit zones + ambient live sample on the card map) -->
+                <t t-if="state.studioMode === 'content'">
                 <aside class="o_ds_map_pane">
                     <div class="o_ds_map_label d-flex align-items-center justify-content-between gap-2">
                         <span>
-                            <t t-if="hasLivePreview">Live preview</t>
-                            <t t-else="">Card preview</t>
+                            <t t-if="hasLivePreview">Live sample</t>
+                            <t t-else="">Card map</t>
                             <span t-if="state.previewLoading" class="text-muted ms-1">
                                 <i class="fa fa-circle-o-notch fa-spin"/>
                             </span>
@@ -198,23 +399,46 @@
                         <div t-att-class="'o_ds_card_zone o_ds_header_zone' + (state.zone === 'header' ? ' is-active' : '')"
                              t-on-click="() => this.selectZone('header')" role="button">
                             <div class="o_ds_avatar"/>
-                            <div class="flex-grow-1">
+                            <div class="o_ds_header_main flex-grow-1 min-w-0">
                                 <div class="fw-bold" t-esc="previewTitle"/>
-                                <div class="text-muted small">
-                                    <t t-foreach="previewHeaderLines" t-as="h" t-key="h.id">
-                                        <span class="me-2">
-                                            <i t-att-class="'fa ' + (h.icon or 'fa-circle-o')"/>
-                                            <t t-esc="h.text"/>
-                                        </span>
+                                <div class="o_ds_header_subtitles text-muted small" t-if="previewHeaderSubtitles.length">
+                                    <t t-foreach="previewHeaderSubtitles" t-as="h" t-key="'sub'+h.id">
+                                        <div t-att-class="'o_ds_header_line d-flex w-100 ' + headerAlignFlexClass(h)">
+                                            <span class="o_ds_header_line_inner">
+                                                <i t-if="h.icon" t-att-class="'fa ' + h.icon + ' me-1'"/>
+                                                <t t-esc="h.text"/>
+                                            </span>
+                                        </div>
+                                    </t>
+                                </div>
+                                <div class="o_ds_header_inline text-muted small" t-if="previewHeaderInline.length">
+                                    <t t-foreach="previewHeaderInline" t-as="h" t-key="'inline'+h.id">
+                                        <div t-att-class="'o_ds_header_line d-flex w-100 ' + headerAlignFlexClass(h)">
+                                            <span class="o_ds_header_line_inner">
+                                                <i t-if="h.icon and h.kind === 'inline'" t-att-class="'fa ' + h.icon + ' me-1'"/>
+                                                <t t-esc="h.text"/>
+                                            </span>
+                                        </div>
                                     </t>
                                 </div>
                             </div>
+                            <div class="o_ds_header_right small" t-if="previewHeaderRight.length">
+                                <t t-foreach="previewHeaderRight" t-as="h" t-key="'right'+h.id">
+                                    <span class="o_ds_header_right_chip">
+                                        <i t-att-class="'fa ' + (h.icon or 'fa-tag')"/>
+                                        <t t-esc="h.text"/>
+                                    </span>
+                                </t>
+                            </div>
+                            <div class="o_ds_header_right text-muted small fst-italic" t-elif="state.zone === 'header'">
+                                Right
+                            </div>
                         </div>
                         <div class="o_ds_card_mid">
-                            <div t-att-class="'o_ds_card_zone o_ds_primary_zone' + (state.zone === 'primary' ? ' is-active' : '')"
+                            <div t-att-class="'o_ds_card_zone o_ds_primary_zone' + (state.zone === 'primary' or state.zone === 'config' ? ' is-active' : '')"
                                  t-on-click="() => this.selectZone('primary')" role="button">
                                 <div class="small text-muted mb-1" t-esc="previewGraphCaption"/>
-                                <div class="o_ds_chart_wrap" t-if="state.preview and state.preview.graph_json">
+                                <div class="o_ds_chart_wrap" t-if="state.preview and state.preview.graph_json and !previewGraphNeedsSave">
                                     <canvas t-ref="previewChart"/>
                                 </div>
                                 <div class="o_ds_fake_chart" t-else="">
@@ -222,14 +446,18 @@
                                         <span t-att-style="'height:' + (bar || 8) + '%'"/>
                                     </t>
                                 </div>
+                                <div class="small text-warning" t-if="previewGraphNeedsSave">
+                                    Save to refresh chart data (measure / group by).
+                                </div>
                                 <div class="o_ds_primary_btn" t-esc="previewPrimaryLabel"/>
                             </div>
                             <div t-att-class="'o_ds_card_zone o_ds_kpi_zone' + (state.zone === 'kpis' ? ' is-active' : '')"
                                  t-on-click="() => this.selectZone('kpis')" role="button">
                                 <div class="o_ds_zone_caption">KPIs</div>
                                 <t t-foreach="kpisPreview" t-as="kpi" t-key="kpi.key or kpi.id">
-                                    <div class="o_ds_kpi_row">
+                                    <div t-att-class="'o_ds_kpi_row' + (isMapSlotSelected(kpi) ? ' is-selected' : '')">
                                         <span class="o_ds_kpi_count" t-esc="formatItemCount(kpi)"/>
+                                        <i t-if="kpi.icon" t-att-class="'fa ' + kpi.icon + ' me-1'"/>
                                         <span t-esc="kpi.label or kpi.label_plural or kpi.name"/>
                                     </div>
                                 </t>
@@ -241,7 +469,7 @@
                             <div class="o_ds_zone_caption">Totals</div>
                             <div class="d-flex flex-wrap gap-1">
                                 <t t-foreach="totalsPreview" t-as="box" t-key="box.key or box.id">
-                                    <span class="o_ds_chip">
+                                    <span t-att-class="'o_ds_chip' + (isMapSlotSelected(box) ? ' is-selected' : '')">
                                         <t t-if="box.count != null"><t t-esc="box.count"/> </t>
                                         <t t-esc="box.label or box.name"/>
                                     </span>
@@ -254,46 +482,78 @@
                             <div class="o_ds_zone_caption">Shortcuts</div>
                             <div class="d-flex flex-wrap gap-1">
                                 <t t-foreach="shortcutsPreview" t-as="btn" t-key="btn.key or btn.id">
-                                    <span class="o_ds_chip o_ds_chip_primary" t-esc="btn.label or btn.name"/>
+                                    <span t-att-class="'o_ds_chip o_ds_chip_primary' + (isMapSlotSelected(btn) ? ' is-selected' : '')"
+                                          t-esc="btn.label or btn.name"/>
                                 </t>
                                 <span t-if="!shortcutsPreview.length" class="text-muted small">None</span>
                             </div>
                         </div>
                         <div t-att-class="'o_ds_card_zone' + (state.zone === 'manage' ? ' is-active' : '')"
                              t-on-click="() => this.selectZone('manage')" role="button">
-                            <div class="o_ds_zone_caption">Manage · Views · New · Reports</div>
-                            <div class="small text-muted" t-if="hasLivePreview">
-                                <t t-esc="(state.preview.slots.menu.views or []).length"/> views ·
-                                <t t-esc="(state.preview.slots.menu.new or []).length"/> new ·
-                                <t t-esc="(state.preview.slots.menu.reports or []).length"/> reports
+                            <div class="o_ds_zone_caption">Manage menu (⋮ on live card)</div>
+                            <div class="o_ds_manage_preview small">
+                                <div>
+                                    <span class="fw-semibold">Views:</span>
+                                    <t t-foreach="manageViewsPreview" t-as="m" t-key="'v'+ (m.key or m.id)">
+                                        <span t-att-class="'o_ds_chip' + (isMapSlotSelected(m) ? ' is-selected' : '')" t-esc="m.label or m.name"/>
+                                    </t>
+                                    <span t-if="!manageViewsPreview.length" class="text-muted">—</span>
+                                </div>
+                                <div>
+                                    <span class="fw-semibold">New:</span>
+                                    <t t-foreach="manageNewPreview" t-as="m" t-key="'n'+ (m.key or m.id)">
+                                        <span t-att-class="'o_ds_chip' + (isMapSlotSelected(m) ? ' is-selected' : '')" t-esc="m.label or m.name"/>
+                                    </t>
+                                    <span t-if="!manageNewPreview.length" class="text-muted">—</span>
+                                </div>
+                                <div>
+                                    <span class="fw-semibold">Reports:</span>
+                                    <t t-foreach="manageReportsPreview" t-as="m" t-key="'r'+ (m.key or m.id)">
+                                        <span t-att-class="'o_ds_chip' + (isMapSlotSelected(m) ? ' is-selected' : '')" t-esc="m.label or m.name"/>
+                                    </t>
+                                    <span t-if="!manageReportsPreview.length" class="text-muted">—</span>
+                                </div>
                             </div>
                         </div>
                     </div>
-                    <button type="button" class="btn btn-link btn-sm px-0 mt-2"
-                            t-att-class="state.zone === 'config' ? 'fw-bold' : ''"
-                            t-on-click="() => this.selectZone('config')">
-                        <i class="fa fa-cog me-1"/>Configuration (scopes &amp; graph)
-                    </button>
+                    <div t-att-class="'o_ds_config_strip mt-2 p-2 border rounded' + (state.zone === 'config' ? ' is-active' : '')"
+                         t-on-click="() => this.selectZone('config')" role="button">
+                        <div class="small fw-semibold mb-1">
+                            <i class="fa fa-cog me-1"/>Configuration
+                        </div>
+                        <div class="small text-muted">
+                            Scopes: <t t-esc="previewConfigSummary.scopes"/>
+                        </div>
+                        <div class="small text-muted">
+                            Graph · <t t-esc="previewGraphCaption"/>
+                            · measure <code t-esc="previewConfigSummary.measure"/>
+                            · group by <code t-esc="previewConfigSummary.groupby"/>
+                        </div>
+                    </div>
                 </aside>
 
                 <section class="o_ds_editor_pane">
                     <div class="o_ds_editor_header">
                         <div>
                             <h2 class="o_ds_editor_title mb-0" t-esc="zoneMeta.label"/>
-                            <p class="text-muted small mb-0">Edit this zone, then Save and Publish to update the live dashboard.</p>
+                            <p class="text-muted small mb-0">
+                                Edits update the live sample immediately. Save to persist; Publish for the real dashboard.
+                                Chart series refresh after Save when measure / group by change.
+                            </p>
                         </div>
-                        <div class="d-flex gap-1" t-if="canStructureEdit">
-                            <button type="button" class="btn btn-primary btn-sm" t-on-click="addItem" t-att-disabled="state.saving">
-                                <i class="fa fa-plus me-1"/>Add
+                        <div class="o_ds_struct_actions btn-group" role="group" t-if="canStructureEdit">
+                            <button type="button" class="btn btn-sm o_ds_btn_accent" t-on-click="addItem" t-att-disabled="state.saving" title="Add item">
+                                <i class="fa fa-plus"/>
+                                <span>Add</span>
                             </button>
-                            <button type="button" class="btn btn-light btn-sm" t-on-click="() => this.moveSelected(-1)" title="Move up">
+                            <button type="button" class="btn btn-sm btn-outline-secondary" t-on-click="() => this.moveSelected(-1)" title="Move up">
                                 <i class="fa fa-arrow-up"/>
                             </button>
-                            <button type="button" class="btn btn-light btn-sm" t-on-click="() => this.moveSelected(1)" title="Move down">
+                            <button type="button" class="btn btn-sm btn-outline-secondary" t-on-click="() => this.moveSelected(1)" title="Move down">
                                 <i class="fa fa-arrow-down"/>
                             </button>
-                            <button type="button" class="btn btn-outline-danger btn-sm" t-on-click="removeSelected" t-att-disabled="state.saving">
-                                <i class="fa fa-trash"/>
+                            <button type="button" class="btn btn-sm btn-outline-secondary o_ds_btn_danger" t-on-click="removeSelected" t-att-disabled="state.saving" title="Remove">
+                                <i class="fa fa-trash-o"/>
                             </button>
                         </div>
                     </div>
@@ -333,58 +593,250 @@
                             </div>
                         </t>
 
-                        <t t-if="state.zone === 'header'">
-                            <div class="o_ds_item_list mb-3" t-if="(state.payload.headers or []).length">
-                                <t t-foreach="state.payload.headers or []" t-as="h" t-key="h.id">
-                                    <button type="button" class="o_ds_item"
-                                            t-att-class="selectedHeader and selectedHeader.id === h.id ? 'active' : ''"
-                                            t-on-click="() => this.selectHeader(h.id)">
-                                        <i t-att-class="'fa ' + (h.icon or 'fa-circle-o')"/>
-                                        <span t-esc="(h.kind || '') + ' · ' + (h.field_names || '')"/>
-                                    </button>
-                                </t>
-                            </div>
-                        </t>
-
                         <!-- CONFIG -->
                         <t t-if="state.zone === 'config'">
                             <div class="o_ds_fieldset">
-                                <h3>Scopes</h3>
-                                <p class="text-muted small">Toggle which filters are on by default. Domain rules stay in Advanced.</p>
-                                <t t-foreach="state.payload.scopes or []" t-as="scope" t-key="scope.id">
-                                    <label class="o_ds_check">
-                                        <input type="checkbox" t-att-checked="scope.default_on"
-                                               t-on-change="(ev) => this.toggleScope(scope.id, ev.target.checked)"/>
-                                        <span t-esc="scope.name"/>
-                                        <span class="text-muted small ms-1" t-esc="scope.mode"/>
-                                    </label>
-                                </t>
-                                <div t-if="!(state.payload.scopes or []).length" class="text-muted small">No scopes on this dashboard.</div>
+                                <div class="d-flex justify-content-between align-items-center gap-2 mb-2">
+                                    <h3 class="mb-0">General Settings</h3>
+                                    <button type="button" class="btn btn-sm o_ds_btn_accent"
+                                            t-on-click="addScope" t-att-disabled="state.saving">
+                                        <i class="fa fa-plus"/>
+                                        <span>Add scope</span>
+                                    </button>
+                                </div>
+                                <p class="text-muted small">Each line becomes a tick box in the live ⚙️ popup. Use uid in a filter for the current user.</p>
+                                <div class="o_ds_scope_list" t-if="(state.payload.scopes or []).length">
+                                    <div class="o_ds_scope_row o_ds_scope_header small text-muted">
+                                        <span/>
+                                        <span>Name</span>
+                                        <span>Description</span>
+                                        <span>Mode</span>
+                                        <span>Domain</span>
+                                        <span>Default</span>
+                                        <span/>
+                                    </div>
+                                    <t t-foreach="state.payload.scopes or []" t-as="scope" t-key="scope.id">
+                                        <div class="o_ds_scope_row"
+                                             draggable="true"
+                                             t-on-dragstart="(ev) => this.onDragStartScope(scope.id, ev)"
+                                             t-on-dragover="onDragOver"
+                                             t-on-drop="(ev) => this.onDropScope(scope.id, ev)">
+                                            <div class="o_ds_scope_handle_col">
+                                                <i class="fa fa-bars text-muted" title="Drag to reorder"/>
+                                                <button type="button" class="btn btn-link btn-sm p-0 text-muted"
+                                                        t-on-click="() => this.moveScope(scope.id, -1)" title="Move up">
+                                                    <i class="fa fa-chevron-up"/>
+                                                </button>
+                                                <button type="button" class="btn btn-link btn-sm p-0 text-muted"
+                                                        t-on-click="() => this.moveScope(scope.id, 1)" title="Move down">
+                                                    <i class="fa fa-chevron-down"/>
+                                                </button>
+                                            </div>
+                                            <input type="text" class="form-control form-control-sm"
+                                                   t-att-value="scope.name"
+                                                   t-on-blur="(ev) => this.onScopeFieldBlur(scope.id, 'name', ev)"/>
+                                            <input type="text" class="form-control form-control-sm"
+                                                   t-att-value="scope.description or ''"
+                                                   placeholder="Optional"
+                                                   t-on-blur="(ev) => this.onScopeFieldBlur(scope.id, 'description', ev)"/>
+                                            <select class="form-select form-select-sm"
+                                                    t-on-change="(ev) => this.updateScope(scope.id, 'mode', ev.target.value)">
+                                                <option value="include" t-att-selected="scope.mode === 'include'">Include</option>
+                                                <option value="restrict" t-att-selected="scope.mode === 'restrict'">Restrict</option>
+                                            </select>
+                                            <div class="input-group input-group-sm">
+                                                <input type="text" class="form-control font-monospace"
+                                                       t-att-value="scope.domain or '[]'"
+                                                       t-on-blur="(ev) => this.onScopeFieldBlur(scope.id, 'domain', ev)"/>
+                                                <button type="button" class="btn btn-outline-secondary"
+                                                        t-on-click="() => this.openScopeDomainEditor(scope.id)"
+                                                        t-if="state.payload.graph_model or state.payload.host_model"
+                                                        title="Edit domain">
+                                                    <i class="fa fa-filter"/>
+                                                </button>
+                                            </div>
+                                            <label class="o_ds_check mb-0 justify-content-center">
+                                                <input type="checkbox" t-att-checked="scope.default_on"
+                                                       t-on-change="(ev) => this.updateScope(scope.id, 'default_on', ev.target.checked)"/>
+                                            </label>
+                                            <button type="button" class="btn btn-sm btn-outline-secondary o_ds_btn_danger"
+                                                    t-on-click="() => this.removeScope(scope.id)" title="Remove scope">
+                                                <i class="fa fa-trash-o"/>
+                                            </button>
+                                        </div>
+                                    </t>
+                                </div>
+                                <div t-else="" class="text-muted small">No scopes yet. Click <strong>Add scope</strong>.</div>
                             </div>
                             <div class="o_ds_fieldset">
-                                <h3>Graph</h3>
+                                <h3>Graph Configuration</h3>
                                 <label class="o_ds_field">
-                                    <span>Caption</span>
+                                    <span>Graph Model</span>
+                                    <div class="form-control bg-light" t-esc="state.payload.graph_model or state.payload.host_model or '—'"/>
+                                    <p class="form-text mb-0">Change host or graph model in Setup or Advanced.</p>
+                                </label>
+                                <div class="o_ds_field_row">
+                                    <label class="o_ds_field flex-grow-1 mb-0">
+                                        <span>Link to Host</span>
+                                        <div class="o_ds_link_path">
+                                            <t t-foreach="linkPathRows" t-as="hop" t-key="'hop' + hop.index">
+                                                <select class="form-select form-select-sm o_ds_link_hop"
+                                                        t-att-data-hop-index="hop.index"
+                                                        t-on-change="(ev) => this.onLinkPathHopChange(hop.index, ev)">
+                                                    <option value="">—</option>
+                                                    <t t-foreach="hop.options" t-as="opt" t-key="hop.index + opt.name">
+                                                        <option t-att-value="opt.name"
+                                                                t-att-selected="hop.value === opt.name"
+                                                                t-esc="opt.string + ' (' + opt.name + ')'"/>
+                                                    </t>
+                                                </select>
+                                                <span t-if="hop.showSep" class="o_ds_link_sep">.</span>
+                                            </t>
+                                        </div>
+                                        <div class="d-flex flex-wrap gap-2 mt-1">
+                                            <button type="button" class="btn btn-sm btn-outline-secondary"
+                                                    t-on-click="addLinkPathHop"
+                                                    t-att-disabled="!canAddLinkPathHop">
+                                                <i class="fa fa-plus me-1"/>Add hop
+                                            </button>
+                                            <button type="button" class="btn btn-sm btn-outline-secondary"
+                                                    t-on-click="removeLinkPathHop"
+                                                    t-att-disabled="!canRemoveLinkPathHop">
+                                                <i class="fa fa-minus me-1"/>Remove last hop
+                                            </button>
+                                        </div>
+                                        <p class="form-text mb-0">Many2one chain on the graph model to the host card.</p>
+                                    </label>
+                                    <label class="o_ds_check o_ds_check_inline mb-0">
+                                        <input type="checkbox" t-att-checked="state.editor.include_child_records"
+                                               t-on-change="(ev) => this.onEditorInput('include_child_records', ev)"/>
+                                        <span>Include child records</span>
+                                    </label>
+                                </div>
+                                <label class="o_ds_field">
+                                    <span>Graph Title</span>
                                     <input type="text" class="form-control" t-att-value="state.editor.graph_caption"
                                            t-on-input="(ev) => this.onEditorInput('graph_caption', ev)"/>
                                 </label>
                                 <label class="o_ds_field">
-                                    <span>Measure</span>
-                                    <input type="text" class="form-control" t-att-value="state.editor.graph_measure"
-                                           t-on-input="(ev) => this.onEditorInput('graph_measure', ev)"
-                                           placeholder="__count or field:sum"/>
-                                </label>
-                                <label class="o_ds_field">
-                                    <span>Group by</span>
-                                    <select class="form-select" t-on-change="(ev) => this.onEditorInput('graph_groupby', ev)">
-                                        <option value="">—</option>
-                                        <t t-foreach="state.catalogs.graphFields" t-as="f" t-key="f.name">
-                                            <option t-att-value="f.name" t-att-selected="state.editor.graph_groupby === f.name"
+                                    <span>Group By</span>
+                                    <div class="o_ds_groupby_chips mb-2" t-if="graphGroupBySelectedChips.length">
+                                        <t t-foreach="graphGroupBySelectedChips" t-as="chip" t-key="chip.id">
+                                            <span class="badge text-bg-light border o_ds_groupby_chip">
+                                                <button type="button" class="btn btn-link btn-sm p-0 text-muted"
+                                                        t-att-disabled="chip.index === 0"
+                                                        t-on-click="() => this.moveGroupByField(chip.id, -1)"
+                                                        title="Move up">
+                                                    <i class="fa fa-chevron-up"/>
+                                                </button>
+                                                <button type="button" class="btn btn-link btn-sm p-0 text-muted"
+                                                        t-att-disabled="chip.index === graphGroupBySelectedChips.length - 1"
+                                                        t-on-click="() => this.moveGroupByField(chip.id, 1)"
+                                                        title="Move down">
+                                                    <i class="fa fa-chevron-down"/>
+                                                </button>
+                                                <t t-esc="chip.label"/>
+                                                <button type="button" class="btn-close btn-close-sm ms-1"
+                                                        t-on-click="() => this.removeGroupByField(chip.id)"/>
+                                            </span>
+                                        </t>
+                                    </div>
+                                    <select class="form-select" t-on-change="onGroupByPick">
+                                        <option value="">+ Add group by field…</option>
+                                        <t t-foreach="graphGroupByCatalog" t-as="f" t-key="f.id">
+                                            <option t-att-value="f.id"
+                                                    t-att-disabled="state.editor.graph_groupby_field_ids.includes(f.id)"
                                                     t-esc="f.string + ' (' + f.name + ')'"/>
                                         </t>
                                     </select>
+                                    <p class="form-text mb-0">First tag is the top level. Order matches Advanced.</p>
                                 </label>
-                                <p class="text-muted small mb-0">Model: <t t-esc="state.payload.graph_model or state.payload.host_model"/></p>
+                                <div class="row g-2">
+                                    <div t-att-class="showMeasureAggregator ? 'col-md-7' : 'col-12'">
+                                        <label class="o_ds_field mb-0">
+                                            <span>Measure</span>
+                                            <select class="form-select" t-on-change="onMeasureFieldChange">
+                                                <option value="__count"
+                                                        t-att-selected="!state.editor.graph_measure_field_id">Count</option>
+                                                <t t-foreach="state.catalogs.graphMeasureFields" t-as="mf" t-key="mf.id">
+                                                    <option t-att-value="mf.id"
+                                                            t-att-selected="state.editor.graph_measure_field_id === mf.id"
+                                                            t-esc="mf.string + ' (' + mf.name + ')'"/>
+                                                </t>
+                                            </select>
+                                        </label>
+                                    </div>
+                                    <div class="col-md-5" t-if="showMeasureAggregator">
+                                        <label class="o_ds_field mb-0">
+                                            <span>Measured as</span>
+                                            <select class="form-select" t-on-change="onMeasureAggregatorChange">
+                                                <t t-foreach="MEASURE_AGGREGATORS" t-as="agg" t-key="agg.value">
+                                                    <option t-att-value="agg.value"
+                                                            t-att-selected="state.editor.graph_measure_aggregator === agg.value"
+                                                            t-esc="agg.label"/>
+                                                </t>
+                                            </select>
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="o_ds_fieldset">
+                                <h3>Filters</h3>
+                                <p class="text-muted small">Default date fields for the live popup, plus an optional custom domain.</p>
+                                <label class="o_ds_field">
+                                    <span>Creation Date</span>
+                                    <t t-if="state.catalogs.graphDateFields.length">
+                                        <select class="form-select"
+                                                t-on-change="(ev) => this.onEditorInput('period_field_id', ev)">
+                                            <option value="">—</option>
+                                            <t t-foreach="state.catalogs.graphDateFields" t-as="df" t-key="df.id">
+                                                <option t-att-value="df.id"
+                                                        t-att-selected="state.editor.period_field_id === df.id"
+                                                        t-esc="df.string + ' (' + df.name + ')'"/>
+                                            </t>
+                                        </select>
+                                    </t>
+                                    <t t-else="">
+                                        <input type="number" class="form-control"
+                                               t-att-value="state.editor.period_field_id or ''"
+                                               t-on-input="(ev) => this.onEditorInput('period_field_id', ev)"
+                                               placeholder="ir.model.fields id"/>
+                                        <p class="form-text mb-0">No date field catalog — enter a field record id.</p>
+                                    </t>
+                                </label>
+                                <label class="o_ds_field">
+                                    <span>Closed Date</span>
+                                    <t t-if="state.catalogs.graphDateFields.length">
+                                        <select class="form-select"
+                                                t-on-change="(ev) => this.onEditorInput('closed_period_field_id', ev)">
+                                            <option value="">—</option>
+                                            <t t-foreach="state.catalogs.graphDateFields" t-as="df" t-key="'c'+df.id">
+                                                <option t-att-value="df.id"
+                                                        t-att-selected="state.editor.closed_period_field_id === df.id"
+                                                        t-esc="df.string + ' (' + df.name + ')'"/>
+                                            </t>
+                                        </select>
+                                    </t>
+                                    <t t-else="">
+                                        <input type="number" class="form-control"
+                                               t-att-value="state.editor.closed_period_field_id or ''"
+                                               t-on-input="(ev) => this.onEditorInput('closed_period_field_id', ev)"
+                                               placeholder="ir.model.fields id"/>
+                                    </t>
+                                </label>
+                                <label class="o_ds_field">
+                                    <span>Custom Filter</span>
+                                    <div class="input-group">
+                                        <input type="text" class="form-control font-monospace"
+                                               t-att-value="state.editor.graph_domain"
+                                               t-on-input="(ev) => this.onEditorInput('graph_domain', ev)"/>
+                                        <button type="button" class="btn btn-outline-secondary" t-on-click="openGraphDomainEditor"
+                                                t-if="state.payload.graph_model or state.payload.host_model">
+                                            <i class="fa fa-filter"/> Edit
+                                        </button>
+                                    </div>
+                                    <p class="form-text mb-0">Python domain list on the graph model (same as Advanced).</p>
+                                </label>
                             </div>
                         </t>
 
@@ -397,7 +849,7 @@
                                            t-on-input="(ev) => this.onEditorInput('primary_button_label', ev)"/>
                                 </label>
                                 <label class="o_ds_field">
-                                    <span>Graph caption</span>
+                                    <span>Graph Title</span>
                                     <input type="text" class="form-control" t-att-value="state.editor.graph_caption"
                                            t-on-input="(ev) => this.onEditorInput('graph_caption', ev)"/>
                                 </label>
@@ -406,6 +858,95 @@
                                     <input type="text" class="form-control" t-att-value="state.editor.primary_action_xmlid"
                                            t-on-input="(ev) => this.onEditorInput('primary_action_xmlid', ev)"/>
                                 </label>
+                                <div class="o_ds_field mt-2 o_ds_action_defaults">
+                                    <span class="fw-bold d-block mb-1">Action defaults</span>
+                                    <p class="text-muted small mb-2">
+                                        Values passed when this action opens. No JSON — use fixed values,
+                                        this card’s id, or group rules (first matching group wins).
+                                    </p>
+                                    <t t-foreach="state.editor.contextRows" t-as="row" t-key="row_index">
+                                        <div class="o_ds_context_row border rounded p-2 mb-2">
+                                            <div class="d-flex gap-2 mb-1 align-items-start">
+                                                <input type="text" class="form-control form-control-sm"
+                                                       placeholder="Key (e.g. default_type)"
+                                                       t-att-value="row.key"
+                                                       t-on-change="(ev) => this.onContextKeyInput(row_index, ev)"/>
+                                                <select class="form-select form-select-sm"
+                                                        t-on-change="(ev) => this.onContextTypeChange(row_index, ev)">
+                                                    <t t-foreach="CONTEXT_VALUE_TYPES" t-as="vt" t-key="vt.value">
+                                                        <option t-att-value="vt.value"
+                                                                t-att-selected="row.valueType === vt.value"
+                                                                t-esc="vt.label"/>
+                                                    </t>
+                                                </select>
+                                                <button type="button" class="btn btn-link text-danger p-0"
+                                                        title="Remove"
+                                                        t-on-click="() => this.removeContextRow(row_index)">
+                                                    <i class="fa fa-trash-o"/>
+                                                </button>
+                                            </div>
+                                            <t t-if="row.valueType === 'fixed'">
+                                                <input type="text" class="form-control form-control-sm"
+                                                       placeholder="Value"
+                                                       t-att-value="row.fixedValue"
+                                                       t-on-change="(ev) => this.onContextFixedInput(row_index, ev)"/>
+                                            </t>
+                                            <t t-elif="row.valueType === 'record_id'">
+                                                <label class="form-check mb-0">
+                                                    <input type="checkbox" class="form-check-input"
+                                                           t-att-checked="row.asList"
+                                                           t-on-change="(ev) => this.onContextAsListChange(row_index, ev)"/>
+                                                    <span class="form-check-label">Pass as a list</span>
+                                                </label>
+                                            </t>
+                                            <t t-else="">
+                                                <p class="text-muted small mb-2">
+                                                    Rules run top to bottom. First matching group wins.
+                                                </p>
+                                                <t t-foreach="row.groupRules" t-as="rule" t-key="rule_index">
+                                                    <div class="o_ds_context_rule mb-2 p-2 rounded">
+                                                        <div class="d-flex justify-content-between align-items-center mb-1">
+                                                            <span class="small fw-bold">Group rule <t t-esc="rule_index + 1"/></span>
+                                                            <button type="button" class="btn btn-link btn-sm text-danger p-0"
+                                                                    t-on-click="() => this.removeContextGroupRule(row_index, rule_index)">
+                                                                Remove
+                                                            </button>
+                                                        </div>
+                                                        <input type="text" class="form-control form-control-sm mb-1"
+                                                               placeholder="Search user group…"
+                                                               t-att-value="rule.groupLabel or rule.groupXmlid"
+                                                               t-on-input="(ev) => this.onContextGroupSearchInput(row_index, rule_index, ev)"/>
+                                                        <div t-if="getContextGroupHits(row_index, rule_index).length"
+                                                             class="list-group mb-1 shadow-sm">
+                                                            <button type="button" class="list-group-item list-group-item-action py-1"
+                                                                    t-foreach="getContextGroupHits(row_index, rule_index)"
+                                                                    t-as="hit" t-key="hit.xmlid"
+                                                                    t-on-mousedown.prevent="() => this.pickContextGroup(row_index, rule_index, hit)">
+                                                                <t t-esc="hit.name"/>
+                                                            </button>
+                                                        </div>
+                                                        <input type="text" class="form-control form-control-sm"
+                                                               placeholder="Value when in that group"
+                                                               t-att-value="rule.value"
+                                                               t-on-change="(ev) => this.onContextRuleValueInput(row_index, rule_index, ev)"/>
+                                                    </div>
+                                                </t>
+                                                <button type="button" class="btn btn-link btn-sm px-0 mb-2"
+                                                        t-on-click="() => this.addContextGroupRule(row_index)">
+                                                    Add another group rule
+                                                </button>
+                                                <input type="text" class="form-control form-control-sm"
+                                                       placeholder="Otherwise use"
+                                                       t-att-value="row.elseValue"
+                                                       t-on-change="(ev) => this.onContextElseValueInput(row_index, ev)"/>
+                                            </t>
+                                        </div>
+                                    </t>
+                                    <button type="button" class="btn btn-link btn-sm px-0"
+                                            t-on-click="() => this.addContextRow()">
+                                        Add context key
+                                    </button>
+                                </div>
                                 <label class="o_ds_field">
                                     <span>Search actions</span>
                                     <input type="text" class="form-control" t-att-value="state.actionQuery"
@@ -424,39 +965,141 @@
 
                         <!-- HEADER -->
                         <t t-elif="state.zone === 'header'">
-                            <div class="o_ds_fieldset" t-if="selectedHeader">
+                            <div class="o_ds_fieldset">
+                                <h3 class="mb-2">Title &amp; Image</h3>
+                                <p class="text-muted small">Same as Advanced → Card layout → Header.</p>
                                 <label class="o_ds_field">
-                                    <span>Kind</span>
-                                    <select class="form-select" t-on-change="(ev) => this.onEditorInput('kind', ev)">
-                                        <option value="left" t-att-selected="state.editor.kind === 'left'">Left</option>
-                                        <option value="right" t-att-selected="state.editor.kind === 'right'">Right</option>
-                                        <option value="subtitle" t-att-selected="state.editor.kind === 'subtitle'">Subtitle</option>
-                                    </select>
-                                </label>
-                                <label class="o_ds_field">
-                                    <span>Fields (comma-separated)</span>
-                                    <input type="text" class="form-control" t-att-value="state.editor.field_names"
-                                           t-on-input="(ev) => this.onEditorInput('field_names', ev)" placeholder="email, phone"/>
-                                </label>
-                                <label class="o_ds_field">
-                                    <span>Quick pick field</span>
-                                    <select class="form-select" t-on-change="(ev) => this.onQuickPickHeaderField(ev)">
-                                        <option value="">— append from host —</option>
-                                        <t t-foreach="state.catalogs.hostFields.filter(f => ['char','text','many2one','selection'].includes(f.ttype)).slice(0,80)" t-as="f" t-key="f.name">
-                                            <option t-att-value="f.name" t-esc="f.string + ' (' + f.name + ')'"/>
-                                        </t>
-                                    </select>
-                                </label>
-                                <label class="o_ds_field">
-                                    <span>Icon</span>
-                                    <select class="form-select" t-on-change="(ev) => this.onEditorInput('icon', ev)">
+                                    <span>Title field</span>
+                                    <select class="form-select form-select-sm"
+                                            t-on-change="(ev) => this.updateHeaderBlueprint('header_title_field', ev.target.value)">
                                         <option value="">—</option>
-                                        <t t-foreach="state.catalogs.icons" t-as="ic" t-key="ic.value">
-                                            <option t-att-value="ic.value" t-att-selected="state.editor.icon === ic.value"
-                                                    t-esc="ic.label"/>
+                                        <t t-foreach="headerLineFieldCatalog" t-as="f" t-key="'title'+f.name">
+                                            <option t-att-value="f.name"
+                                                    t-att-selected="(state.payload.header_title_field or 'display_name') === f.name"
+                                                    t-esc="f.string + ' (' + f.name + ')'"/>
                                         </t>
                                     </select>
                                 </label>
+                                <label class="o_ds_field">
+                                    <span>Image field</span>
+                                    <select class="form-select form-select-sm"
+                                            t-on-change="(ev) => this.updateHeaderBlueprint('header_image_field', ev.target.value)">
+                                        <option value="">—</option>
+                                        <t t-foreach="headerImageFieldCatalog" t-as="f" t-key="'img'+f.name">
+                                            <option t-att-value="f.name"
+                                                    t-att-selected="state.payload.header_image_field === f.name"
+                                                    t-esc="f.string + ' (' + f.name + ')'"/>
+                                        </t>
+                                    </select>
+                                </label>
+                                <label class="o_ds_field" t-if="state.payload.header_image_field">
+                                    <span>Image style</span>
+                                    <select class="form-select form-select-sm"
+                                            t-on-change="(ev) => this.updateHeaderBlueprint('header_image_style', ev.target.value)">
+                                        <t t-foreach="HEADER_IMAGE_STYLES" t-as="st" t-key="st.value">
+                                            <option t-att-value="st.value"
+                                                    t-att-selected="(state.payload.header_image_style or 'avatar') === st.value"
+                                                    t-esc="st.label"/>
+                                        </t>
+                                    </select>
+                                </label>
+                            </div>
+                            <div class="o_ds_fieldset">
+                                <h3 class="mb-2">Header Lines</h3>
+                                <p class="text-muted small">Kind, alignment, fields, and join style. Use <strong>Add</strong> above for new lines.</p>
+                                <div class="o_ds_header_line_list" t-if="(state.payload.headers or []).length">
+                                    <div class="o_ds_header_line_row o_ds_header_line_header small text-muted">
+                                        <span/>
+                                        <span>Kind</span>
+                                        <span>Alignment</span>
+                                        <span>Icon</span>
+                                        <span>Fields</span>
+                                        <span>Shown as</span>
+                                        <span/>
+                                    </div>
+                                    <t t-foreach="state.payload.headers or []" t-as="hline" t-key="hline.id">
+                                        <div class="o_ds_header_line_row"
+                                             t-att-class="isHeaderRowSelected(hline.id) ? 'is-selected' : ''"
+                                             draggable="true"
+                                             t-on-click="() => this.selectHeaderRow(hline.id)"
+                                             t-on-dragstart="(ev) => this.onDragStartHeader(hline.id, ev)"
+                                             t-on-dragover="onDragOver"
+                                             t-on-drop="(ev) => this.onDropHeader(hline.id, ev)">
+                                            <div class="o_ds_scope_handle_col">
+                                                <i class="fa fa-bars text-muted" title="Drag to reorder"/>
+                                                <button type="button" class="btn btn-link btn-sm p-0 text-muted"
+                                                        t-on-click.stop="() => this.moveHeaderLine(hline.id, -1)" title="Move up">
+                                                    <i class="fa fa-chevron-up"/>
+                                                </button>
+                                                <button type="button" class="btn btn-link btn-sm p-0 text-muted"
+                                                        t-on-click.stop="() => this.moveHeaderLine(hline.id, 1)" title="Move down">
+                                                    <i class="fa fa-chevron-down"/>
+                                                </button>
+                                            </div>
+                                            <select class="form-select form-select-sm"
+                                                    t-on-click.stop=""
+                                                    t-on-change="(ev) => this.updateHeaderItem(hline.id, 'kind', ev.target.value)">
+                                                <option value="subtitle" t-att-selected="hline.kind === 'subtitle'">Subtitle</option>
+                                                <option value="inline" t-att-selected="hline.kind === 'inline'">Inline</option>
+                                            </select>
+                                            <select class="form-select form-select-sm"
+                                                    t-on-click.stop=""
+                                                    t-on-change="(ev) => this.updateHeaderItem(hline.id, 'alignment', ev.target.value)">
+                                                <option value="left" t-att-selected="(hline.alignment or 'left') === 'left'">Left</option>
+                                                <option value="center" t-att-selected="hline.alignment === 'center'">Center</option>
+                                                <option value="right" t-att-selected="hline.alignment === 'right'">Right</option>
+                                            </select>
+                                            <select class="form-select form-select-sm"
+                                                    t-if="headerLineShowIcon(hline)"
+                                                    t-on-click.stop=""
+                                                    t-on-change="(ev) => this.updateHeaderItem(hline.id, 'icon', ev.target.value || false)">
+                                                <option value="">—</option>
+                                                <t t-foreach="state.catalogs.icons" t-as="ic" t-key="ic.value">
+                                                    <option t-att-value="ic.value"
+                                                            t-att-selected="hline.icon === ic.value"
+                                                            t-esc="ic.label"/>
+                                                </t>
+                                            </select>
+                                            <span t-else="" class="text-muted small">—</span>
+                                            <div class="o_ds_header_fields_col" t-on-click.stop="">
+                                                <div class="o_ds_groupby_chips mb-1" t-if="headerFieldChips(hline).length">
+                                                    <t t-foreach="headerFieldChips(hline)" t-as="chip" t-key="chip.name">
+                                                        <span class="badge text-bg-light border o_ds_groupby_chip">
+                                                            <t t-esc="chip.label"/>
+                                                            <button type="button" class="btn-close btn-close-sm ms-1"
+                                                                    t-on-click="() => this.removeHeaderFieldFromLine(hline.id, chip.name)"/>
+                                                        </span>
+                                                    </t>
+                                                </div>
+                                                <select class="form-select form-select-sm"
+                                                        t-on-change="(ev) => this.onHeaderFieldPick(hline.id, ev)">
+                                                    <option value="">+ Add field…</option>
+                                                    <t t-foreach="headerLineFieldCatalog" t-as="f" t-key="hline.id + f.name">
+                                                        <option t-att-value="f.name"
+                                                                t-att-disabled="headerFieldIsSelected(hline, f.name)"
+                                                                t-esc="f.string + ' (' + f.name + ')'"/>
+                                                    </t>
+                                                </select>
+                                            </div>
+                                            <select class="form-select form-select-sm"
+                                                    t-if="headerLineShowSeparator(hline)"
+                                                    t-on-click.stop=""
+                                                    t-on-change="(ev) => this.updateHeaderItem(hline.id, 'separator', ev.target.value)">
+                                                <t t-foreach="HEADER_SEPARATORS" t-as="sep" t-key="sep.value">
+                                                    <option t-att-value="sep.value"
+                                                            t-att-selected="(hline.separator or ', ') === sep.value"
+                                                            t-esc="sep.label"/>
+                                                </t>
+                                            </select>
+                                            <span t-else="" class="text-muted small">—</span>
+                                            <button type="button" class="btn btn-sm btn-outline-secondary o_ds_btn_danger"
+                                                    t-on-click.stop="() => this.removeHeaderLine(hline.id)" title="Remove line">
+                                                <i class="fa fa-trash-o"/>
+                                            </button>
+                                        </div>
+                                    </t>
+                                </div>
+                                <div t-else="" class="text-muted small">No header lines yet. Click <strong>Add</strong>.</div>
                             </div>
                         </t>
 
@@ -525,7 +1168,7 @@
                                         </div>
                                         <div class="col-md-6">
                                             <label class="o_ds_field">
-                                                <span>Link to card</span>
+                                                <span>Link to Host</span>
                                                 <input type="text" class="form-control" t-att-value="state.editor.relate_field"
                                                        t-on-input="(ev) => this.onEditorInput('relate_field', ev)" placeholder="partner_id"/>
                                             </label>
@@ -541,17 +1184,42 @@
                                             </button>
                                         </div>
                                     </label>
-                                    <label class="o_ds_field">
-                                        <span>Conditions</span>
-                                        <select class="form-select" multiple="multiple" size="4"
-                                                t-on-change="(ev) => this.onEditorInput('condition_ids', ev)">
-                                            <t t-foreach="state.catalogs.conditions" t-as="c" t-key="c.id">
-                                                <option t-att-value="c.id"
-                                                        t-att-selected="state.editor.condition_ids.includes(c.id)"
-                                                        t-esc="c.name"/>
+                                    <div class="o_ds_field o_ds_conditions">
+                                        <span class="fw-bold d-block mb-1">Conditions</span>
+                                        <p class="text-muted small mb-2">
+                                            Reusable filters — same records as Advanced.
+                                            Remove only unlinks from this KPI.
+                                        </p>
+                                        <t t-if="!selectedConditions.length">
+                                            <p class="text-muted small mb-2">No conditions on this KPI yet.</p>
+                                        </t>
+                                        <div class="o_ds_condition_list mb-2">
+                                            <t t-foreach="selectedConditions" t-as="cond" t-key="cond.id">
+                                                <div class="o_ds_condition_row d-flex align-items-center gap-2 border rounded px-2 py-1 mb-1">
+                                                    <span class="flex-grow-1 text-truncate" t-esc="cond.name"/>
+                                                    <button type="button" class="btn btn-link btn-sm px-1"
+                                                            t-on-click="() => this.editCondition(cond.id)">
+                                                        Edit
+                                                    </button>
+                                                    <button type="button" class="btn btn-link btn-sm text-danger px-1"
+                                                            title="Remove from this KPI"
+                                                            t-on-click="() => this.removeCondition(cond.id)">
+                                                        <i class="fa fa-times"/>
+                                                    </button>
+                                                </div>
                                             </t>
-                                        </select>
-                                    </label>
+                                        </div>
+                                        <div class="d-flex flex-wrap gap-2">
+                                            <button type="button" class="btn btn-secondary btn-sm"
+                                                    t-on-click="() => this.linkExistingConditions()">
+                                                Link existing
+                                            </button>
+                                            <button type="button" class="btn btn-primary btn-sm"
+                                                    t-on-click="() => this.openNewCondition()">
+                                                New condition
+                                            </button>
+                                        </div>
+                                    </div>
                                 </t>
 
                                 <t t-if="state.zone === 'totals'">
@@ -594,6 +1262,95 @@
                                     <input type="text" class="form-control" t-att-value="state.editor.action_method"
                                            t-on-input="(ev) => this.onEditorInput('action_method', ev)" placeholder="open_follow_up_report"/>
                                 </label>
+                                <div class="o_ds_field mt-2 o_ds_action_defaults">
+                                    <span class="fw-bold d-block mb-1">Action defaults</span>
+                                    <p class="text-muted small mb-2">
+                                        Values passed when this action opens. No JSON — use fixed values,
+                                        this card’s id, or group rules (first matching group wins).
+                                    </p>
+                                    <t t-foreach="state.editor.contextRows" t-as="row" t-key="row_index">
+                                        <div class="o_ds_context_row border rounded p-2 mb-2">
+                                            <div class="d-flex gap-2 mb-1 align-items-start">
+                                                <input type="text" class="form-control form-control-sm"
+                                                       placeholder="Key (e.g. default_type)"
+                                                       t-att-value="row.key"
+                                                       t-on-change="(ev) => this.onContextKeyInput(row_index, ev)"/>
+                                                <select class="form-select form-select-sm"
+                                                        t-on-change="(ev) => this.onContextTypeChange(row_index, ev)">
+                                                    <t t-foreach="CONTEXT_VALUE_TYPES" t-as="vt" t-key="vt.value">
+                                                        <option t-att-value="vt.value"
+                                                                t-att-selected="row.valueType === vt.value"
+                                                                t-esc="vt.label"/>
+                                                    </t>
+                                                </select>
+                                                <button type="button" class="btn btn-link text-danger p-0"
+                                                        title="Remove"
+                                                        t-on-click="() => this.removeContextRow(row_index)">
+                                                    <i class="fa fa-trash-o"/>
+                                                </button>
+                                            </div>
+                                            <t t-if="row.valueType === 'fixed'">
+                                                <input type="text" class="form-control form-control-sm"
+                                                       placeholder="Value"
+                                                       t-att-value="row.fixedValue"
+                                                       t-on-change="(ev) => this.onContextFixedInput(row_index, ev)"/>
+                                            </t>
+                                            <t t-elif="row.valueType === 'record_id'">
+                                                <label class="form-check mb-0">
+                                                    <input type="checkbox" class="form-check-input"
+                                                           t-att-checked="row.asList"
+                                                           t-on-change="(ev) => this.onContextAsListChange(row_index, ev)"/>
+                                                    <span class="form-check-label">Pass as a list</span>
+                                                </label>
+                                            </t>
+                                            <t t-else="">
+                                                <p class="text-muted small mb-2">
+                                                    Rules run top to bottom. First matching group wins.
+                                                </p>
+                                                <t t-foreach="row.groupRules" t-as="rule" t-key="rule_index">
+                                                    <div class="o_ds_context_rule mb-2 p-2 rounded">
+                                                        <div class="d-flex justify-content-between align-items-center mb-1">
+                                                            <span class="small fw-bold">Group rule <t t-esc="rule_index + 1"/></span>
+                                                            <button type="button" class="btn btn-link btn-sm text-danger p-0"
+                                                                    t-on-click="() => this.removeContextGroupRule(row_index, rule_index)">
+                                                                Remove
+                                                            </button>
+                                                        </div>
+                                                        <input type="text" class="form-control form-control-sm mb-1"
+                                                               placeholder="Search user group…"
+                                                               t-att-value="rule.groupLabel or rule.groupXmlid"
+                                                               t-on-input="(ev) => this.onContextGroupSearchInput(row_index, rule_index, ev)"/>
+                                                        <div t-if="getContextGroupHits(row_index, rule_index).length"
+                                                             class="list-group mb-1 shadow-sm">
+                                                            <button type="button" class="list-group-item list-group-item-action py-1"
+                                                                    t-foreach="getContextGroupHits(row_index, rule_index)"
+                                                                    t-as="hit" t-key="hit.xmlid"
+                                                                    t-on-mousedown.prevent="() => this.pickContextGroup(row_index, rule_index, hit)">
+                                                                <t t-esc="hit.name"/>
+                                                            </button>
+                                                        </div>
+                                                        <input type="text" class="form-control form-control-sm"
+                                                               placeholder="Value when in that group"
+                                                               t-att-value="rule.value"
+                                                               t-on-change="(ev) => this.onContextRuleValueInput(row_index, rule_index, ev)"/>
+                                                    </div>
+                                                </t>
+                                                <button type="button" class="btn btn-link btn-sm px-0 mb-2"
+                                                        t-on-click="() => this.addContextGroupRule(row_index)">
+                                                    Add another group rule
+                                                </button>
+                                                <input type="text" class="form-control form-control-sm"
+                                                       placeholder="Otherwise use"
+                                                       t-att-value="row.elseValue"
+                                                       t-on-change="(ev) => this.onContextElseValueInput(row_index, ev)"/>
+                                            </t>
+                                        </div>
+                                    </t>
+                                    <button type="button" class="btn btn-link btn-sm px-0"
+                                            t-on-click="() => this.addContextRow()">
+                                        Add context key
+                                    </button>
+                                </div>
                                 <label class="o_ds_field">
                                     <span>Search actions</span>
                                     <input type="text" class="form-control" t-att-value="state.actionQuery"

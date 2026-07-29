@@ -141,6 +141,16 @@ title/help pass closed in `19.0.1.0.7` (see §H). Remaining per §B: multi-group
 (item 7), dynamic Unassigned wording (item 1), action-variant builder UI
 (item 12). Full dual-date-row filters and settings-block chrome still lag v1.
 
+### Dynamic graph config / Studio (2026-07-28)
+
+Dict → blueprint checklist **closed** for Studio promote of Link to Host
+(`graph_data_field`), periods, Custom Filter (`graph_domain`), and include
+child records. UI labels: **Link to Host**, **Graph Title**, **Custom Filter**.
+**Do not** re-port `graph_my_data_field` or `graph_config_form_view_ref`.
+`graph_data_scope.warning` stays Accept (not a blueprint field). Spec:
+`docs/superpowers/specs/2026-07-28-dynamic-graph-config-studio-design.md`.
+Engine **19.0.1.0.98**.
+
 ### Manual UI eyeball (2026-07-26)
 
 Open both cards in the browser:

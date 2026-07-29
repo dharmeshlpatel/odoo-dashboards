@@ -13,13 +13,15 @@
         <field name="blueprint_id" ref="blueprint_crm_salespersons"/>
         <field name="sequence">10</field>
         <field name="kind">subtitle</field>
+        <field name="alignment">left</field>
         <field name="field_names">login</field>
     </record>
 
     <record id="header_crm_sp_email" model="dashboard.blueprint.header.item">
         <field name="blueprint_id" ref="blueprint_crm_salespersons"/>
         <field name="sequence">20</field>
-        <field name="kind">left</field>
+        <field name="kind">inline</field>
+        <field name="alignment">left</field>
         <field name="icon">fa-envelope</field>
         <field name="field_names">email</field>
     </record>
@@ -27,7 +29,8 @@
     <record id="header_crm_sp_phone" model="dashboard.blueprint.header.item">
         <field name="blueprint_id" ref="blueprint_crm_salespersons"/>
         <field name="sequence">30</field>
-        <field name="kind">left</field>
+        <field name="kind">inline</field>
+        <field name="alignment">left</field>
         <field name="icon">fa-phone</field>
         <field name="field_names">phone</field>
     </record>

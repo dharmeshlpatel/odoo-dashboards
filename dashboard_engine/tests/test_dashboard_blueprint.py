@@ -647,16 +647,76 @@ class TestDashboardBlueprintEngine(TransactionCase):
         self.assertIn('<field name="function"/>', arch)
         self.assertIn('<field name="parent_id"/>', arch)
 
+    def test_header_kind_inline_alignment_migration_mapping(self):
+        Item = self.env["dashboard.blueprint.header.item"]
+        mapped = Item._map_legacy_header_kind("left")
+        self.assertEqual(mapped, {"kind": "inline", "alignment": "left"})
+        mapped = Item._map_legacy_header_kind("right")
+        self.assertEqual(mapped, {"kind": "inline", "alignment": "right"})
+        mapped = Item._map_legacy_header_kind("subtitle")
+        self.assertEqual(mapped, {"kind": "subtitle", "alignment": "left"})
+
+    def test_header_arch_inline_center_and_subtitle_align(self):
+        bp = self._header_blueprint(
+            [
+                {"kind": "subtitle", "alignment": "center", "field_names": "email"},
+                {
+                    "kind": "inline",
+                    "alignment": "center",
+                    "icon": "fa-phone",
+                    "field_names": "phone",
+                },
+                {"kind": "inline", "alignment": "right", "field_names": "category_id"},
+                {
+                    "kind": "inline",
+                    "alignment": "left",
+                    "icon": "fa-envelope",
+                    "field_names": "email",
+                },
+            ]
+        )
+        arch = bp._header_arch()
+        self.assertIn("dashboard_header_line_inner", arch)
+        self.assertIn("dashboard_header_align_center", arch)
+        self.assertIn("justify-content-center", arch)
+        self.assertIn("dashboard_header_right", arch)
+        self.assertIn("fa-envelope", arch)
+        # Centered inline keeps its icon (alignment is justify only).
+        self.assertIn("fa-phone", arch)
+        self.assertRegex(
+            arch,
+            r'dashboard_header_align_center[^>]*>[\s\S]*?dashboard_header_line_inner',
+        )
+
+    def test_header_inline_right_text_stays_under_title(self):
+        """Right on Email is text justify, not the tags-column error."""
+        bp = self._header_blueprint(
+            [
+                {
+                    "kind": "inline",
+                    "alignment": "right",
+                    "icon": "fa-envelope",
+                    "field_names": "email",
+                }
+            ]
+        )
+        arch = bp._header_arch()
+        self.assertIn("justify-content-end", arch)
+        self.assertIn("fa-envelope", arch)
+        self.assertNotIn("dashboard_header_right", arch)
+        self.assertIn("dashboard_header_inline_stack", arch)
+
     def test_header_declares_the_fields_it_reads(self):
         """Undeclared fields are simply not loaded by the kanban."""
         bp = self._header_blueprint(
             [
                 {
-                    "kind": "left",
+                    "kind": "inline",
+                    "alignment": "left",
                     "icon": "fa-map-marker",
                     "field_names": "city,country_id",
                 },
-                {"kind": "right", "field_names": "category_id"},
+                {"kind": "inline", "alignment": "right", "field_names": "category_id"},
             ]
         )
         arch = bp._kanban_arch()
@@ -670,7 +730,14 @@ class TestDashboardBlueprintEngine(TransactionCase):
 
     def test_header_icon_is_named_for_screen_readers(self):
         bp = self._header_blueprint(
-            [{"kind": "left", "icon": "fa-envelope", "field_names": "email"}]
+            [
+                {
+                    "kind": "inline",
+                    "alignment": "left",
+                    "icon": "fa-envelope",
+                    "field_names": "email",
+                }
+            ]
         )
         arch = bp._kanban_arch()
         self.assertIn('class="fa fa-envelope me-1" title="Email"', arch)
@@ -678,7 +745,7 @@ class TestDashboardBlueprintEngine(TransactionCase):
 
     def test_header_tags_use_colour_only_when_the_target_has_one(self):
         with_colour = self._header_blueprint(
-            [{"kind": "right", "field_names": "category_id"}]
+            [{"kind": "inline", "alignment": "right", "field_names": "category_id"}]
         )
         self.assertIn("'color_field': 'color'", with_colour._kanban_arch())
 
@@ -698,7 +765,7 @@ class TestDashboardBlueprintEngine(TransactionCase):
             self.skipTest("every partner relation carries a colour here")
         without_colour = self._header_blueprint(
             [
-                {"kind": "right", "field_names": colourless},
+                {"kind": "inline", "alignment": "right", "field_names": colourless},
                 {"kind": "subtitle", "field_names": "ref"},
             ]
         )
@@ -709,7 +776,7 @@ class TestDashboardBlueprintEngine(TransactionCase):
     def test_header_left_tags_render_under_the_title(self):
         """Left + tags must stay in the title column, not the far-right pin."""
         bp = self._header_blueprint(
-            [{"kind": "left", "field_names": "category_id"}]
+            [{"kind": "inline", "alignment": "left", "field_names": "category_id"}]
         )
         arch = bp._kanban_arch()
         self.assertIn("dashboard_header_left_tags", arch)
@@ -719,20 +786,22 @@ class TestDashboardBlueprintEngine(TransactionCase):
     def test_header_kind_change_republishes_kanban(self):
         """Editing Left/Right on a published blueprint must refresh the card."""
         bp = self._header_blueprint(
-            [{"kind": "right", "field_names": "category_id"}]
+            [{"kind": "inline", "alignment": "right", "field_names": "category_id"}]
         )
         bp.action_publish()
         self.assertIn("dashboard_header_right", bp.generated_view_id.arch_db)
-        bp.header_line_ids.write({"kind": "left"})
+        bp.header_line_ids.write({"kind": "inline", "alignment": "left"})
         arch = bp.generated_view_id.arch_db
         self.assertIn("dashboard_header_left_tags", arch)
         self.assertNotIn("dashboard_header_right", arch)
 
-    def test_header_refuses_tags_on_a_single_value_field(self):
-        from odoo.exceptions import ValidationError
-
-        with self.assertRaises(ValidationError):
-            self._header_blueprint([{"kind": "right", "field_names": "email"}])
+    def test_header_allows_text_field_on_right_alignment(self):
+        """Right alignment on Email is allowed (justify); tags column is for M2M."""
+        bp = self._header_blueprint(
+            [{"kind": "inline", "alignment": "right", "field_names": "email"}]
+        )
+        self.assertEqual(bp.header_line_ids.alignment, "right")
+        self.assertNotIn("dashboard_header_right", bp._header_arch())
 
     def test_generated_header_is_valid_arch(self):
         """The generated view has to survive Odoo's own validation."""
@@ -744,12 +813,13 @@ class TestDashboardBlueprintEngine(TransactionCase):
                     "separator": " at ",
                 },
                 {
-                    "kind": "left",
+                    "kind": "inline",
+                    "alignment": "left",
                     "icon": "fa-map-marker",
                     "field_names": "city,country_id",
                     "separator": ", ",
                 },
-                {"kind": "right", "field_names": "category_id"},
+                {"kind": "inline", "alignment": "right", "field_names": "category_id"},
             ]
         )
         bp.action_publish()
@@ -764,9 +834,14 @@ class TestDashboardBlueprintEngine(TransactionCase):
         if not bp:
             self.skipTest("CRM seed not present")
         self.assertEqual(bp.header_image_field, "image_128")
-        kinds = bp.header_line_ids.mapped("kind")
-        self.assertEqual(kinds[:3], ["subtitle", "left", "left"])
-        self.assertIn(kinds[-1], ("left", "right"))
+        effective = [
+            line._effective_kind_alignment()
+            for line in bp.header_line_ids.sorted("sequence")
+        ]
+        self.assertEqual(
+            [e["kind"] for e in effective[:3]], ["subtitle", "inline", "inline"]
+        )
+        self.assertIn(effective[-1]["alignment"], ("left", "right"))
         tags_line = bp.header_line_ids.filtered(
             lambda h: "category_id" in (h.field_names or "")
         )
@@ -779,7 +854,7 @@ class TestDashboardBlueprintEngine(TransactionCase):
             "dashboard_tag_container",
         ):
             self.assertIn(marker, arch, "%s is load-bearing in the v1 stylesheet" % marker)
-        if tags_line.kind == "right":
+        if tags_line._effective_kind_alignment()["alignment"] == "right":
             self.assertIn("dashboard_header_right", arch)
         else:
             self.assertIn("dashboard_header_left_tags", arch)
@@ -1616,6 +1691,65 @@ class TestDashboardBlueprintEngine(TransactionCase):
             rule.with_user(plain)._resolve_static_value(), "person"
         )
 
+    def test_action_context_resolves_group_value_token(self):
+        """Any blueprint can put __de__ tokens in action_context (generic)."""
+        from odoo.addons.dashboard_engine.tools.condition_domain import (
+            compile_context_value,
+        )
+
+        token_ctx = {
+            "default_type": {
+                "__de__": "group_value",
+                "default": "person",
+                "map": [
+                    {
+                        "groups": ["base.group_system"],
+                        "value": "company",
+                    }
+                ],
+            }
+        }
+        bp = self.env["dashboard.blueprint"].create(
+            {
+                "name": "Context Tokens",
+                "key": "test_context_tokens_%s" % self.env.uid,
+                "host_model_id": self._host_model().id,
+                "graph_model": "res.partner",
+                "slot_ids": [
+                    (
+                        0,
+                        0,
+                        {
+                            "key": "kids",
+                            "name": "Kids",
+                            "section": "kpi",
+                            "compute_model": "res.partner",
+                            "relate_field": "parent_id",
+                            "compute_domain": "[]",
+                            "action_model": "res.partner",
+                            "action_context": json.dumps(token_ctx),
+                        },
+                    )
+                ],
+            }
+        )
+        slot = bp.slot_ids
+        partner = self.env["res.partner"].create({"name": "Token Host"})
+        action = slot._prepare_action(partner)
+        self.assertEqual(action["context"]["default_type"], "company")
+        plain = self.env["res.users"].create(
+            {
+                "name": "Plain Ctx",
+                "login": "plain_ctx_viewer_%s" % self.env.uid,
+                "group_ids": [(6, 0, [self.env.ref("base.group_user").id])],
+            }
+        )
+        plain_ctx = compile_context_value(
+            token_ctx, self.env(user=plain), record=partner
+        )
+        self.assertEqual(plain_ctx["default_type"], "person")
+
+
     def test_condition_skipped_when_required_app_missing(self):
         condition = self.env["dashboard.condition"].create(
             {
@@ -2257,22 +2391,21 @@ class TestDashboardBlueprintEngine(TransactionCase):
         self.assertEqual(presented["description"], "Help when base is installed")
         self.assertEqual(scope.display_label, "With Base")
 
-    def test_only_mine_scope_narrows_crm_kpi_count_and_action(self):
-        """Ticking 'Only mine' on the CRM dashboard narrows the KPI badge
-        count and its click-through domain, matching the graph."""
+    def _crm_only_mine_fixture(self):
+        """Partner with one mine + one teammate opportunity; CRM My scope."""
         bp = self.env.ref(
             "crm_customer_dashboard.blueprint_crm_customers", raise_if_not_found=False
         )
         mine = self.env.ref(
             "crm_customer_dashboard.scope_crm_mine", raise_if_not_found=False
         )
-        slot = self.env.ref(
-            "crm_customer_dashboard.slot_crm_bottom_opportunities", raise_if_not_found=False
-        )
-        if not bp or not mine or not slot or "crm.lead" not in self.env:
-            self.skipTest("CRM customers blueprint/slot seed missing")
+        if not bp or not mine or "crm.lead" not in self.env:
+            self.skipTest("CRM customers blueprint seed missing")
         other_user = self.env["res.users"].create(
-            {"name": "Other Salesperson", "login": "other_salesperson_fold"}
+            {
+                "name": "Other Salesperson",
+                "login": "other_salesperson_fold_%s" % self.env.uid,
+            }
         )
         partner = self.env["res.partner"].create({"name": "Only Mine Co"})
         self.env["crm.lead"].create(
@@ -2291,6 +2424,17 @@ class TestDashboardBlueprintEngine(TransactionCase):
                 "user_id": other_user.id,
             }
         )
+        return bp, mine, partner
+
+    def test_only_mine_scope_narrows_crm_kpi_count_and_action(self):
+        """Ticking My Pipeline narrows right KPI count + click domain."""
+        bp, mine, partner = self._crm_only_mine_fixture()
+        slot = self.env.ref(
+            "crm_customer_dashboard.slot_crm_open_opportunities",
+            raise_if_not_found=False,
+        )
+        if not slot:
+            self.skipTest("CRM open opportunities KPI slot missing")
         records = partner
         before = slot._compute_values_batch(records).get(partner.id, (0, None))[0]
         self.assertEqual(before, 2)
@@ -2302,6 +2446,51 @@ class TestDashboardBlueprintEngine(TransactionCase):
 
         action = slot._prepare_action(partner)
         self.assertIn(("user_id", "=", self.env.uid), action["domain"])
+
+    def test_only_mine_scope_skips_bottom_and_menu_slots(self):
+        """My Pipeline must not narrow bottoms or Manage menu actions.
+
+        Spec: 2026-07-28-restrict-scope-surface-matrix-design.md
+        """
+        bp, mine, partner = self._crm_only_mine_fixture()
+        bottom = self.env.ref(
+            "crm_customer_dashboard.slot_crm_bottom_opportunities",
+            raise_if_not_found=False,
+        )
+        report = self.env.ref(
+            "crm_customer_dashboard.slot_crm_menu_report_opportunities",
+            raise_if_not_found=False,
+        )
+        views = self.env.ref(
+            "crm_customer_dashboard.slot_crm_menu_opportunities",
+            raise_if_not_found=False,
+        )
+        if not bottom:
+            self.skipTest("CRM bottom opportunities slot missing")
+
+        pref = bp._get_or_create_pref()
+        pref.scope_ids = [(4, mine.id)]
+
+        bottom_count = bottom._compute_values_batch(partner).get(
+            partner.id, (0, None)
+        )[0]
+        self.assertEqual(bottom_count, 2)
+        bottom_action = bottom._prepare_action(partner)
+        self.assertNotIn(
+            ("user_id", "=", self.env.uid), bottom_action.get("domain") or []
+        )
+
+        for slot in (report, views):
+            if not slot:
+                continue
+            action = slot._prepare_action(partner)
+            if not action:
+                continue
+            self.assertNotIn(
+                ("user_id", "=", self.env.uid),
+                action.get("domain") or [],
+                "slot %s must not inherit restrict scope" % slot.key,
+            )
 
     def test_dashboard_fields_are_inert_without_a_blueprint(self):
         """Models that are not hosting a dashboard must pay nothing."""

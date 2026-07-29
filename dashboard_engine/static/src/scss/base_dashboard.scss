@@ -370,13 +370,30 @@
             font-size: 12px !important;
             opacity: 0.8;
             font-weight: 500;
-            text-align: left;
 
             i {
                 color: #714B67;
                 width: auto !important;
                 margin-right: 4px !important;
-                text-align: left;
+            }
+        }
+
+        // Shrink-wrap header field widgets so flex justify-* can move the line.
+        .dashboard_header_line {
+            min-width: 0;
+        }
+        .dashboard_header_line_inner {
+            max-width: 100%;
+            min-width: 0;
+
+            .o_field_widget,
+            .o_field_char,
+            .o_field_many2one,
+            .o_field_text {
+                display: inline !important;
+                width: auto !important;
+                max-width: 100%;
+                vertical-align: baseline;
             }
         }
 
@@ -1056,6 +1073,36 @@
         color: var(--body-color) !important;
         line-height: 1.25;
         margin-bottom: 2px;
+    }
+
+    /* Layout Studio published grid — keep mixed rows compact. */
+    .o_ds_layout_body {
+        > .row + .row {
+            margin-top: 0.5rem;
+        }
+
+        .o_ds_layout_cell {
+            min-width: 0;
+        }
+
+        .o_ds_layout_graph {
+            .o_analytic_kanban_graph_section,
+            .o_dashboard_graph {
+                max-height: 140px;
+            }
+
+            canvas {
+                max-height: 120px !important;
+            }
+        }
+
+        [data-studio-widget="primary"] .btn {
+            white-space: nowrap;
+        }
+
+        [data-studio-widget="kpis"] {
+            min-width: 0;
+        }
     }
 }
 

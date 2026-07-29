@@ -4,13 +4,45 @@ import { Component, onWillStart, onPatched, useRef, useState } from "@odoo/owl";
 import { registry } from "@web/core/registry";
 import { useService } from "@web/core/utils/hooks";
 import { _t } from "@web/core/l10n/translation";
+import { ConfirmationDialog } from "@web/core/confirmation_dialog/confirmation_dialog";
 import { DomainSelectorDialog } from "@web/core/domain_selector_dialog/domain_selector_dialog";
+import { FormViewDialog } from "@web/views/view_dialogs/form_view_dialog";
+import { SelectCreateDialog } from "@web/views/view_dialogs/select_create_dialog";
 import { standardActionServiceProps } from "@web/webclient/actions/action_service";
+import {
+    rowsFromContextRaw,
+    serializeContextRows,
+    createEmptyContextRow,
+    emptyGroupRule,
+    collectGroupXmlids,
+    applyGroupLabels,
+    VALUE_TYPES,
+} from "../fields/context_kv_utils";
 
 const MANAGE_SECTIONS = [
     { id: "menu_views", label: "Views" },
     { id: "menu_new", label: "New" },
     { id: "menu_reports", label: "Reports" },
+];
+
+const MEASURE_AGGREGATORS = [
+    { value: "sum", label: _t("Total") },
+    { value: "avg", label: _t("Average") },
+    { value: "max", label: _t("Maximum") },
+    { value: "min", label: _t("Minimum") },
+];
+
+const HEADER_IMAGE_STYLES = [
+    { value: "avatar", label: _t("Fit the whole picture (logos, avatars)") },
+    { value: "cover", label: _t("Fill the square, cropping edges (photos)") },
+];
+
+const HEADER_SEPARATORS = [
+    { value: ", ", label: _t("Paris, France") },
+    { value: " at ", label: _t("Sales Manager at Acme") },
+    { value: " | ", label: _t("Service | Furniture") },
+    { value: " - ", label: _t("Acme - Paris") },
+    { value: " ", label: _t("Acme Paris") },
 ];
 
 const ZONES = [
@@ -40,13 +72,42 @@ const EMPTY_EDITOR = () => ({
     value_mode: "count",
     module_depends: "",
     condition_ids: [],
-    kind: "left",
+    kind: "subtitle",
+    alignment: "left",
     field_names: "",
     primary_button_label: "",
     primary_action_xmlid: "",
+    primary_action_context: "{}",
+    contextRows: [createEmptyContextRow()],
     graph_caption: "",
     graph_measure: "",
     graph_groupby: "",
+    graph_groupby_field_ids: [],
+    graph_measure_field_id: false,
+    graph_measure_aggregator: "sum",
+    graph_data_field: "",
+    graph_domain: "[]",
+    period_field_id: false,
+    closed_period_field_id: false,
+    include_child_records: false,
+    header_title_field: "",
+    header_image_field: "",
+    header_image_style: "avatar",
+});
+
+const EMPTY_SETUP = () => ({
+    host_model_id: false,
+    host_model_label: "",
+    menu_name: "",
+    menu_parent_id: false,
+    menu_parent_name: "",
+    menu_sequence: 50,
+    company_id: false,
+    company_name: "",
+    module_ids: [],
+    module_names: [],
+    share_link_ids: [],
+    share_link_names: [],
 });
 
 export class DashboardStudioAction extends Component {
@@ -61,21 +122,49 @@ export class DashboardStudioAction extends Component {
         this.ZONES = ZONES;
         this.MANAGE_SECTIONS = MANAGE_SECTIONS;
         this.LAYOUT_SPANS = [3, 4, 6, 8, 12];
+        this.MEASURE_AGGREGATORS = MEASURE_AGGREGATORS;
+        this.HEADER_IMAGE_STYLES = HEADER_IMAGE_STYLES;
+        this.HEADER_SEPARATORS = HEADER_SEPARATORS;
+        this.CONTEXT_VALUE_TYPES = VALUE_TYPES;
         this.previewChartRef = useRef("previewChart");
         this._previewChart = null;
         this._dragSlotId = null;
+        this._dragScopeId = null;
+        this._dragHeaderId = null;
         this.state = useState({
             zone: "kpis",
-            studioMode: "content", // content | layout | preview
+            studioMode: "content", // setup | content | layout
             payload: null,
             selectedSlotId: null,
             selectedHeaderId: null,
             manageSection: "menu_views",
             layoutDraft: null,
+            setup: EMPTY_SETUP(),
+            setupDirty: false,
+            setupBanner: null,
+            setupQuery: {
+                host: "",
+                menu: "",
+                module: "",
+                share: "",
+                company: "",
+            },
+            setupResults: {
+                host: [],
+                menu: [],
+                module: [],
+                share: [],
+                company: [],
+            },
+            contextGroupQuery: {},
+            contextGroupHits: {},
             editor: EMPTY_EDITOR(),
             catalogs: {
                 hostFields: [],
                 graphFields: [],
+                graphFieldRecords: [],
+                graphMeasureFields: [],
+                graphDateFields: [],
                 conditions: [],
                 icons: [],
                 actions: [],
@@ -90,6 +179,8 @@ export class DashboardStudioAction extends Component {
             layoutDirty: false,
             loading: true,
             saving: false,
+            linkPathHopFields: [],
+            linkPathExtraHop: false,
         });
         onWillStart(async () => {
             await this.loadPayload();
@@ -140,30 +231,108 @@ export class DashboardStudioAction extends Component {
         return headers.find((h) => h.id === id) || headers[0] || null;
     }
 
-    get kpisPreview() {
-        const live = this.state.preview?.slots?.kpis;
-        if (this.state.preview?.ok && live) {
-            return live.slice(0, 6);
+    /**
+     * Merge unsaved slot editor fields into map items (match by key/id).
+     */
+    _overlaySelectedSlot(items) {
+        const list = (items || []).map((item) => ({ ...item }));
+        if (!this.state.dirty || !this.selectedSlot) {
+            return list;
         }
-        return (this.state.payload?.slots || []).filter((s) => s.section === "kpi").slice(0, 5);
+        if (!["kpis", "totals", "shortcuts", "manage"].includes(this.state.zone)) {
+            return list;
+        }
+        const slot = this.selectedSlot;
+        const ed = this.state.editor;
+        return list.map((item) => {
+            if (item.key !== slot.key && item.id !== slot.id) {
+                return item;
+            }
+            const label = (ed.label || "").trim() || item.label || item.name;
+            return {
+                ...item,
+                label,
+                label_plural: (ed.label_plural || "").trim() || item.label_plural,
+                name: label,
+                icon: ed.icon || item.icon,
+                style: ed.style || item.style,
+                _draft: true,
+            };
+        });
+    }
+
+    _slotsFromPayload(section) {
+        return (this.state.payload?.slots || [])
+            .filter((s) => s.section === section)
+            .map((s) => ({
+                id: s.id,
+                key: s.key,
+                label: s.label,
+                name: s.name || s.label,
+                icon: s.icon,
+                count: null,
+                style: s.style,
+            }));
+    }
+
+    get kpisPreview() {
+        let items;
+        if (this.state.preview?.ok && this.state.preview.slots?.kpis) {
+            items = this.state.preview.slots.kpis.slice(0, 8);
+        } else {
+            items = this._slotsFromPayload("kpi").slice(0, 8);
+        }
+        return this._overlaySelectedSlot(items);
     }
 
     get totalsPreview() {
-        const live = this.state.preview?.slots?.button_box;
-        if (this.state.preview?.ok && live) {
-            return live.slice(0, 4);
+        let items;
+        if (this.state.preview?.ok && this.state.preview.slots?.button_box) {
+            items = this.state.preview.slots.button_box.slice(0, 6);
+        } else {
+            items = this._slotsFromPayload("button_box").slice(0, 6);
         }
-        return (this.state.payload?.slots || [])
-            .filter((s) => s.section === "button_box")
-            .slice(0, 4);
+        return this._overlaySelectedSlot(items);
     }
 
     get shortcutsPreview() {
-        const live = this.state.preview?.slots?.buttons;
-        if (this.state.preview?.ok && live) {
-            return live.slice(0, 5);
+        let items;
+        if (this.state.preview?.ok && this.state.preview.slots?.buttons) {
+            items = this.state.preview.slots.buttons.slice(0, 6);
+        } else {
+            items = this._slotsFromPayload("bottom").slice(0, 6);
         }
-        return (this.state.payload?.slots || []).filter((s) => s.section === "bottom").slice(0, 5);
+        return this._overlaySelectedSlot(items);
+    }
+
+    get manageViewsPreview() {
+        let items;
+        if (this.state.preview?.ok) {
+            items = this.state.preview.slots?.menu?.views || [];
+        } else {
+            items = this._slotsFromPayload("menu_views");
+        }
+        return this._overlaySelectedSlot(items).slice(0, 4);
+    }
+
+    get manageNewPreview() {
+        let items;
+        if (this.state.preview?.ok) {
+            items = this.state.preview.slots?.menu?.new || [];
+        } else {
+            items = this._slotsFromPayload("menu_new");
+        }
+        return this._overlaySelectedSlot(items).slice(0, 4);
+    }
+
+    get manageReportsPreview() {
+        let items;
+        if (this.state.preview?.ok) {
+            items = this.state.preview.slots?.menu?.reports || [];
+        } else {
+            items = this._slotsFromPayload("menu_reports");
+        }
+        return this._overlaySelectedSlot(items).slice(0, 4);
     }
 
     get previewTitle() {
@@ -171,6 +340,13 @@ export class DashboardStudioAction extends Component {
     }
 
     get previewPrimaryLabel() {
+        if (
+            this.state.dirty &&
+            this.state.zone === "primary" &&
+            (this.state.editor.primary_button_label || "").trim()
+        ) {
+            return this.state.editor.primary_button_label.trim();
+        }
         return (
             this.state.preview?.primary_label ||
             this.state.payload?.primary_button_label ||
@@ -179,6 +355,13 @@ export class DashboardStudioAction extends Component {
     }
 
     get previewGraphCaption() {
+        if (
+            this.state.dirty &&
+            (this.state.zone === "primary" || this.state.zone === "config") &&
+            this.state.editor.graph_caption != null
+        ) {
+            return this.state.editor.graph_caption || "Analysis";
+        }
         return this.state.preview?.graph_caption || this.state.payload?.graph_caption || "Analysis";
     }
 
@@ -190,19 +373,309 @@ export class DashboardStudioAction extends Component {
         return [40, 70, 55, 85, 45, 62];
     }
 
-    get previewHeaderLines() {
-        if (this.state.preview?.ok) {
-            return (this.state.preview.header_lines || []).slice(0, 3);
+    get previewGraphNeedsSave() {
+        if (!this.state.dirty || this.state.zone !== "config") {
+            return false;
         }
-        return (this.state.payload?.headers || []).slice(0, 2).map((h) => ({
-            id: h.id,
-            icon: h.icon,
-            text: h.field_names || "",
+        const ed = this.state.editor;
+        const p = this.state.payload || {};
+        const groupbyDirty =
+            JSON.stringify(ed.graph_groupby_field_ids || []) !==
+            JSON.stringify(p.graph_groupby_field_ids || []);
+        const measureDirty =
+            (ed.graph_measure_field_id || false) !== (p.graph_measure_field_id || false) ||
+            (ed.graph_measure_aggregator || false) !== (p.graph_measure_aggregator || false);
+        const linkDirty = (ed.graph_data_field || "") !== (p.graph_data_field || "");
+        const includeChildDirty =
+            Boolean(ed.include_child_records) !== Boolean(p.include_child_records);
+        const domainDirty =
+            (ed.graph_domain || "[]") !== (p.graph_domain != null ? p.graph_domain : "[]");
+        return groupbyDirty || measureDirty || linkDirty || includeChildDirty || domainDirty;
+    }
+
+    get previewConfigSummary() {
+        const p = this.state.payload || {};
+        const ed = this.state.editor;
+        const dirtyConfig = this.state.dirty && this.state.zone === "config";
+        const groupbyIds = dirtyConfig
+            ? ed.graph_groupby_field_ids || []
+            : p.graph_groupby_field_ids || [];
+        const byId = new Map(
+            (this.state.catalogs.graphFieldRecords || []).map((f) => [f.id, f])
+        );
+        const groupbyLabels = groupbyIds.map((id, idx) => {
+            const meta = byId.get(id);
+            return (
+                meta?.string ||
+                meta?.field_description ||
+                p.graph_groupby_field_names?.[idx] ||
+                `#${id}`
+            );
+        });
+        let measureLabel = "Count";
+        const measureId = dirtyConfig ? ed.graph_measure_field_id : p.graph_measure_field_id;
+        if (measureId) {
+            const mf =
+                (this.state.catalogs.graphMeasureFields || []).find((f) => f.id === measureId) ||
+                byId.get(measureId);
+            const agg = dirtyConfig ? ed.graph_measure_aggregator : p.graph_measure_aggregator;
+            const name = mf?.string || mf?.field_description || p.graph_measure || `#${measureId}`;
+            measureLabel = agg ? `${name} (${agg})` : name;
+        } else if (!dirtyConfig && p.graph_measure && p.graph_measure !== "__count") {
+            measureLabel = p.graph_measure;
+        }
+        const scopes = (p.scopes || []).filter((s) => s.default_on).map((s) => s.name);
+        return {
+            scopes: scopes.length ? scopes.join(", ") : "none on by default",
+            measure: measureLabel,
+            groupby: groupbyLabels.length ? groupbyLabels.join(" → ") : "—",
+            model: p.graph_model || p.host_model || "—",
+        };
+    }
+
+    get previewHeaderLines() {
+        let lines;
+        if (this.state.preview?.ok) {
+            lines = (this.state.preview.header_lines || []).map((h) => ({ ...h }));
+        } else {
+            lines = (this.state.payload?.headers || []).map((h) => ({
+                id: h.id,
+                kind: h.kind || "subtitle",
+                alignment: h.alignment || "left",
+                icon: h.icon,
+                text: h.field_names || "",
+                field_names: h.field_names || "",
+            }));
+        }
+        const selected = this.selectedHeader;
+        if (this.state.zone === "header" && selected && this.state.dirty) {
+            const ed = this.state.editor;
+            const fieldsChanged =
+                (ed.field_names || "") !== (selected.field_names || "");
+            lines = lines.map((h) => {
+                if (h.id !== selected.id) {
+                    return h;
+                }
+                return {
+                    ...h,
+                    kind: ed.kind || h.kind || "subtitle",
+                    alignment: ed.alignment || h.alignment || "left",
+                    icon: ed.icon || h.icon,
+                    text: fieldsChanged
+                        ? (ed.field_names || "").trim() || h.text
+                        : h.text || (ed.field_names || "").trim(),
+                };
+            });
+        }
+        return lines;
+    }
+
+    _headerLineMatches(h, kind, alignment) {
+        const k = h.kind || "subtitle";
+        const a = h.alignment || "left";
+        return k === kind && a === alignment;
+    }
+
+    headerAlignFlexClass(h) {
+        const a = (h && h.alignment) || "left";
+        if (a === "center") {
+            return "justify-content-center";
+        }
+        if (a === "right") {
+            return "justify-content-end";
+        }
+        return "justify-content-start";
+    }
+
+    get previewHeaderSubtitles() {
+        return this.previewHeaderLines.filter(
+            (h) => h.kind === "subtitle" && h.text
+        );
+    }
+
+    _headerLineIsSideTags(h) {
+        if ((h.kind || "subtitle") !== "inline") {
+            return false;
+        }
+        if ((h.alignment || "left") !== "right") {
+            return false;
+        }
+        const names = this._parseHeaderFieldNames(h.field_names);
+        if (!names.length) {
+            return false;
+        }
+        const byName = new Map(
+            (this.state.catalogs.hostFields || []).map((f) => [f.name, f])
+        );
+        return names.every((name) => {
+            const ttype = byName.get(name)?.ttype;
+            return ttype === "many2many" || ttype === "one2many";
+        });
+    }
+
+    get previewHeaderInline() {
+        return this.previewHeaderLines.filter(
+            (h) => h.kind === "inline" && h.text && !this._headerLineIsSideTags(h)
+        );
+    }
+
+    get previewHeaderLeft() {
+        return this.previewHeaderInline.filter(
+            (h) => (h.alignment || "left") === "left"
+        );
+    }
+
+    get previewHeaderCenter() {
+        return this.previewHeaderInline.filter((h) => h.alignment === "center");
+    }
+
+    get previewHeaderRight() {
+        return this.previewHeaderLines.filter(
+            (h) => this._headerLineIsSideTags(h) && h.text
+        );
+    }
+
+    get headerLineFieldCatalog() {
+        return (this.state.catalogs.hostFields || []).filter(
+            (f) => f.name !== "id" && f.ttype !== "binary"
+        );
+    }
+
+    get headerImageFieldCatalog() {
+        return (this.state.catalogs.hostFields || []).filter((f) => f.ttype === "binary");
+    }
+
+    _parseHeaderFieldNames(fieldNames) {
+        return (fieldNames || "")
+            .split(",")
+            .map((s) => s.trim())
+            .filter(Boolean);
+    }
+
+    _headerFieldLabel(name) {
+        const meta = (this.state.catalogs.hostFields || []).find((f) => f.name === name);
+        if (meta?.string) {
+            return `${meta.string} (${name})`;
+        }
+        return name;
+    }
+
+    headerFieldChips(header) {
+        return this._parseHeaderFieldNames(header?.field_names).map((name, index) => ({
+            name,
+            label: this._headerFieldLabel(name),
+            index,
         }));
+    }
+
+    headerFieldIsSelected(header, fieldName) {
+        return this._parseHeaderFieldNames(header?.field_names).includes(fieldName);
+    }
+
+    headerLineShowIcon(header) {
+        return header?.kind === "inline";
+    }
+
+    headerLineShowSeparator(header) {
+        const count = this._parseHeaderFieldNames(header?.field_names).length;
+        if (count < 2) {
+            return false;
+        }
+        return !this._headerLineIsSideTags(header);
+    }
+
+    isHeaderRowSelected(headerId) {
+        return this.state.selectedHeaderId === headerId;
     }
 
     get hasLivePreview() {
         return Boolean(this.state.preview?.ok);
+    }
+
+    _isGroupByCatalogField(field) {
+        if (!field || field.name === "id") {
+            return false;
+        }
+        if (field.ttype === "date" || field.ttype === "datetime") {
+            return field.name.startsWith("x_");
+        }
+        return field.store !== false;
+    }
+
+    get graphGroupByCatalog() {
+        return (this.state.catalogs.graphFieldRecords || []).filter((f) =>
+            this._isGroupByCatalogField(f)
+        );
+    }
+
+    get graphGroupBySelectedChips() {
+        const ids = this.state.editor.graph_groupby_field_ids || [];
+        const byId = new Map(
+            (this.state.catalogs.graphFieldRecords || []).map((f) => [f.id, f])
+        );
+        const payloadNames = this.state.payload?.graph_groupby_field_names || [];
+        const payloadIds = this.state.payload?.graph_groupby_field_ids || [];
+        return ids.map((id, index) => {
+            const meta = byId.get(id);
+            const payloadIdx = payloadIds.indexOf(id);
+            const label =
+                meta?.string ||
+                meta?.field_description ||
+                (payloadIdx >= 0 ? payloadNames[payloadIdx] : null) ||
+                `#${id}`;
+            return { id, label, index };
+        });
+    }
+
+    get linkPathRows() {
+        const segments = (this.state.editor.graph_data_field || "")
+            .split(".")
+            .filter(Boolean);
+        const count = Math.max(1, segments.length + (this.state.linkPathExtraHop ? 1 : 0));
+        const rows = [];
+        for (let i = 0; i < count; i++) {
+            rows.push({
+                index: i,
+                value: segments[i] || "",
+                options: this.state.linkPathHopFields[i] || [],
+                showSep: i < count - 1,
+            });
+        }
+        return rows;
+    }
+
+    get canAddLinkPathHop() {
+        if (this.state.linkPathExtraHop) {
+            return false;
+        }
+        const segments = (this.state.editor.graph_data_field || "")
+            .split(".")
+            .filter(Boolean);
+        if (!segments.length) {
+            return false;
+        }
+        const lastIdx = segments.length - 1;
+        const opts = this.state.linkPathHopFields[lastIdx] || [];
+        const sel = opts.find((f) => f.name === segments[lastIdx]);
+        return Boolean(sel?.relation);
+    }
+
+    get canRemoveLinkPathHop() {
+        return Boolean(
+            (this.state.editor.graph_data_field || "").split(".").filter(Boolean).length
+        );
+    }
+
+    get showMeasureAggregator() {
+        return Boolean(this.state.editor.graph_measure_field_id);
+    }
+
+    isMapSlotSelected(item) {
+        const slot = this.selectedSlot;
+        if (!slot || !item) {
+            return false;
+        }
+        return item.key === slot.key || item.id === slot.id;
     }
 
     get canStructureEdit() {
@@ -210,14 +683,77 @@ export class DashboardStudioAction extends Component {
     }
 
     get canSave() {
+        if (this.state.studioMode === "setup") {
+            return this.state.setupDirty;
+        }
         if (this.state.zone === "config") {
             return this.state.dirty;
         }
         return this.state.dirty;
     }
 
+    get headerChipHost() {
+        return (
+            this.state.setup?.host_model_label ||
+            this.state.payload?.host_model_label ||
+            this.state.payload?.host_model ||
+            ""
+        );
+    }
+
+    get headerChipMenu() {
+        const name =
+            this.state.setup?.menu_name || this.state.payload?.menu_name || "";
+        return name || _t("No menu name");
+    }
+
+    get moduleChips() {
+        const ids = this.state.setup.module_ids || [];
+        const names = this.state.setup.module_names || [];
+        return ids.map((id, i) => ({ id, name: names[i] || `#${id}` }));
+    }
+
+    get shareChips() {
+        const ids = this.state.setup.share_link_ids || [];
+        const names = this.state.setup.share_link_names || [];
+        return ids.map((id, i) => ({ id, name: names[i] || `#${id}` }));
+    }
+
     markDirty() {
         this.state.dirty = true;
+    }
+
+    markSetupDirty() {
+        this.state.setupDirty = true;
+    }
+
+    _syncSetupFromPayload(payload) {
+        if (!payload) {
+            this.state.setup = EMPTY_SETUP();
+            return;
+        }
+        this.state.setup = {
+            host_model_id: payload.host_model_id || false,
+            host_model_label: payload.host_model_label || payload.host_model || "",
+            menu_name: payload.menu_name || "",
+            menu_parent_id: payload.menu_parent_id || false,
+            menu_parent_name: payload.menu_parent_name || "",
+            menu_sequence: payload.menu_sequence ?? 50,
+            company_id: payload.company_id || false,
+            company_name: payload.company_name || "",
+            module_ids: [...(payload.module_ids || [])],
+            module_names: [...(payload.module_names || [])],
+            share_link_ids: [...(payload.share_link_ids || [])],
+            share_link_names: [...(payload.share_link_names || [])],
+        };
+        this.state.setupDirty = false;
+        this.state.setupResults = {
+            host: [],
+            menu: [],
+            module: [],
+            share: [],
+            company: [],
+        };
     }
 
     async loadPayload() {
@@ -233,8 +769,10 @@ export class DashboardStudioAction extends Component {
                 JSON.stringify(payload.layout || { version: 1, rows: [] })
             );
             this.state.layoutDirty = false;
+            this._syncSetupFromPayload(payload);
             this._syncEditorFromSelection();
             this.state.dirty = false;
+            this.state.setupBanner = null;
             await this.loadPreview();
         } finally {
             this.state.loading = false;
@@ -277,10 +815,17 @@ export class DashboardStudioAction extends Component {
     }
 
     setStudioMode(mode) {
-        this.state.studioMode = mode;
-        if (mode === "preview") {
-            this.loadPreview();
+        if (mode === "layout") {
+            this.state.studioMode = "layout";
+        } else if (mode === "setup") {
+            this.state.studioMode = "setup";
+        } else {
+            this.state.studioMode = "content";
         }
+    }
+
+    openSetupMode() {
+        this.setStudioMode("setup");
     }
 
     markLayoutDirty() {
@@ -507,9 +1052,8 @@ export class DashboardStudioAction extends Component {
 
     async loadCatalogs() {
         const bp = this.blueprintId;
-        const [hostFields, conditions, icons] = await Promise.all([
+        const [hostFields, icons] = await Promise.all([
             this.orm.call("dashboard.blueprint", "studio_model_fields", [[bp], null, null]),
-            this.orm.call("dashboard.blueprint", "studio_condition_catalog", [[bp]]),
             this.orm.call("dashboard.blueprint", "studio_header_icons", [[bp]]),
         ]);
         let graphFields = hostFields;
@@ -521,11 +1065,179 @@ export class DashboardStudioAction extends Component {
                 [[bp], graphModel, null]
             );
         }
+        let graphDateFields = [];
+        let graphFieldRecords = [];
+        let graphMeasureFields = [];
+        if (graphModel) {
+            graphFieldRecords = await this.orm.searchRead(
+                "ir.model.fields",
+                [["model", "=", graphModel]],
+                ["id", "name", "field_description", "ttype", "store"],
+                { order: "field_description", limit: 500 }
+            );
+            graphFieldRecords = graphFieldRecords.map((f) => ({
+                id: f.id,
+                name: f.name,
+                string: f.field_description || f.name,
+                field_description: f.field_description,
+                ttype: f.ttype,
+                store: f.store,
+            }));
+            graphMeasureFields = graphFieldRecords.filter(
+                (f) =>
+                    f.store !== false &&
+                    ["integer", "float", "monetary"].includes(f.ttype)
+            );
+            graphDateFields = graphFieldRecords
+                .filter((f) => f.ttype === "date" || f.ttype === "datetime")
+                .map((f) => ({
+                    id: f.id,
+                    name: f.name,
+                    string: f.string,
+                }));
+        }
         this.state.catalogs.hostFields = hostFields;
         this.state.catalogs.graphFields = graphFields;
-        this.state.catalogs.conditions = conditions;
+        this.state.catalogs.graphFieldRecords = graphFieldRecords;
+        this.state.catalogs.graphMeasureFields = graphMeasureFields;
+        this.state.catalogs.graphDateFields = graphDateFields;
         this.state.catalogs.icons = icons;
+        await this.refreshConditionCatalog();
         await this.searchActions("");
+        await this.refreshLinkPathCatalogs();
+    }
+
+    async refreshConditionCatalog() {
+        const bp = this.blueprintId;
+        if (!bp) {
+            this.state.catalogs.conditions = [];
+            return;
+        }
+        const model =
+            this.state.editor?.compute_model ||
+            this.selectedSlot?.compute_model ||
+            null;
+        try {
+            this.state.catalogs.conditions = await this.orm.call(
+                "dashboard.blueprint",
+                "studio_condition_catalog",
+                [[bp]],
+                { model: model || null }
+            );
+        } catch {
+            this.state.catalogs.conditions = [];
+        }
+    }
+
+    get selectedConditions() {
+        const ids = this.state.editor.condition_ids || [];
+        const byId = Object.fromEntries(
+            (this.state.catalogs.conditions || []).map((c) => [c.id, c])
+        );
+        return ids.map((id) => byId[id] || { id, name: `#${id}`, model: "" });
+    }
+
+    _touchConditionIds(ids) {
+        this.state.editor.condition_ids = [...ids];
+        this.markDirty();
+    }
+
+    linkExistingConditions() {
+        const model = this.state.editor.compute_model || false;
+        const domain = model ? [["model", "=", model]] : [];
+        const already = new Set(this.state.editor.condition_ids || []);
+        this.dialog.add(SelectCreateDialog, {
+            title: _t("Link conditions"),
+            resModel: "dashboard.condition",
+            domain,
+            multiSelect: true,
+            noCreate: true,
+            onSelected: async (resIds) => {
+                const next = [...(this.state.editor.condition_ids || [])];
+                for (const id of resIds || []) {
+                    if (!already.has(id) && !next.includes(id)) {
+                        next.push(id);
+                    }
+                }
+                this._touchConditionIds(next);
+                await this.refreshConditionCatalog();
+            },
+        });
+    }
+
+    openNewCondition() {
+        const model = this.state.editor.compute_model || false;
+        const context = {};
+        if (model) {
+            context.default_model = model;
+        }
+        this.dialog.add(FormViewDialog, {
+            title: _t("New condition"),
+            resModel: "dashboard.condition",
+            resId: false,
+            context,
+            onRecordSaved: async (record) => {
+                const id = record.resId;
+                if (id && !(this.state.editor.condition_ids || []).includes(id)) {
+                    this._touchConditionIds([
+                        ...(this.state.editor.condition_ids || []),
+                        id,
+                    ]);
+                }
+                await this.refreshConditionCatalog();
+            },
+        });
+    }
+
+    editCondition(conditionId) {
+        this.dialog.add(FormViewDialog, {
+            title: _t("Edit condition"),
+            resModel: "dashboard.condition",
+            resId: conditionId,
+            onRecordSaved: async () => {
+                await this.refreshConditionCatalog();
+            },
+        });
+    }
+
+    removeCondition(conditionId) {
+        this._touchConditionIds(
+            (this.state.editor.condition_ids || []).filter((id) => id !== conditionId)
+        );
+    }
+
+    async refreshLinkPathCatalogs() {
+        const graphModel = this.state.payload?.graph_model;
+        if (!graphModel) {
+            this.state.linkPathHopFields = [];
+            return;
+        }
+        const segments = (this.state.editor.graph_data_field || "")
+            .split(".")
+            .filter(Boolean);
+        const hopCount = Math.max(1, segments.length + (this.state.linkPathExtraHop ? 1 : 0));
+        const catalogs = [];
+        let model = graphModel;
+        for (let i = 0; i < hopCount; i++) {
+            if (!model) {
+                catalogs.push([]);
+                continue;
+            }
+            const fields = await this.orm.call(
+                "dashboard.blueprint",
+                "studio_model_fields",
+                [[this.blueprintId], model, ["many2one"]]
+            );
+            catalogs.push(fields);
+            const seg = segments[i];
+            if (seg) {
+                const sel = fields.find((f) => f.name === seg);
+                model = sel?.relation || false;
+            } else {
+                model = false;
+            }
+        }
+        this.state.linkPathHopFields = catalogs;
     }
 
     async searchActions(term) {
@@ -547,6 +1259,10 @@ export class DashboardStudioAction extends Component {
         this.state.selectedSlotId = null;
         this.state.selectedHeaderId = null;
         this._syncEditorFromSelection();
+        if (zoneId === "config") {
+            this.state.linkPathExtraHop = false;
+            this.refreshLinkPathCatalogs();
+        }
     }
 
     selectSlot(slotId) {
@@ -571,20 +1287,41 @@ export class DashboardStudioAction extends Component {
         if (this.state.zone === "primary" || this.state.zone === "config") {
             ed.primary_button_label = p.primary_button_label || "";
             ed.primary_action_xmlid = p.primary_action_xmlid || "";
+            ed.primary_action_context = p.primary_action_context || "{}";
+            ed.contextRows = rowsFromContextRaw(
+                this.state.zone === "primary" ? ed.primary_action_context : "{}"
+            );
             ed.graph_caption = p.graph_caption || "";
             ed.graph_measure = p.graph_measure || "";
             ed.graph_groupby = p.graph_groupby || "";
+            ed.graph_groupby_field_ids = [...(p.graph_groupby_field_ids || [])];
+            ed.graph_measure_field_id = p.graph_measure_field_id || false;
+            ed.graph_measure_aggregator = p.graph_measure_aggregator || "sum";
+            ed.graph_data_field = p.graph_data_field || "";
+            ed.graph_domain = p.graph_domain != null ? p.graph_domain : "[]";
+            ed.period_field_id = p.period_field_id || false;
+            ed.closed_period_field_id = p.closed_period_field_id || false;
+            ed.include_child_records = Boolean(p.include_child_records);
             this.state.editor = ed;
+            this.state.contextGroupHits = {};
+            this.state.contextGroupQuery = {};
+            this.state.linkPathExtraHop = false;
+            this.refreshLinkPathCatalogs();
+            this._hydrateEditorGroupLabels();
             return;
         }
         if (this.state.zone === "header") {
             const item = this.selectedHeader;
             if (item) {
                 this.state.selectedHeaderId = item.id;
-                ed.kind = item.kind || "left";
+                ed.kind = item.kind || "subtitle";
+                ed.alignment = item.alignment || "left";
                 ed.field_names = item.field_names || "";
                 ed.icon = item.icon || "";
             }
+            ed.header_title_field = p.header_title_field || "";
+            ed.header_image_field = p.header_image_field || "";
+            ed.header_image_style = p.header_image_style || "avatar";
             this.state.editor = ed;
             return;
         }
@@ -607,8 +1344,13 @@ export class DashboardStudioAction extends Component {
             ed.value_mode = slot.value_mode || "count";
             ed.module_depends = slot.module_depends || "";
             ed.condition_ids = [...(slot.condition_ids || [])];
+            ed.contextRows = rowsFromContextRaw(slot.action_context || "{}");
         }
         this.state.editor = ed;
+        this.state.contextGroupHits = {};
+        this.state.contextGroupQuery = {};
+        this._hydrateEditorGroupLabels();
+        this.refreshConditionCatalog();
     }
 
     onEditorInput(field, ev) {
@@ -617,19 +1359,324 @@ export class DashboardStudioAction extends Component {
         if (field === "condition_ids") {
             value = Array.from(target.selectedOptions || []).map((o) => Number(o.value));
         }
+        if (field === "period_field_id" || field === "closed_period_field_id") {
+            value = value === "" || value == null ? false : Number(value);
+        }
         this.state.editor[field] = value;
+        this.markDirty();
+        if (field === "compute_model") {
+            this.refreshConditionCatalog();
+        }
+    }
+
+    _touchContextRows() {
+        this.state.editor.contextRows = [...(this.state.editor.contextRows || [])];
+        this.markDirty();
+    }
+
+    async _hydrateEditorGroupLabels() {
+        const rows = this.state.editor.contextRows || [];
+        const xmlids = collectGroupXmlids(rows);
+        if (!xmlids.length) {
+            return;
+        }
+        try {
+            const labels = await this.orm.call(
+                "dashboard.blueprint",
+                "studio_group_labels",
+                [],
+                { xmlids }
+            );
+            applyGroupLabels(rows, labels || {});
+            this.state.editor.contextRows = [...rows];
+        } catch {
+            /* keep xmlids */
+        }
+    }
+
+    onContextKeyInput(index, ev) {
+        this.state.editor.contextRows[index].key = ev.target.value;
+        this._touchContextRows();
+    }
+
+    onContextTypeChange(index, ev) {
+        const row = this.state.editor.contextRows[index];
+        row.valueType = ev.target.value;
+        if (row.valueType === "group" && !(row.groupRules && row.groupRules.length)) {
+            row.groupRules = [emptyGroupRule()];
+        }
+        this._touchContextRows();
+    }
+
+    onContextFixedInput(index, ev) {
+        this.state.editor.contextRows[index].fixedValue = ev.target.value;
+        this._touchContextRows();
+    }
+
+    onContextAsListChange(index, ev) {
+        this.state.editor.contextRows[index].asList = ev.target.checked;
+        this._touchContextRows();
+    }
+
+    onContextElseValueInput(index, ev) {
+        this.state.editor.contextRows[index].elseValue = ev.target.value;
+        this._touchContextRows();
+    }
+
+    onContextRuleValueInput(rowIndex, ruleIndex, ev) {
+        this.state.editor.contextRows[rowIndex].groupRules[ruleIndex].value =
+            ev.target.value;
+        this._touchContextRows();
+    }
+
+    _contextRuleKey(rowIndex, ruleIndex) {
+        return `${rowIndex}:${ruleIndex}`;
+    }
+
+    getContextGroupHits(rowIndex, ruleIndex) {
+        return this.state.contextGroupHits[this._contextRuleKey(rowIndex, ruleIndex)] || [];
+    }
+
+    async onContextGroupSearchInput(rowIndex, ruleIndex, ev) {
+        const term = ev.target.value;
+        const key = this._contextRuleKey(rowIndex, ruleIndex);
+        this.state.contextGroupQuery[key] = term;
+        this.state.editor.contextRows[rowIndex].groupRules[ruleIndex].groupLabel = term;
+        this._touchContextRows();
+        if (!term) {
+            this.state.contextGroupHits[key] = [];
+            return;
+        }
+        try {
+            const hits = await this.orm.call(
+                "dashboard.blueprint",
+                "studio_search_groups",
+                [],
+                { term, limit: 12 }
+            );
+            this.state.contextGroupHits[key] = hits || [];
+        } catch {
+            this.state.contextGroupHits[key] = [];
+        }
+    }
+
+    pickContextGroup(rowIndex, ruleIndex, hit) {
+        const key = this._contextRuleKey(rowIndex, ruleIndex);
+        const rule = this.state.editor.contextRows[rowIndex].groupRules[ruleIndex];
+        rule.groupXmlid = hit.xmlid;
+        rule.groupLabel = hit.name;
+        this.state.contextGroupQuery[key] = hit.name;
+        this.state.contextGroupHits[key] = [];
+        this._touchContextRows();
+    }
+
+    addContextGroupRule(rowIndex) {
+        this.state.editor.contextRows[rowIndex].groupRules.push(emptyGroupRule());
+        this._touchContextRows();
+    }
+
+    removeContextGroupRule(rowIndex, ruleIndex) {
+        const rules = this.state.editor.contextRows[rowIndex].groupRules;
+        rules.splice(ruleIndex, 1);
+        if (!rules.length) {
+            rules.push(emptyGroupRule());
+        }
+        this._touchContextRows();
+    }
+
+    addContextRow() {
+        this.state.editor.contextRows.push(createEmptyContextRow());
+        this._touchContextRows();
+    }
+
+    removeContextRow(index) {
+        this.state.editor.contextRows.splice(index, 1);
+        if (!this.state.editor.contextRows.length) {
+            this.state.editor.contextRows.push(createEmptyContextRow());
+        }
+        this._touchContextRows();
+    }
+
+    async onLinkPathHopChange(hopIndex, ev) {
+        const name = ev.target.value;
+        let segments = (this.state.editor.graph_data_field || "")
+            .split(".")
+            .filter((s, i, arr) => s || i < arr.length - 1);
+        while (segments.length <= hopIndex) {
+            segments.push("");
+        }
+        if (name) {
+            segments[hopIndex] = name;
+            segments = segments.slice(0, hopIndex + 1);
+        } else {
+            segments = segments.slice(0, hopIndex);
+        }
+        this.state.editor.graph_data_field = segments.filter(Boolean).join(".");
+        this.state.linkPathExtraHop = false;
+        this.markDirty();
+        await this.refreshLinkPathCatalogs();
+    }
+
+    async addLinkPathHop() {
+        if (!this.canAddLinkPathHop) {
+            return;
+        }
+        this.state.linkPathExtraHop = true;
+        await this.refreshLinkPathCatalogs();
+    }
+
+    async removeLinkPathHop() {
+        const segments = (this.state.editor.graph_data_field || "")
+            .split(".")
+            .filter(Boolean);
+        if (!segments.length) {
+            return;
+        }
+        segments.pop();
+        this.state.editor.graph_data_field = segments.join(".");
+        this.state.linkPathExtraHop = false;
+        this.markDirty();
+        await this.refreshLinkPathCatalogs();
+    }
+
+    onGroupByPick(ev) {
+        const raw = ev.target.value;
+        ev.target.value = "";
+        if (!raw) {
+            return;
+        }
+        const id = Number(raw);
+        const ids = this.state.editor.graph_groupby_field_ids || [];
+        if (ids.includes(id)) {
+            return;
+        }
+        this.state.editor.graph_groupby_field_ids = [...ids, id];
+        this.markDirty();
+    }
+
+    removeGroupByField(fieldId) {
+        const id = Number(fieldId);
+        this.state.editor.graph_groupby_field_ids = (
+            this.state.editor.graph_groupby_field_ids || []
+        ).filter((i) => i !== id);
+        this.markDirty();
+    }
+
+    moveGroupByField(fieldId, delta) {
+        const ids = [...(this.state.editor.graph_groupby_field_ids || [])];
+        const idx = ids.indexOf(Number(fieldId));
+        const next = idx + delta;
+        if (idx < 0 || next < 0 || next >= ids.length) {
+            return;
+        }
+        [ids[idx], ids[next]] = [ids[next], ids[idx]];
+        this.state.editor.graph_groupby_field_ids = ids;
+        this.markDirty();
+    }
+
+    onMeasureFieldChange(ev) {
+        const raw = ev.target.value;
+        if (!raw || raw === "__count") {
+            this.state.editor.graph_measure_field_id = false;
+            this.state.editor.graph_measure_aggregator = false;
+        } else {
+            this.state.editor.graph_measure_field_id = Number(raw);
+            if (!this.state.editor.graph_measure_aggregator) {
+                this.state.editor.graph_measure_aggregator = "sum";
+            }
+        }
+        this.markDirty();
+    }
+
+    onMeasureAggregatorChange(ev) {
+        this.state.editor.graph_measure_aggregator = ev.target.value || "sum";
         this.markDirty();
     }
 
     onQuickPickHeaderField(ev) {
         const value = ev.target.value;
         ev.target.value = "";
+        if (!value || !this.selectedHeader) {
+            return;
+        }
+        this._appendHeaderFieldName(this.selectedHeader.id, value);
+    }
+
+    _joinHeaderFieldNames(names) {
+        return names.join(", ");
+    }
+
+    _appendHeaderFieldName(headerId, fieldName) {
+        const header = (this.state.payload?.headers || []).find((h) => h.id === headerId);
+        if (!header) {
+            return;
+        }
+        const names = this._parseHeaderFieldNames(header.field_names);
+        if (names.includes(fieldName)) {
+            return;
+        }
+        names.push(fieldName);
+        this.updateHeaderItem(headerId, "field_names", this._joinHeaderFieldNames(names));
+    }
+
+    removeHeaderFieldFromLine(headerId, fieldName) {
+        const header = (this.state.payload?.headers || []).find((h) => h.id === headerId);
+        if (!header) {
+            return;
+        }
+        const names = this._parseHeaderFieldNames(header.field_names).filter((n) => n !== fieldName);
+        this.updateHeaderItem(headerId, "field_names", this._joinHeaderFieldNames(names));
+    }
+
+    onHeaderFieldPick(headerId, ev) {
+        const value = ev.target.value;
+        ev.target.value = "";
         if (!value) {
             return;
         }
-        const current = (this.state.editor.field_names || "").trim();
-        this.state.editor.field_names = current ? `${current}, ${value}` : value;
-        this.markDirty();
+        this._appendHeaderFieldName(headerId, value);
+    }
+
+    async updateHeaderBlueprint(field, value) {
+        let clean = value;
+        if (field === "header_image_field" || field === "header_title_field") {
+            clean = value || false;
+        }
+        try {
+            const payload = await this.orm.call(
+                "dashboard.blueprint",
+                "studio_write_blueprint",
+                [[this.blueprintId], { [field]: clean }]
+            );
+            await this.applyPayload(payload, false);
+        } catch (error) {
+            this.notification.add(
+                error?.data?.message || error.message || _t("Header settings update failed"),
+                { type: "danger" }
+            );
+            await this.loadPayload();
+        }
+    }
+
+    async updateHeaderItem(headerId, field, value) {
+        try {
+            const payload = await this.orm.call(
+                "dashboard.blueprint",
+                "studio_write_header_item",
+                [[this.blueprintId], headerId, { [field]: value }]
+            );
+            await this.applyPayload(payload, false);
+        } catch (error) {
+            this.notification.add(
+                error?.data?.message || error.message || _t("Header line update failed"),
+                { type: "danger" }
+            );
+            await this.loadPayload();
+        }
+    }
+
+    selectHeaderRow(headerId) {
+        this.state.selectedHeaderId = headerId;
     }
 
     onActionQueryInput(ev) {
@@ -653,12 +1700,245 @@ export class DashboardStudioAction extends Component {
         if (selectCreated && payload.created_header_id) {
             this.state.selectedHeaderId = payload.created_header_id;
         }
+        if (payload.layout) {
+            this.state.layoutDraft = JSON.parse(JSON.stringify(payload.layout));
+        }
+        this._syncSetupFromPayload(payload);
         this._syncEditorFromSelection();
         this.state.dirty = false;
         await this.loadPreview();
     }
 
+    onSetupMenuNameInput(ev) {
+        this.state.setup.menu_name = ev.target.value;
+        this.markSetupDirty();
+    }
+
+    onSetupMenuSequenceInput(ev) {
+        this.state.setup.menu_sequence = parseInt(ev.target.value, 10) || 0;
+        this.markSetupDirty();
+    }
+
+    dismissSetupBanner() {
+        this.state.setupBanner = null;
+    }
+
+    clearSetupResults(kind) {
+        if (kind) {
+            this.state.setupResults[kind] = [];
+            return;
+        }
+        this.state.setupResults = {
+            host: [],
+            menu: [],
+            module: [],
+            share: [],
+            company: [],
+        };
+    }
+
+    onSetupSearchFocus(ev) {
+        const kind = ev.currentTarget.dataset.kind;
+        for (const key of Object.keys(this.state.setupResults)) {
+            if (key !== kind) {
+                this.state.setupResults[key] = [];
+            }
+        }
+    }
+
+    onSetupSearchBlur(ev) {
+        const kind = ev.currentTarget.dataset.kind;
+        const picker = ev.currentTarget.closest(".o_ds_setup_picker");
+        this._setupBlurTimers = this._setupBlurTimers || {};
+        clearTimeout(this._setupBlurTimers[kind]);
+        this._setupBlurTimers[kind] = setTimeout(() => {
+            const active = document.activeElement;
+            if (picker && active && picker.contains(active)) {
+                return;
+            }
+            this.clearSetupResults(kind);
+        }, 180);
+    }
+
+    async onSetupSearchInput(ev) {
+        const kind = ev.currentTarget.dataset.kind;
+        const term = ev.target.value;
+        this.state.setupQuery[kind] = term;
+        const methodMap = {
+            host: "studio_search_models",
+            menu: "studio_search_menus",
+            module: "studio_search_modules",
+            share: "studio_search_share_blueprints",
+            company: "studio_search_companies",
+        };
+        const method = methodMap[kind];
+        if (!method) {
+            return;
+        }
+        const rows = await this.orm.call("dashboard.blueprint", method, [
+            [this.blueprintId],
+            term,
+            20,
+        ]);
+        this.state.setupResults[kind] = rows || [];
+    }
+
+    pickSetupHost(ev) {
+        if (!this.state.payload?.host_editable) {
+            return;
+        }
+        const id = parseInt(ev.currentTarget.dataset.id, 10);
+        const name = ev.currentTarget.dataset.name || "";
+        this.state.setup.host_model_id = id;
+        this.state.setup.host_model_label = name;
+        this.state.setupQuery.host = "";
+        this.state.setupResults.host = [];
+        this.markSetupDirty();
+    }
+
+    pickSetupMenu(ev) {
+        const id = parseInt(ev.currentTarget.dataset.id, 10);
+        const name = ev.currentTarget.dataset.name || "";
+        this.state.setup.menu_parent_id = id;
+        this.state.setup.menu_parent_name = name;
+        this.state.setupQuery.menu = "";
+        this.state.setupResults.menu = [];
+        this.markSetupDirty();
+    }
+
+    clearSetupMenuParent() {
+        this.state.setup.menu_parent_id = false;
+        this.state.setup.menu_parent_name = "";
+        this.markSetupDirty();
+    }
+
+    pickSetupCompany(ev) {
+        const id = parseInt(ev.currentTarget.dataset.id, 10);
+        const name = ev.currentTarget.dataset.name || "";
+        this.state.setup.company_id = id;
+        this.state.setup.company_name = name;
+        this.state.setupQuery.company = "";
+        this.state.setupResults.company = [];
+        this.markSetupDirty();
+    }
+
+    clearSetupCompany() {
+        this.state.setup.company_id = false;
+        this.state.setup.company_name = "";
+        this.markSetupDirty();
+    }
+
+    pickSetupModule(ev) {
+        const id = parseInt(ev.currentTarget.dataset.id, 10);
+        const name = ev.currentTarget.dataset.name || "";
+        if (this.state.setup.module_ids.includes(id)) {
+            return;
+        }
+        this.state.setup.module_ids.push(id);
+        this.state.setup.module_names.push(name);
+        this.state.setupQuery.module = "";
+        this.state.setupResults.module = [];
+        this.markSetupDirty();
+    }
+
+    removeSetupModule(ev) {
+        const id = parseInt(ev.currentTarget.dataset.id, 10);
+        const idx = this.state.setup.module_ids.indexOf(id);
+        if (idx >= 0) {
+            this.state.setup.module_ids.splice(idx, 1);
+            this.state.setup.module_names.splice(idx, 1);
+            this.markSetupDirty();
+        }
+    }
+
+    pickSetupShare(ev) {
+        const id = parseInt(ev.currentTarget.dataset.id, 10);
+        const name = ev.currentTarget.dataset.name || "";
+        if (this.state.setup.share_link_ids.includes(id)) {
+            return;
+        }
+        this.state.setup.share_link_ids.push(id);
+        this.state.setup.share_link_names.push(name);
+        this.state.setupQuery.share = "";
+        this.state.setupResults.share = [];
+        this.markSetupDirty();
+    }
+
+    removeSetupShare(ev) {
+        const id = parseInt(ev.currentTarget.dataset.id, 10);
+        const idx = this.state.setup.share_link_ids.indexOf(id);
+        if (idx >= 0) {
+            this.state.setup.share_link_ids.splice(idx, 1);
+            this.state.setup.share_link_names.splice(idx, 1);
+            this.markSetupDirty();
+        }
+    }
+
+    async saveSetup() {
+        if (!this.state.payload || this.state.saving || !this.state.setupDirty) {
+            return;
+        }
+        const setup = this.state.setup;
+        const hostChanged =
+            setup.host_model_id &&
+            setup.host_model_id !== this.state.payload.host_model_id;
+        if (hostChanged && this.state.payload.host_editable) {
+            const confirmed = await new Promise((resolve) => {
+                this.dialog.add(ConfirmationDialog, {
+                    title: _t("Change host model?"),
+                    body: _t(
+                        "Changing the host model may invalidate header fields, host-based KPI/total fields, and share links. Invalid references will be cleared on save."
+                    ),
+                    confirm: () => resolve(true),
+                    cancel: () => resolve(false),
+                    confirmLabel: _t("Change host"),
+                });
+            });
+            if (!confirmed) {
+                return;
+            }
+        }
+        this.state.saving = true;
+        try {
+            const vals = {
+                menu_name: setup.menu_name || false,
+                menu_parent_id: setup.menu_parent_id || false,
+                menu_sequence: setup.menu_sequence,
+                company_id: setup.company_id || false,
+                module_ids: setup.module_ids || [],
+                share_link_ids: setup.share_link_ids || [],
+            };
+            if (this.state.payload.host_editable) {
+                vals.host_model_id = setup.host_model_id || false;
+            }
+            const payload = await this.orm.call(
+                "dashboard.blueprint",
+                "studio_write_blueprint",
+                [[this.blueprintId], vals]
+            );
+            const cleanup = payload.setup_cleanup_count || 0;
+            await this.applyPayload(payload, false);
+            await this.loadCatalogs();
+            await this.loadSamples("");
+            if (cleanup > 0) {
+                this.state.setupBanner = { count: cleanup };
+            }
+            this.notification.add(_t("Setup saved"), { type: "success" });
+        } catch (error) {
+            this.notification.add(
+                error?.data?.message || error.message || _t("Save failed"),
+                { type: "danger" }
+            );
+        } finally {
+            this.state.saving = false;
+        }
+    }
+
     async saveCurrent() {
+        if (this.state.studioMode === "setup") {
+            await this.saveSetup();
+            return;
+        }
         if (!this.state.payload || this.state.saving || !this.state.dirty) {
             return;
         }
@@ -672,12 +1952,23 @@ export class DashboardStudioAction extends Component {
                         ? {
                               primary_button_label: ed.primary_button_label,
                               primary_action_xmlid: ed.primary_action_xmlid,
+                              primary_action_context: serializeContextRows(
+                                  ed.contextRows || []
+                              ),
                               graph_caption: ed.graph_caption,
                           }
                         : {
-                              graph_measure: ed.graph_measure,
-                              graph_groupby: ed.graph_groupby,
                               graph_caption: ed.graph_caption,
+                              graph_groupby_field_ids: ed.graph_groupby_field_ids || [],
+                              graph_measure_field_id: ed.graph_measure_field_id || false,
+                              graph_measure_aggregator: ed.graph_measure_field_id
+                                  ? ed.graph_measure_aggregator || "sum"
+                                  : false,
+                              graph_data_field: ed.graph_data_field || false,
+                              graph_domain: ed.graph_domain || "[]",
+                              period_field_id: ed.period_field_id || false,
+                              closed_period_field_id: ed.closed_period_field_id || false,
+                              include_child_records: Boolean(ed.include_child_records),
                           };
                 payload = await this.orm.call(
                     "dashboard.blueprint",
@@ -693,8 +1984,10 @@ export class DashboardStudioAction extends Component {
                         this.selectedHeader.id,
                         {
                             kind: ed.kind,
+                            alignment: ed.alignment,
                             field_names: ed.field_names,
                             icon: ed.icon || false,
+                            separator: ed.separator || false,
                         },
                     ]
                 );
@@ -716,6 +2009,7 @@ export class DashboardStudioAction extends Component {
                     value_mode: ed.value_mode || "count",
                     module_depends: ed.module_depends || false,
                     condition_ids: ed.condition_ids || [],
+                    action_context: serializeContextRows(ed.contextRows || []),
                     name: ed.label || this.selectedSlot.name,
                 };
                 payload = await this.orm.call(
@@ -762,6 +2056,22 @@ export class DashboardStudioAction extends Component {
             title: _t("Filter domain"),
             onConfirm: (domain) => {
                 this.state.editor.compute_domain = domain;
+                this.markDirty();
+            },
+        });
+    }
+
+    openGraphDomainEditor() {
+        const resModel =
+            this.state.payload?.graph_model ||
+            this.state.payload?.host_model ||
+            "res.partner";
+        this.dialog.add(DomainSelectorDialog, {
+            resModel,
+            domain: this.state.editor.graph_domain || "[]",
+            title: _t("Custom Filter"),
+            onConfirm: (domain) => {
+                this.state.editor.graph_domain = domain;
                 this.markDirty();
             },
         });
@@ -878,7 +2188,7 @@ export class DashboardStudioAction extends Component {
                 const payload = await this.orm.call(
                     "dashboard.blueprint",
                     "studio_create_header_item",
-                    [[this.blueprintId], { kind: "left", field_names: "email" }]
+                    [[this.blueprintId], { kind: "subtitle", field_names: "" }]
                 );
                 await this.applyPayload(payload);
                 this.notification.add(_t("Header line added"), { type: "success" });
@@ -981,13 +2291,262 @@ export class DashboardStudioAction extends Component {
         await this.applyPayload(payload, false);
     }
 
-    async toggleScope(scopeId, checked) {
+    _scopeResModel() {
+        return (
+            this.state.payload?.graph_model ||
+            this.state.payload?.host_model ||
+            "res.partner"
+        );
+    }
+
+    async addScope() {
+        this.state.saving = true;
+        try {
+            const payload = await this.orm.call(
+                "dashboard.blueprint",
+                "studio_create_scope",
+                [
+                    [this.blueprintId],
+                    {
+                        name: _t("New scope"),
+                        mode: "include",
+                        domain: "[]",
+                        default_on: false,
+                    },
+                ]
+            );
+            await this.applyPayload(payload);
+            this.notification.add(_t("Scope added"), { type: "success" });
+        } catch (error) {
+            this.notification.add(error?.data?.message || error.message || _t("Add scope failed"), {
+                type: "danger",
+            });
+        } finally {
+            this.state.saving = false;
+        }
+    }
+
+    async updateScope(scopeId, field, value) {
+        try {
+            const payload = await this.orm.call(
+                "dashboard.blueprint",
+                "studio_write_scope",
+                [[this.blueprintId], scopeId, { [field]: value }]
+            );
+            await this.applyPayload(payload, false);
+        } catch (error) {
+            this.notification.add(
+                error?.data?.message || error.message || _t("Scope update failed"),
+                { type: "danger" }
+            );
+            await this.loadPayload();
+        }
+    }
+
+    onScopeFieldBlur(scopeId, field, ev) {
+        let value = ev.target.value;
+        const scope = (this.state.payload.scopes || []).find((s) => s.id === scopeId);
+        if (!scope) {
+            return;
+        }
+        if (field === "name") {
+            value = (value || "").trim();
+            if (!value) {
+                ev.target.value = scope.name || "";
+                return;
+            }
+            if (scope.name === value) {
+                return;
+            }
+            this.updateScope(scopeId, field, value);
+            return;
+        }
+        if (field === "description") {
+            const next = value || false;
+            if ((scope.description || "") === (value || "")) {
+                return;
+            }
+            this.updateScope(scopeId, field, next);
+            return;
+        }
+        if (field === "domain") {
+            value = (value || "").trim() || "[]";
+            if ((scope.domain || "[]") === value) {
+                return;
+            }
+            this.updateScope(scopeId, field, value);
+        }
+    }
+
+    openScopeDomainEditor(scopeId) {
+        const scope = (this.state.payload.scopes || []).find((s) => s.id === scopeId);
+        if (!scope) {
+            return;
+        }
+        this.dialog.add(DomainSelectorDialog, {
+            resModel: this._scopeResModel(),
+            domain: scope.domain || "[]",
+            title: _t("Scope filter"),
+            onConfirm: (domain) => {
+                this.updateScope(scopeId, "domain", domain);
+            },
+        });
+    }
+
+    async removeScope(scopeId) {
+        if (!confirm(_t("Remove this scope from the dashboard?"))) {
+            return;
+        }
+        this.state.saving = true;
+        try {
+            const payload = await this.orm.call(
+                "dashboard.blueprint",
+                "studio_unlink_scope",
+                [[this.blueprintId], scopeId]
+            );
+            await this.applyPayload(payload, false);
+            this.notification.add(_t("Scope removed"), { type: "info" });
+        } catch (error) {
+            this.notification.add(
+                error?.data?.message || error.message || _t("Remove scope failed"),
+                { type: "danger" }
+            );
+        } finally {
+            this.state.saving = false;
+        }
+    }
+
+    async reorderScopes(orderedIds) {
         const payload = await this.orm.call(
             "dashboard.blueprint",
-            "studio_write_scope",
-            [[this.blueprintId], scopeId, { default_on: checked }]
+            "studio_reorder_scopes",
+            [[this.blueprintId], orderedIds]
         );
         await this.applyPayload(payload, false);
+    }
+
+    async removeHeaderLine(headerId) {
+        if (!confirm(_t("Remove this header line?"))) {
+            return;
+        }
+        this.state.saving = true;
+        try {
+            const payload = await this.orm.call(
+                "dashboard.blueprint",
+                "studio_unlink_header_item",
+                [[this.blueprintId], headerId]
+            );
+            if (this.state.selectedHeaderId === headerId) {
+                this.state.selectedHeaderId = null;
+            }
+            await this.applyPayload(payload, false);
+            this.notification.add(_t("Header line removed"), { type: "info" });
+        } catch (error) {
+            this.notification.add(
+                error?.data?.message || error.message || _t("Remove header line failed"),
+                { type: "danger" }
+            );
+        } finally {
+            this.state.saving = false;
+        }
+    }
+
+    onDragStartHeader(headerId, ev) {
+        this._dragHeaderId = headerId;
+        if (ev.dataTransfer) {
+            ev.dataTransfer.effectAllowed = "move";
+            ev.dataTransfer.setData("text/plain", String(headerId));
+        }
+    }
+
+    async onDropHeader(targetId, ev) {
+        ev.preventDefault();
+        const sourceId = this._dragHeaderId || Number(ev.dataTransfer?.getData("text/plain"));
+        this._dragHeaderId = null;
+        if (!sourceId || sourceId === targetId) {
+            return;
+        }
+        const ids = (this.state.payload.headers || []).map((h) => h.id);
+        const from = ids.indexOf(sourceId);
+        const to = ids.indexOf(targetId);
+        if (from < 0 || to < 0) {
+            return;
+        }
+        ids.splice(from, 1);
+        ids.splice(to, 0, sourceId);
+        const payload = await this.orm.call(
+            "dashboard.blueprint",
+            "studio_reorder_headers",
+            [[this.blueprintId], ids]
+        );
+        await this.applyPayload(payload, false);
+    }
+
+    async moveHeaderLine(headerId, delta) {
+        const ids = (this.state.payload.headers || []).map((h) => h.id);
+        const idx = ids.indexOf(headerId);
+        const next = idx + delta;
+        if (idx < 0 || next < 0 || next >= ids.length) {
+            return;
+        }
+        [ids[idx], ids[next]] = [ids[next], ids[idx]];
+        const payload = await this.orm.call(
+            "dashboard.blueprint",
+            "studio_reorder_headers",
+            [[this.blueprintId], ids]
+        );
+        await this.applyPayload(payload, false);
+    }
+
+    onDragStartScope(scopeId, ev) {
+        this._dragScopeId = scopeId;
+        if (ev.dataTransfer) {
+            ev.dataTransfer.effectAllowed = "move";
+            ev.dataTransfer.setData("text/plain", String(scopeId));
+        }
+    }
+
+    async onDropScope(targetId, ev) {
+        ev.preventDefault();
+        const sourceId = this._dragScopeId || Number(ev.dataTransfer?.getData("text/plain"));
+        this._dragScopeId = null;
+        if (!sourceId || sourceId === targetId) {
+            return;
+        }
+        const ids = (this.state.payload.scopes || []).map((s) => s.id);
+        const from = ids.indexOf(sourceId);
+        const to = ids.indexOf(targetId);
+        if (from < 0 || to < 0) {
+            return;
+        }
+        ids.splice(from, 1);
+        ids.splice(to, 0, sourceId);
+        try {
+            await this.reorderScopes(ids);
+        } catch (error) {
+            this.notification.add(
+                error?.data?.message || error.message || _t("Reorder failed"),
+                { type: "danger" }
+            );
+        }
+    }
+
+    async moveScope(scopeId, delta) {
+        const ids = (this.state.payload.scopes || []).map((s) => s.id);
+        const idx = ids.indexOf(scopeId);
+        const next = idx + delta;
+        if (idx < 0 || next < 0 || next >= ids.length) {
+            return;
+        }
+        [ids[idx], ids[next]] = [ids[next], ids[idx]];
+        try {
+            await this.reorderScopes(ids);
+        } catch (error) {
+            this.notification.add(
+                error?.data?.message || error.message || _t("Reorder failed"),
+                { type: "danger" }
+            );
+        }
     }
 
     async publish() {
@@ -1004,6 +2563,7 @@ export class DashboardStudioAction extends Component {
 
     async discard() {
         await this.loadPayload();
+        await this.loadCatalogs();
         this.notification.add(_t("Changes discarded"), { type: "info" });
     }
 

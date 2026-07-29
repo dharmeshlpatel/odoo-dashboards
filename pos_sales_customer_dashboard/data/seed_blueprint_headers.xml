@@ -13,6 +13,7 @@
         <field name="blueprint_id" ref="blueprint_pos_customers"/>
         <field name="sequence">10</field>
         <field name="kind">subtitle</field>
+        <field name="alignment">left</field>
         <field name="field_names">function,parent_id</field>
         <field name="separator" eval="' at '"/>
     </record>
@@ -20,7 +21,8 @@
 <record id="header_pos_location" model="dashboard.blueprint.header.item">
         <field name="blueprint_id" ref="blueprint_pos_customers"/>
         <field name="sequence">20</field>
-        <field name="kind">left</field>
+        <field name="kind">inline</field>
+        <field name="alignment">left</field>
         <field name="icon">fa-map-marker</field>
         <field name="field_names">city,country_id</field>
         <field name="separator" eval="', '"/>
@@ -29,7 +31,8 @@
 <record id="header_pos_email" model="dashboard.blueprint.header.item">
         <field name="blueprint_id" ref="blueprint_pos_customers"/>
         <field name="sequence">30</field>
-        <field name="kind">left</field>
+        <field name="kind">inline</field>
+        <field name="alignment">left</field>
         <field name="icon">fa-envelope</field>
         <field name="field_names">email</field>
     </record>
@@ -37,7 +40,8 @@
 <record id="header_pos_tags" model="dashboard.blueprint.header.item">
         <field name="blueprint_id" ref="blueprint_pos_customers"/>
         <field name="sequence">40</field>
-        <field name="kind">right</field>
+        <field name="kind">inline</field>
+        <field name="alignment">right</field>
         <field name="field_names">category_id</field>
     </record>
 </odoo>

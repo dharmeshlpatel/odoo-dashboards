@@ -41,7 +41,7 @@ Studio Complete edits **content** inside fixed zones. Buyers still ask to “mov
 ```text
 ┌──────────────────────────────────────────────────────────────┐
 │  Studio modes                                                 │
-│  Content (zones)  |  Layout (grid)  |  Preview (sample host) │
+│  Content (zones + ambient live sample)  |  Layout (grid)     │
 └────────────────────────────┬─────────────────────────────────┘
                              │ studio_layout_* RPC
 ┌────────────────────────────▼─────────────────────────────────┐
@@ -53,6 +53,8 @@ Studio Complete edits **content** inside fixed zones. Buyers still ask to “mov
 │  Live host kanban (same runtime widgets: slots, graph, …)    │
 └──────────────────────────────────────────────────────────────┘
 ```
+
+**IA note:** Live sample is not a third peer tab. It sits on the Content card map (and a compact strip in Layout). Preview-as-mode was removed to avoid duplicate chrome.
 
 ### Layout schema (v1)
 
@@ -110,7 +112,7 @@ Each maps 1:1 to existing generated arch fragments / slot widgets (no new runtim
 
 ## Studio UX (Wave F)
 
-1. Mode toggle: **Content | Layout | Preview** (Preview already exists; Layout is new).  
+1. Mode toggle: **Content | Layout**. Live sample stays on the Content card map (sample picker); Layout has a compact live-sample strip.  
 2. Layout canvas: rows; each row has columns with span 1–12; drag widgets between cells; add row / split column / delete empty.  
 3. Palette: widget types not yet on the page (or allow duplicates only for types that make sense — Wave F: **at most one** of each type except future richtext).  
 4. Span control: buttons 3 / 4 / 6 / 8 / 12.  

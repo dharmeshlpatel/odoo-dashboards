@@ -10,12 +10,14 @@
         <field name="blueprint_id" ref="blueprint_sales_products"/>
         <field name="sequence">10</field>
         <field name="kind">subtitle</field>
+        <field name="alignment">left</field>
         <field name="field_names">default_code</field>
     </record>
     <record id="header_sales_prod_header_barcode" model="dashboard.blueprint.header.item">
         <field name="blueprint_id" ref="blueprint_sales_products"/>
         <field name="sequence">20</field>
-        <field name="kind">left</field>
+        <field name="kind">inline</field>
+        <field name="alignment">left</field>
         <field name="icon">fa-barcode</field>
         <field name="field_names">barcode</field>
     </record>

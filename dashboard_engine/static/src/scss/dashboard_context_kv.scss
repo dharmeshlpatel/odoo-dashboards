@@ -1,0 +1,44 @@
+/* Friendly Action defaults (Advanced form widget) */
+
+.o_dashboard_context_kv {
+    .o_dashboard_context_kv_row {
+        padding: 0.75rem 0.85rem;
+        border: 1px solid var(--border-color, #dee2e6);
+        border-radius: 0.375rem;
+        background: var(--o-view-background-color, #fff);
+    }
+
+    .o_dashboard_context_kv_rule {
+        padding: 0.55rem 0.65rem;
+        border-radius: 0.3rem;
+        background: rgba(0, 0, 0, 0.03);
+        border: 1px solid transparent;
+
+        &:hover {
+            border-color: var(--border-color, #dee2e6);
+        }
+    }
+
+    .o_dashboard_context_kv_hits {
+        position: absolute;
+        z-index: 20;
+        left: 0;
+        right: 0;
+        top: 100%;
+        max-height: 12rem;
+        overflow: auto;
+    }
+}
+
+/* Studio inspector — same mental model */
+
+.o_ds_action_defaults {
+    .o_ds_context_rule {
+        background: rgba(0, 0, 0, 0.03);
+        border: 1px solid transparent;
+
+        &:hover {
+            border-color: var(--border-color, #dee2e6);
+        }
+    }
+}

@@ -19,6 +19,12 @@
         <field name="graph_groupby">stage_id</field>
         <field name="graph_domain">[]</field>
         <field name="graph_caption">Open pipeline</field>
+        <field name="lens_my_enabled" eval="True"/>
+        <field name="lens_my_default" eval="True"/>
+        <field name="lens_my_label">My Partners</field>
+        <field name="lens_kpis_enabled" eval="True"/>
+        <field name="lens_kpis_default" eval="True"/>
+        <field name="lens_kpis_label">With KPIs</field>
         <field name="state">published</field>
         <field name="sequence">10</field>
     </record>
@@ -73,6 +79,7 @@
         <field name="include_child_records" eval="True"/>
         <field name="primary_label_alt_scope_id" ref="scope_crm_pipeline"/>
         <field name="primary_label_alt">Leads Analysis</field>
+        <field name="primary_action_context">{"default_type": {"__de__": "group_value", "default": "opportunity", "map": [{"groups": ["crm.group_use_lead"], "value": "lead"}]}}</field>
     </record>
 
 <record id="slot_crm_open_opportunities" model="dashboard.blueprint.slot">
@@ -90,7 +97,7 @@
         <field name="amount_aggregator">expected_revenue:sum</field>
         <field name="action_xmlid">crm.crm_lead_action_pipeline</field>
         <field name="action_domain">[('type', '=', 'opportunity'), ('probability', '&lt;', 100), ('active', '=', True), ('partner_id', 'child_of', '{{id}}')]</field>
-        <field name="action_context">{"default_type": "opportunity"}</field>
+        <field name="action_context">{"default_type": {"__de__": "group_value", "default": "opportunity", "map": [{"groups": ["crm.group_use_lead"], "value": "lead"}]}}</field>
     </record>
 
 <record id="slot_crm_overdue_opportunities" model="dashboard.blueprint.slot">
@@ -111,7 +118,7 @@
         <field name="amount_aggregator">expected_revenue:sum</field>
         <field name="action_xmlid">crm.crm_lead_action_pipeline</field>
         <field name="action_domain">[('partner_id', 'child_of', '{{id}}')]</field>
-        <field name="action_context">{"default_type": "opportunity"}</field>
+        <field name="action_context">{"default_type": {"__de__": "group_value", "default": "opportunity", "map": [{"groups": ["crm.group_use_lead"], "value": "lead"}]}}</field>
     </record>
 
     <record id="slot_crm_menu_opportunities" model="dashboard.blueprint.slot">

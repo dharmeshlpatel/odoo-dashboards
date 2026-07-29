@@ -37,6 +37,23 @@ class BaseModelDashboardEngine(models.AbstractModel):
         "page — it depends on the viewer's saved preferences, not the "
         "record — so it is computed once per batch, not per card.",
     )
+    # Kanban search-view toggles: never stored; rewritten in search_fetch.
+    # search= stubs make the fields searchable for ir.ui.view validation;
+    # the real domain rewrite stays in search_fetch (two-pass My ∩ KPIs).
+    dashboard_my_data = fields.Boolean(
+        store=False, search="_search_dashboard_my_data"
+    )
+    dashboard_with_kpis = fields.Boolean(
+        store=False, search="_search_dashboard_with_kpis"
+    )
+
+    def _search_dashboard_my_data(self, operator, value):
+        """Fallback only; dashboard search_fetch rewrites this leaf first."""
+        return [("id", "=", False)]
+
+    def _search_dashboard_with_kpis(self, operator, value):
+        """Fallback only; dashboard search_fetch rewrites this leaf first."""
+        return [("id", "=", False)]
 
     def _dashboard_engine_blueprint(self):
         """Published blueprint for the current card page, read as sudo.
@@ -102,3 +119,64 @@ class BaseModelDashboardEngine(models.AbstractModel):
         return self.env["dashboard.blueprint"].execute_slot_action(
             key, slot_key, self._name, self.id
         )
+
+    @api.model
+    @api.readonly
+    def search_fetch(
+        self, domain, field_names=None, offset=0, limit=None, order=None
+    ):
+        domain = self._dashboard_lens_rewrite_domain(domain)
+        return super().search_fetch(
+            domain, field_names, offset=offset, limit=limit, order=order
+        )
+
+    @api.model
+    def _dashboard_lens_rewrite_domain(self, domain):
+        """Replace virtual lens flags with real domains when rendering.
+
+        Two-pass rewrite of virtual flags. When My and With KPIs are both on,
+        My becomes a host domain and KPIs use the full KPI host-id set;
+        intersection is ``my_domain AND id in kpi_ids``. Do not also narrow
+        KPI graph rows by ``user_id`` — that over-filters hosts that already
+        scope My via host ``user_id`` (e.g. ``res.partner``).
+
+        Gate: ``dashboard_blueprint_key`` present, not
+        ``_dashboard_fetching_data``, and blueprint host matches ``self._name``.
+        """
+        key = self.env.context.get("dashboard_blueprint_key")
+        if not key or self.env.context.get("_dashboard_fetching_data"):
+            return domain
+        # Lookup must not re-enter rewrite (context still carries the key).
+        bp = (
+            self.env["dashboard.blueprint"]
+            .sudo()
+            .with_context(_dashboard_fetching_data=True)
+            ._get_blueprint(key)
+        )
+        if not bp or bp.host_model_name != self._name:
+            return domain
+        bp = bp.with_user(self.env.user)
+        domain = list(domain or [])
+
+        def _is_flag(leaf, name):
+            return (
+                isinstance(leaf, (list, tuple))
+                and len(leaf) >= 3
+                and leaf[0] == name
+            )
+
+        def _flag_on(leaf):
+            return leaf[2] in (True, 1, [True], [1])
+
+        out = []
+        for leaf in domain:
+            if _is_flag(leaf, "dashboard_my_data"):
+                if _flag_on(leaf):
+                    out.extend(bp._lens_my_domain())
+                continue
+            if _is_flag(leaf, "dashboard_with_kpis"):
+                if _flag_on(leaf):
+                    out.append(("id", "in", bp._lens_kpis_host_ids()))
+                continue
+            out.append(leaf)
+        return out

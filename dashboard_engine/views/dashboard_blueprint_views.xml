@@ -187,7 +187,7 @@
                             </div>
                         </div>
                         <div class="mt-3">
-                            <b>Custom Filter…</b>
+                            <b>Custom Filter</b>
                             <div class="text-muted">
                                 Add custom rules to further narrow down the data
                                 based on your business needs.
@@ -282,6 +282,16 @@
                             <field name="menu_name"/>
                             <field name="menu_parent_id" options="{'no_create': True}"/>
                             <field name="menu_sequence"/>
+                        </group>
+                        <group string="Kanban lens">
+                            <field name="lens_my_enabled"/>
+                            <field name="lens_my_default" invisible="not lens_my_enabled"/>
+                            <field name="lens_my_label" invisible="not lens_my_enabled"
+                                   required="lens_my_enabled"/>
+                            <field name="lens_kpis_enabled"/>
+                            <field name="lens_kpis_default" invisible="not lens_kpis_enabled"/>
+                            <field name="lens_kpis_label" invisible="not lens_kpis_enabled"
+                                   required="lens_kpis_enabled"/>
                         </group>
                     </group>
                     <notebook>
@@ -389,7 +399,7 @@
                                                    invisible="not graph_model_id"
                                                    domain="[('model_id', '=', graph_model_id),
                                                             ('ttype', 'in', ['date', 'datetime'])]"/>
-                                            <field name="graph_domain" string="Custom Filter…"
+                                            <field name="graph_domain"
                                                    widget="domain"
                                                    options="{'model': 'graph_model', 'in_dialog': True}"
                                                    invisible="not graph_model_id"
@@ -438,14 +448,15 @@
                                             <field name="ordered_field_ids" column_invisible="1"/>
                                             <field name="has_multiple_fields" column_invisible="1"/>
                                             <field name="kind"/>
+                                            <field name="alignment"/>
                                             <field name="icon"
-                                                   invisible="kind != 'left'"/>
+                                                   invisible="kind != 'inline'"/>
                                             <field name="field_ids"
                                                    widget="many2many_ordered_tags"
-                                                   options="{'no_create': True, 'separator': False}"
+                                                   options="{'no_create': True, 'separator': False, 'label_format': 'string_name'}"
                                                    domain="[('model', '=', host_model_name)]"/>
                                             <field name="separator"
-                                                   invisible="kind == 'right' or not has_multiple_fields"/>
+                                                   invisible="not has_multiple_fields"/>
                                         </list>
                                     </field>
                                 </group>
@@ -513,7 +524,8 @@
                                        options="{'model': 'graph_model', 'in_dialog': False, 'foldable': False, 'allow_expressions': True}"
                                        invisible="not graph_model"/>
                                 <field name="primary_action_context"
-                                       widget="dashboard_context_kv"/>
+                                       widget="dashboard_context_kv"
+                                       string="Action defaults"/>
                             </group>
 
                             <separator string="Right · KPIs"/>
@@ -542,7 +554,7 @@
                                     <field name="relate_field"
                                            widget="dashboard_relation_path"
                                            options="{'model': 'compute_model', 'follow_relations': True}"
-                                           placeholder="Link to card (or leave empty)"/>
+                                           placeholder="Link to Host (or leave empty)"/>
                                     <field name="relate_field_id" column_invisible="1"/>
                                     <field name="relation_path_id" column_invisible="1"/>
                                     <field name="condition_ids" optional="show"
@@ -551,6 +563,10 @@
                                            domain="[('model', '=', compute_model)]"/>
                                     <field name="action_id"
                                            options="{'no_create': True}"/>
+                                    <field name="action_context"
+                                           widget="dashboard_context_kv"
+                                           string="Action defaults"
+                                           optional="hide"/>
                                     <field name="name" string="Technical Name" optional="hide"/>
                                     <field name="label_plural" optional="hide"/>
                                     <field name="style" optional="hide"/>
@@ -583,6 +599,10 @@
                                                     ('ttype', 'in', ['integer', 'float', 'monetary'])]"/>
                                     <field name="action_id"
                                            options="{'no_create': True}"/>
+                                    <field name="action_context"
+                                           widget="dashboard_context_kv"
+                                           string="Action defaults"
+                                           optional="hide"/>
                                     <field name="name" string="Technical Name" optional="hide"/>
                                     <field name="style" optional="hide"/>
                                     <field name="show_if_zero" optional="hide"/>
@@ -617,7 +637,7 @@
                                            invisible="not ui_number_from_related"
                                            widget="dashboard_relation_path"
                                            options="{'model': 'compute_model', 'follow_relations': True}"
-                                           placeholder="Link to card (or leave empty)"/>
+                                           placeholder="Link to Host (or leave empty)"/>
                                     <field name="relate_field_id" column_invisible="1"/>
                                     <field name="relation_path_id" column_invisible="1"/>
                                     <field name="count_field_id"
@@ -631,6 +651,10 @@
                                                     ('ttype', 'in', ['integer', 'float', 'monetary'])]"/>
                                     <field name="action_id"
                                            options="{'no_create': True}"/>
+                                    <field name="action_context"
+                                           widget="dashboard_context_kv"
+                                           string="Action defaults"
+                                           optional="hide"/>
                                     <field name="name" string="Technical Name" optional="hide"/>
                                     <field name="show_if_zero" optional="hide"/>
                                     <field name="module_ids" optional="hide"
@@ -655,6 +679,10 @@
                                     <field name="label"/>
                                     <field name="action_id"
                                            options="{'no_create': True}"/>
+                                    <field name="action_context"
+                                           widget="dashboard_context_kv"
+                                           string="Action defaults"
+                                           optional="hide"/>
                                     <field name="name" string="Technical Name" optional="hide"/>
                                     <field name="module_ids" optional="hide"
                                            widget="many2many_tags"
@@ -674,6 +702,10 @@
                                     <field name="label"/>
                                     <field name="action_id"
                                            options="{'no_create': True}"/>
+                                    <field name="action_context"
+                                           widget="dashboard_context_kv"
+                                           string="Action defaults"
+                                           optional="hide"/>
                                     <field name="name" string="Technical Name" optional="hide"/>
                                     <field name="module_ids" optional="hide"
                                            widget="many2many_tags"
@@ -693,6 +725,10 @@
                                     <field name="label"/>
                                     <field name="action_id"
                                            options="{'no_create': True}"/>
+                                    <field name="action_context"
+                                           widget="dashboard_context_kv"
+                                           string="Action defaults"
+                                           optional="hide"/>
                                     <field name="name" string="Technical Name" optional="hide"/>
                                     <field name="module_ids" optional="hide"
                                            widget="many2many_tags"
@@ -736,7 +772,10 @@
                                         <field name="key"/>
                                         <field name="name"/>
                                         <field name="visible_if_context"/>
-                                        <field name="action_context"/>
+                                        <field name="action_context"
+                                               widget="dashboard_context_kv"
+                                               string="Action defaults"
+                                               optional="show"/>
                                         <field name="action_view_mode"/>
                                         <field name="action_method" optional="show"/>
                                         <field name="host_model_name" column_invisible="1"/>

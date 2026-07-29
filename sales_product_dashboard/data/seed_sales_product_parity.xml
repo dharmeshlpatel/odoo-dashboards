@@ -8,7 +8,8 @@
     <record id="header_sales_prod_categ" model="dashboard.blueprint.header.item">
         <field name="blueprint_id" ref="blueprint_sales_products"/>
         <field name="sequence">30</field>
-        <field name="kind">left</field>
+        <field name="kind">inline</field>
+        <field name="alignment">left</field>
         <field name="icon">fa-tag</field>
         <field name="field_names">categ_id</field>
     </record>

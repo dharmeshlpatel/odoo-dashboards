@@ -8,6 +8,7 @@
         <field name="blueprint_id" ref="blueprint_warehouse_overview"/>
         <field name="sequence">10</field>
         <field name="kind">subtitle</field>
+        <field name="alignment">left</field>
         <field name="field_names">code</field>
     </record>
 </odoo>

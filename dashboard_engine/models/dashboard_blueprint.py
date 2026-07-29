@@ -21,6 +21,7 @@ from .dashboard_graph_periods import get_period_year
 from .ir_model_fields import GRAPH_CUSTOM_GROUP
 from ..tools.date_utils import _get_period_dates
 from ..tools.domain_utils import _date_range_to_domain
+from ..tools.condition_domain import compile_context_value
 from ..tools.relation_path import (
     RelationPathInfo,
     first_hop as relation_first_hop,
@@ -98,6 +99,8 @@ HEADER_SEPARATORS = [
 STUDIO_LAYOUT_WIDGETS = frozenset(
     {"header", "primary", "graph", "kpis", "totals", "shortcuts", "manage"}
 )
+# Palette labels — manage is validated if present but always lives in the ⋮ menu,
+# never in the card body (classic kanban behaviour).
 STUDIO_LAYOUT_WIDGET_LABELS = {
     "header": "Header",
     "primary": "Primary button",
@@ -105,8 +108,10 @@ STUDIO_LAYOUT_WIDGET_LABELS = {
     "kpis": "KPIs",
     "totals": "Totals",
     "shortcuts": "Shortcuts",
-    "manage": "Manage menu",
 }
+STUDIO_LAYOUT_CARD_WIDGETS = frozenset(
+    {"header", "primary", "graph", "kpis", "totals", "shortcuts"}
+)
 
 
 class DashboardBlueprint(models.Model):
@@ -164,6 +169,12 @@ class DashboardBlueprint(models.Model):
         "Left empty → under Dashboard Engine root.",
     )
     menu_sequence = fields.Integer(default=50, string="Menu Sequence")
+    lens_my_enabled = fields.Boolean(string="Show My filter", default=False)
+    lens_my_default = fields.Boolean(string="My filter on by default", default=False)
+    lens_my_label = fields.Char(string="My filter label")
+    lens_kpis_enabled = fields.Boolean(string="Show With KPIs filter", default=False)
+    lens_kpis_default = fields.Boolean(string="With KPIs on by default", default=False)
+    lens_kpis_label = fields.Char(string="With KPIs filter label")
     primary_button_label = fields.Char(
         translate=True,
         default="Open Analysis",
@@ -224,25 +235,27 @@ class DashboardBlueprint(models.Model):
         help="Technical model name for the card graph (e.g. crm.lead)."
     )
     graph_data_field = fields.Char(
-        string="Link to card",
-        help="Many2one path from the chart model to this card "
-        "(e.g. partner_id or product_id.categ_id). Use the field picker "
-        "to drill into related records.",
+        string="Link to Host",
+        help="Many2one path on the graph model that points back to this "
+        "host record (e.g. partner_id on crm.lead for a customer card, "
+        "or product_id.categ_id for a category card). Pick fields in order "
+        "with the relation path widget; KPI slots use the same label.",
     )
     graph_relation_path_id = fields.Many2one(
         "dashboard.relation.path",
         string="Relation Path (legacy)",
         ondelete="restrict",
-        help="Deprecated: prefer Link to card. Kept for migration.",
+        help="Deprecated: prefer Link to Host. Kept for migration.",
     )
     graph_measure = fields.Char(default="__count")
     graph_groupby = fields.Char(help="Group-by field, e.g. create_date:month")
     graph_domain = fields.Char(
-        string="Custom Filter…",
+        string="Custom Filter",
         default="[]",
-        help="Extra domain on the graph model (Python list literal).",
+        help="Optional domain on the graph model (Python list), same idea "
+        "as Custom Filter on a list or graph view.",
     )
-    graph_caption = fields.Char(translate=True, string="Caption")
+    graph_caption = fields.Char(translate=True, string="Graph Title")
 
     # Source of truth for the builder (same chrome as the live ⚙️ popup):
     # one ordered Group By tag list. First tag = top level; each next tag is
@@ -395,13 +408,14 @@ class DashboardBlueprint(models.Model):
     )
     graph_data_field_id = fields.Many2one(
         "ir.model.fields",
-        string="Related Field",
+        string="Link to Host",
         compute="_compute_graph_data_field_id",
         inverse="_inverse_graph_data_field_id",
         store=True,
         readonly=False,
         ondelete="set null",
-        help="The field pointing back at the card's record.",
+        help="Many2one on the graph model that links a counted row to this "
+        "host. Prefer the relation path control on Configuration.",
     )
     graph_groupby_field_id = fields.Many2one(
         "ir.model.fields",
@@ -927,7 +941,7 @@ class DashboardBlueprint(models.Model):
         issues = []
         checks = [
             (self.graph_model, self.graph_model_id, _("Chart model")),
-            (self.graph_data_field, self.graph_data_field_id, _("Chart link field")),
+            (self.graph_data_field, self.graph_data_field_id, _("Link to Host")),
             (self.menu_parent_xmlid, self.menu_parent_id, _("Parent menu")),
         ]
         for mirror, picker, label in checks:
@@ -996,6 +1010,12 @@ class DashboardBlueprint(models.Model):
                         ref=group,
                     )
                 )
+        if self.lens_my_enabled and not (self.lens_my_label or "").strip():
+            issues.append(_("My filter is on: set My filter label."))
+        if self.lens_my_enabled and not self._lens_can_resolve_my():
+            issues.append(_("My filter cannot resolve for this host/graph."))
+        if self.lens_kpis_enabled and not (self.lens_kpis_label or "").strip():
+            issues.append(_("With KPIs filter is on: set With KPIs filter label."))
         return issues
 
     def action_health_check(self):
@@ -1126,6 +1146,9 @@ class DashboardBlueprint(models.Model):
     )
 
     generated_view_id = fields.Many2one("ir.ui.view", readonly=True, copy=False)
+    generated_search_view_id = fields.Many2one(
+        "ir.ui.view", readonly=True, copy=False
+    )
     generated_action_id = fields.Many2one(
         "ir.actions.act_window", readonly=True, copy=False
     )
@@ -1166,6 +1189,21 @@ class DashboardBlueprint(models.Model):
             if not rec.key or not rec.key.replace("_", "").isalnum():
                 raise ValidationError(
                     _("Blueprint key must be alphanumeric/underscore.")
+                )
+
+    @api.constrains(
+        "lens_my_enabled",
+        "lens_my_label",
+        "lens_kpis_enabled",
+        "lens_kpis_label",
+    )
+    def _check_lens_labels(self):
+        for rec in self:
+            if rec.lens_my_enabled and not (rec.lens_my_label or "").strip():
+                raise ValidationError(_("My filter is on: set My filter label."))
+            if rec.lens_kpis_enabled and not (rec.lens_kpis_label or "").strip():
+                raise ValidationError(
+                    _("With KPIs filter is on: set With KPIs filter label.")
                 )
 
     @api.constrains(
@@ -1294,6 +1332,7 @@ class DashboardBlueprint(models.Model):
         "compute_domain",
         "value_mode",
         "module_depends",
+        "action_context",
     )
     _STUDIO_SLOT_WRITE_FIELDS = frozenset(
         {
@@ -1315,21 +1354,43 @@ class DashboardBlueprint(models.Model):
             "name",
             "sequence",
             "condition_ids",
+            "action_context",
         }
     )
     _STUDIO_BP_WRITE_FIELDS = frozenset(
         {
             "primary_button_label",
             "primary_action_xmlid",
+            "primary_action_context",
             "graph_caption",
             "graph_measure",
             "graph_groupby",
+            "graph_groupby_field_ids",
+            "graph_measure_field_id",
+            "graph_measure_aggregator",
+            "graph_data_field",
+            "graph_domain",
+            "period_field_id",
+            "closed_period_field_id",
+            "include_child_records",
             "header_title_field",
             "header_image_field",
+            "header_image_style",
+            # Setup mode (Dashboard + Menu)
+            "host_model_id",
+            "menu_name",
+            "menu_parent_id",
+            "menu_sequence",
+            "company_id",
+            "module_ids",
+            "share_link_ids",
         }
     )
     _STUDIO_HEADER_WRITE_FIELDS = frozenset(
-        {"sequence", "kind", "icon", "field_names", "separator"}
+        {"sequence", "kind", "alignment", "icon", "field_names", "separator"}
+    )
+    _STUDIO_SCOPE_WRITE_FIELDS = frozenset(
+        {"name", "description", "mode", "domain", "default_on", "sequence"}
     )
 
     def _studio_slot_dict(self, slot):
@@ -1349,11 +1410,13 @@ class DashboardBlueprint(models.Model):
         ]
         headers = []
         for item in self.header_line_ids.sorted("sequence"):
+            ka = item._effective_kind_alignment()
             headers.append(
                 {
                     "id": item.id,
                     "sequence": item.sequence,
-                    "kind": item.kind,
+                    "kind": ka["kind"],
+                    "alignment": ka["alignment"],
                     "icon": item.icon or False,
                     "field_names": item.field_names or "",
                     "separator": item.separator or False,
@@ -1365,25 +1428,54 @@ class DashboardBlueprint(models.Model):
                 {
                     "id": scope.id,
                     "name": scope.name,
+                    "description": scope.description or False,
                     "mode": scope.mode,
+                    "domain": scope.domain or "[]",
                     "default_on": scope.default_on,
                     "sequence": scope.sequence,
                 }
             )
+        ordered_groupby = list(self._ordered_graph_groupby_fields())
         return {
             "id": self.id,
             "name": self.name,
             "key": self.key,
             "state": self.state,
             "host_model": self.host_model_name or "",
+            "host_model_id": self.host_model_id.id or False,
+            "host_model_label": self.host_model_id.name or self.host_model_name or "",
+            "host_editable": self.state == "draft",
+            "menu_name": self.menu_name or "",
+            "menu_parent_id": self.menu_parent_id.id or False,
+            "menu_parent_name": self.menu_parent_id.display_name or "",
+            "menu_sequence": self.menu_sequence,
+            "company_id": self.company_id.id or False,
+            "company_name": self.company_id.display_name or "",
+            "module_ids": self.module_ids.ids,
+            "module_names": self.module_ids.mapped("display_name"),
+            "share_link_ids": self.share_link_ids.ids,
+            "share_link_names": self.share_link_ids.mapped("display_name"),
+            "generated_menu_name": self.generated_menu_id.display_name or "",
+            "multi_company": self.env.user.has_group("base.group_multi_company"),
             "primary_button_label": self.primary_button_label or "",
             "primary_action_xmlid": self.primary_action_xmlid or "",
+            "primary_action_context": self.primary_action_context or "{}",
             "graph_caption": self.graph_caption or "",
             "graph_model": self.graph_model or "",
             "graph_measure": self.graph_measure or "",
             "graph_groupby": self.graph_groupby or "",
+            "graph_groupby_field_ids": [f.id for f in ordered_groupby],
+            "graph_groupby_field_names": [f.name for f in ordered_groupby],
+            "graph_measure_field_id": self.graph_measure_field_id.id or False,
+            "graph_measure_aggregator": self.graph_measure_aggregator or False,
+            "graph_data_field": self.graph_data_field or "",
+            "graph_domain": self.graph_domain or "[]",
+            "period_field_id": self.period_field_id.id or False,
+            "closed_period_field_id": self.closed_period_field_id.id or False,
+            "include_child_records": bool(self.include_child_records),
             "header_title_field": self.header_title_field or "",
             "header_image_field": self.header_image_field or "",
+            "header_image_style": self.header_image_style or "avatar",
             "slots": slots,
             "headers": headers,
             "scopes": scopes,
@@ -1447,16 +1539,6 @@ class DashboardBlueprint(models.Model):
                             "span": 6,
                             "widget": {"type": "shortcuts"},
                         },
-                    ],
-                },
-                {
-                    "id": "r_manage",
-                    "cols": [
-                        {
-                            "id": "c_manage",
-                            "span": 12,
-                            "widget": {"type": "manage"},
-                        }
                     ],
                 },
             ],
@@ -1535,17 +1617,127 @@ class DashboardBlueprint(models.Model):
             self.studio_layout = layout
         return self.get_studio_payload()
 
+    def _studio_model_has_field(self, model_name, field_name):
+        if not model_name or not field_name or model_name not in self.env:
+            return False
+        return field_name in self.env[model_name]._fields
+
+    def _studio_cleanup_after_host_change(self):
+        """Clear invalid host-tied refs after host model change. Returns count."""
+        self.ensure_one()
+        host = self.host_model_name
+        cleared = 0
+        bp_vals = {}
+        if self.header_title_field and not self._studio_model_has_field(
+            host, self.header_title_field
+        ):
+            bp_vals["header_title_field"] = False
+            cleared += 1
+        if self.header_image_field and not self._studio_model_has_field(
+            host, self.header_image_field
+        ):
+            bp_vals["header_image_field"] = False
+            cleared += 1
+        if bp_vals:
+            self.write(bp_vals)
+        for item in self.header_line_ids:
+            names = [
+                n.strip()
+                for n in (item.field_names or "").split(",")
+                if n.strip()
+            ]
+            kept = [n for n in names if self._studio_model_has_field(host, n)]
+            if kept != names:
+                cleared += len(names) - len(kept)
+                item.write({"field_names": ",".join(kept) or False})
+        for slot in self.slot_ids:
+            slot_vals = {}
+            model_name = slot.compute_model or host
+            if slot.count_field and not self._studio_model_has_field(
+                model_name, slot.count_field
+            ):
+                slot_vals["count_field"] = False
+                cleared += 1
+            if slot.amount_field and not self._studio_model_has_field(
+                model_name, slot.amount_field
+            ):
+                slot_vals["amount_field"] = False
+                cleared += 1
+            if slot_vals:
+                slot.write(slot_vals)
+        bad_links = self.share_link_ids.filtered(
+            lambda o: o.host_model_id != self.host_model_id
+        )
+        if bad_links:
+            cleared += len(bad_links)
+            self.write({"share_link_ids": [(3, link.id) for link in bad_links]})
+        return cleared
+
+    def _studio_validate_graph_domain(self, domain_str):
+        """Reject invalid Custom Filter strings on Studio writes."""
+        if domain_str in (False, None, ""):
+            return "[]"
+        if isinstance(domain_str, (list, tuple)):
+            domain_str = str(list(domain_str))
+        if not isinstance(domain_str, str):
+            raise UserError(_("Custom Filter must be a valid Python domain list."))
+        self._safe_domain(domain_str, strict=True)
+        return domain_str
+
     def studio_write_blueprint(self, vals):
         """Write a whitelist of blueprint fields from Studio."""
         self.ensure_one()
-        clean = {
-            key: value
-            for key, value in (vals or {}).items()
-            if key in self._STUDIO_BP_WRITE_FIELDS
-        }
+        clean = {}
+        for key, value in (vals or {}).items():
+            if key not in self._STUDIO_BP_WRITE_FIELDS:
+                continue
+            if key in ("module_ids", "share_link_ids"):
+                ids = value if isinstance(value, (list, tuple)) else []
+                clean[key] = [(6, 0, [int(i) for i in ids if i])]
+            elif key == "host_model_id":
+                if self.state == "published":
+                    raise UserError(
+                        _(
+                            "Unpublish to change the host model, or use Advanced."
+                        )
+                    )
+                clean[key] = int(value) if value else False
+            elif key in ("menu_parent_id", "company_id"):
+                clean[key] = int(value) if value else False
+            elif key in ("period_field_id", "closed_period_field_id"):
+                clean[key] = int(value) if value else False
+            elif key == "menu_sequence":
+                clean[key] = int(value or 0)
+            elif key == "graph_domain":
+                clean[key] = self._studio_validate_graph_domain(value)
+            elif key == "include_child_records":
+                clean[key] = bool(value)
+            elif key == "graph_groupby_field_ids":
+                ids = [int(i) for i in (value or []) if i]
+                clean["graph_groupby_ids"] = [(6, 0, ids)]
+                clean["ordered_graph_groupby_ids"] = ",".join(str(i) for i in ids)
+            elif key == "graph_measure_field_id":
+                clean[key] = int(value) if value else False
+            elif key == "graph_measure_aggregator":
+                clean[key] = value or False
+            else:
+                clean[key] = value
+        old_host = self.host_model_id.id
         if clean:
+            mirror_groupby = "graph_groupby_ids" in clean
             self.write(clean)
-        return self.get_studio_payload()
+            if mirror_groupby:
+                self._mirror_legacy_graph_groupby_from_unified()
+        cleanup_count = 0
+        if (
+            "host_model_id" in clean
+            and clean.get("host_model_id")
+            and clean["host_model_id"] != old_host
+        ):
+            cleanup_count = self._studio_cleanup_after_host_change()
+        payload = self.get_studio_payload()
+        payload["setup_cleanup_count"] = cleanup_count
+        return payload
 
     def _studio_prepare_slot_vals(self, vals):
         clean = {}
@@ -1671,7 +1863,8 @@ class DashboardBlueprint(models.Model):
             {
                 "blueprint_id": self.id,
                 "sequence": clean.get("sequence", seq),
-                "kind": clean.get("kind") or "left",
+                "kind": clean.get("kind") or "subtitle",
+                "alignment": clean.get("alignment") or "left",
                 "icon": clean.get("icon") or False,
                 "field_names": clean.get("field_names") or "",
                 "separator": clean.get("separator") or False,
@@ -1707,13 +1900,73 @@ class DashboardBlueprint(models.Model):
         if not scope:
             raise UserError(_("Unknown scope on this dashboard."))
         clean = {}
-        vals = vals or {}
-        if "default_on" in vals:
-            clean["default_on"] = bool(vals.get("default_on"))
-        if "name" in vals and vals.get("name"):
-            clean["name"] = vals["name"]
+        for key, value in (vals or {}).items():
+            if key not in self._STUDIO_SCOPE_WRITE_FIELDS:
+                continue
+            if key == "domain":
+                clean["domain"] = self._studio_validate_graph_domain(value)
+            elif key == "mode":
+                if value not in ("include", "restrict"):
+                    raise UserError(_("Invalid scope mode."))
+                clean["mode"] = value
+            elif key == "default_on":
+                clean["default_on"] = bool(value)
+            elif key == "sequence":
+                clean["sequence"] = int(value)
+            elif key == "name":
+                name = (value or "").strip()
+                if not name:
+                    raise UserError(_("Scope name is required."))
+                clean["name"] = name
+            elif key == "description":
+                clean["description"] = value or False
         if clean:
             scope.write(clean)
+        return self.get_studio_payload()
+
+    def studio_create_scope(self, vals):
+        self.ensure_one()
+        vals = vals or {}
+        name = (vals.get("name") or "").strip()
+        if not name:
+            raise UserError(_("Scope name is required."))
+        mode = vals.get("mode") or "include"
+        if mode not in ("include", "restrict"):
+            raise UserError(_("Invalid scope mode."))
+        domain = self._studio_validate_graph_domain(vals.get("domain") or "[]")
+        seq = max(self.scope_ids.mapped("sequence") or [0]) + 10
+        created = self.env["dashboard.blueprint.scope"].create(
+            {
+                "blueprint_id": self.id,
+                "name": name,
+                "description": vals.get("description") or False,
+                "mode": mode,
+                "domain": domain,
+                "default_on": bool(vals.get("default_on")),
+                "sequence": int(vals.get("sequence") or seq),
+            }
+        )
+        payload = self.get_studio_payload()
+        payload["created_scope_id"] = created.id
+        return payload
+
+    def studio_unlink_scope(self, scope_id):
+        self.ensure_one()
+        scope = self.scope_ids.filtered(lambda s: s.id == scope_id)[:1]
+        if scope:
+            scope.unlink()
+        return self.get_studio_payload()
+
+    def studio_reorder_scopes(self, ordered_ids):
+        self.ensure_one()
+        ordered_ids = [int(i) for i in (ordered_ids or [])]
+        by_id = {s.id: s for s in self.scope_ids}
+        if set(ordered_ids) != set(by_id):
+            raise UserError(
+                _("Scope list is out of date. Reload Studio and try again.")
+            )
+        for index, scope_id in enumerate(ordered_ids):
+            by_id[scope_id].sequence = (index + 1) * 10
         return self.get_studio_payload()
 
     def studio_search_actions(self, term="", limit=20):
@@ -1736,6 +1989,134 @@ class DashboardBlueprint(models.Model):
                     "res_model": action.res_model or "",
                 }
             )
+        return result
+
+    def studio_search_models(self, term="", limit=20):
+        """ir.model picker for Setup host model."""
+        self.ensure_one()
+        limit = min(int(limit or 20), 50)
+        domain = [("transient", "=", False)]
+        if term:
+            domain = [
+                "&",
+                ("transient", "=", False),
+                "|",
+                ("name", "ilike", term),
+                ("model", "ilike", term),
+            ]
+        models = self.env["ir.model"].search(domain, limit=limit, order="name")
+        return [
+            {
+                "id": m.id,
+                "name": m.name,
+                "model": m.model,
+            }
+            for m in models
+        ]
+
+    def studio_search_menus(self, term="", limit=20):
+        """Parent menu picker for Setup."""
+        self.ensure_one()
+        limit = min(int(limit or 20), 50)
+        domain = [("name", "ilike", term or "")] if term else []
+        menus = self.env["ir.ui.menu"].search(domain, limit=limit, order="name, id")
+        return [
+            {"id": m.id, "name": m.complete_name or m.display_name or m.name}
+            for m in menus
+        ]
+
+    def studio_search_modules(self, term="", limit=20):
+        """Required apps picker for Setup."""
+        self.ensure_one()
+        limit = min(int(limit or 20), 50)
+        domain = []
+        if term:
+            domain = [
+                "|",
+                ("shortdesc", "ilike", term),
+                ("name", "ilike", term),
+            ]
+        modules = self.env["ir.module.module"].search(domain, limit=limit, order="shortdesc")
+        return [
+            {
+                "id": m.id,
+                "name": m.shortdesc or m.display_name or m.name,
+                "technical": m.name,
+            }
+            for m in modules
+        ]
+
+    def studio_search_share_blueprints(self, term="", limit=20):
+        """Share-link picker: other blueprints on the same host model."""
+        self.ensure_one()
+        limit = min(int(limit or 20), 50)
+        domain = [
+            ("id", "!=", self.id),
+            ("host_model_id", "=", self.host_model_id.id),
+        ]
+        if term:
+            domain = [
+                "&",
+                ("id", "!=", self.id),
+                ("host_model_id", "=", self.host_model_id.id),
+                "|",
+                ("name", "ilike", term),
+                ("key", "ilike", term),
+            ]
+        blueprints = self.search(domain, limit=limit, order="name")
+        return [
+            {"id": bp.id, "name": bp.display_name or bp.name, "key": bp.key}
+            for bp in blueprints
+        ]
+
+    def studio_search_companies(self, term="", limit=20):
+        """Company picker for Setup (multi-company)."""
+        self.ensure_one()
+        limit = min(int(limit or 20), 50)
+        domain = [("name", "ilike", term or "")] if term else []
+        companies = self.env["res.company"].search(domain, limit=limit, order="name")
+        return [{"id": c.id, "name": c.display_name or c.name} for c in companies]
+
+    @api.model
+    def studio_search_groups(self, term="", limit=20):
+        """Group picker for friendly action-context (xmlid + label)."""
+        limit = min(int(limit or 20), 50)
+        Group = self.env["res.groups"]
+        domain = []
+        if term:
+            domain = [
+                "|",
+                ("name", "ilike", term),
+                ("full_name", "ilike", term),
+            ]
+        groups = Group.search(domain, limit=limit, order="name")
+        xmlids = groups.get_external_id()
+        rows = []
+        for group in groups:
+            xmlid = xmlids.get(group.id) or ""
+            if not xmlid:
+                continue
+            rows.append(
+                {
+                    "id": group.id,
+                    "name": group.full_name or group.display_name or group.name,
+                    "xmlid": xmlid,
+                }
+            )
+        return rows
+
+    @api.model
+    def studio_group_labels(self, xmlids=None):
+        """Map group xmlids → human labels for Action defaults UI."""
+        result = {}
+        for xmlid in xmlids or []:
+            if not xmlid or not isinstance(xmlid, str):
+                continue
+            group = self.env.ref(xmlid, raise_if_not_found=False)
+            if group and group._name == "res.groups":
+                result[xmlid] = group.full_name or group.display_name or group.name
+            else:
+                result[xmlid] = xmlid
         return result
 
     def studio_model_fields(self, model_name=None, ttypes=None):
@@ -1767,10 +2148,21 @@ class DashboardBlueprint(models.Model):
         rows.sort(key=lambda r: (r["string"] or "").lower())
         return rows
 
-    def studio_condition_catalog(self):
+    def studio_condition_catalog(self, model=None):
+        """Reusable conditions for Studio KPI/shortcut pickers.
+
+        When ``model`` is set (slot compute model), only return matching
+        conditions — same filter Advanced uses on ``condition_ids``.
+        """
         self.ensure_one()
-        conditions = self.env["dashboard.condition"].search([], order="name")
-        return [{"id": c.id, "name": c.name} for c in conditions]
+        domain = []
+        if model:
+            domain = [("model", "=", model)]
+        conditions = self.env["dashboard.condition"].search(domain, order="name")
+        return [
+            {"id": c.id, "name": c.name, "model": c.model or ""}
+            for c in conditions
+        ]
 
     def studio_header_icons(self):
         self.ensure_one()
@@ -1847,12 +2239,15 @@ class DashboardBlueprint(models.Model):
                 if text:
                     values.append(text)
             sep = item.separator or ", "
+            ka = item._effective_kind_alignment()
             header_lines.append(
                 {
                     "id": item.id,
-                    "kind": item.kind,
+                    "kind": ka["kind"],
+                    "alignment": ka["alignment"],
                     "icon": item.icon or False,
                     "text": sep.join(values),
+                    "field_names": item.field_names or ",".join(names),
                 }
             )
 
@@ -1970,6 +2365,12 @@ class DashboardBlueprint(models.Model):
             "header_image_style",
             "header_line_ids",
             "studio_layout",
+            "lens_my_enabled",
+            "lens_my_default",
+            "lens_my_label",
+            "lens_kpis_enabled",
+            "lens_kpis_default",
+            "lens_kpis_label",
         }
         if sync_fields.intersection(vals):
             for rec in self.filtered(lambda b: b.state == "published"):
@@ -2005,7 +2406,9 @@ class DashboardBlueprint(models.Model):
         return records
 
     def unlink(self):
-        views = self.mapped("generated_view_id")
+        views = self.mapped("generated_view_id") | self.mapped(
+            "generated_search_view_id"
+        )
         actions = self.mapped("generated_action_id")
         menus = self.mapped("generated_menu_id")
         res = super().unlink()
@@ -2203,12 +2606,14 @@ class DashboardBlueprint(models.Model):
                 pass
             return
 
+        search_view = self._upsert_search_view()
         view = self._upsert_kanban_view()
-        action = self._upsert_window_action(view)
+        action = self._upsert_window_action(view, search_view)
         menu = self._upsert_menu(action)
         self.write(
             {
                 "generated_view_id": view.id,
+                "generated_search_view_id": search_view.id,
                 "generated_action_id": action.id,
                 "generated_menu_id": menu.id,
                 "generated_arch_hash": self._kanban_arch_hash(),
@@ -2293,25 +2698,46 @@ class DashboardBlueprint(models.Model):
             )
         return "".join(blocks)
 
-    def _header_line_arch(self, item):
+    def _header_line_has_tags(self, item):
+        return any(
+            self._header_field_is_tags(item.host_model_name, name)
+            for name in item._field_names()
+        )
+
+    def _header_line_arch(self, item, *, force_tags_column=False):
         """One header line: ordered fields joined by Shown as, or tags.
 
-        Emitting the join as per-field conditions is what lets a single
-        configured line cover "Job", "Company" and "Job at Company" without
-        anyone configuring the three cases. Multi-relation fields always
-        render as tags; kind only chooses left vs right placement.
+        Alignment only moves text left/center/right inside the line (flex
+        justify). Multi-relation fields render as tags; when ``force_tags_column``
+        they sit in the far-right tags area, otherwise they follow alignment
+        under the title like other lines.
         """
         names = item._field_names()
         if not names:
             return ""
         model_name = item.host_model_name
+        ka = item._effective_kind_alignment()
+        kind = ka["kind"]
+        alignment = ka["alignment"]
+        flex_justify = {
+            "left": "justify-content-start",
+            "center": "justify-content-center",
+            "right": "justify-content-end",
+        }.get(alignment, "justify-content-start")
         tag_names = [
             name for name in names if self._header_field_is_tags(model_name, name)
         ]
         text_names = [name for name in names if name not in tag_names]
 
-        if item.kind == "right":
+        if force_tags_column:
             return self._header_tags_fields_arch(names, model_name)
+
+        def _aligned_row(shown, inner, extra_classes=""):
+            muted = " text-muted fw-bold" if kind == "subtitle" else ""
+            return f"""
+                        <div class="d-flex w-100 {flex_justify} dashboard_header_line dashboard_header_align_{alignment}{extra_classes}" t-if="{shown}">
+                            <span class="dashboard_header_line_inner d-inline-flex align-items-center flex-wrap{muted}">{inner}</span>
+                        </div>"""
 
         parts = []
         if text_names:
@@ -2329,80 +2755,72 @@ class DashboardBlueprint(models.Model):
                 )
             body = "".join(body_parts)
             shown = " or ".join(tests)
-            if item.kind == "left":
-                icon = ""
-                if item.icon:
-                    label = xml_escape(dict(HEADER_ICONS).get(item.icon, item.icon))
-                    icon = (
-                        f'<i class="fa {item.icon} me-1" title="{label}" '
-                        f'role="img" aria-label="{label}"/>'
-                    )
-                parts.append(
-                    f"""
-                        <div class="d-flex align-items-center me-3" t-if="{shown}">{icon}{body}</div>"""
+            icon = ""
+            if kind == "inline" and item.icon:
+                label = xml_escape(dict(HEADER_ICONS).get(item.icon, item.icon))
+                icon = (
+                    f'<i class="fa {item.icon} me-1" title="{label}" '
+                    f'role="img" aria-label="{label}"/>'
                 )
-            else:
-                parts.append(
-                    f"""
-                        <small class="text-muted fw-bold" t-if="{shown}">{body}</small>"""
-                )
+            parts.append(_aligned_row(shown, f"{icon}{body}"))
         if tag_names:
             tags = self._header_tags_fields_arch(tag_names, model_name)
-            if item.kind == "left":
-                # Own row under the title column (classic CRM card layout).
-                parts.append(
-                    f"""
-                        <div class="d-flex align-items-center flex-wrap mt-1 dashboard_header_left_tags">{tags}
-                        </div>"""
-                )
+            if kind == "inline" and alignment == "left":
+                tag_class = " dashboard_header_left_tags mt-1"
             else:
-                parts.append(tags)
+                tag_class = " dashboard_header_inline_tags mt-1"
+            parts.append(
+                f"""
+                        <div class="d-flex w-100 {flex_justify} dashboard_header_line dashboard_header_align_{alignment}{tag_class}">
+                            <span class="dashboard_header_line_inner d-inline-flex align-items-center flex-wrap">{tags}</span>
+                        </div>"""
+            )
         return "".join(parts)
 
     def _header_arch(self):
         self.ensure_one()
         title = self.header_title_field or "display_name"
         items = self.header_line_ids
+
+        def _ka(item):
+            return item._effective_kind_alignment()
+
         subtitles = "".join(
             self._header_line_arch(item)
-            for item in items.filtered(lambda i: i.kind == "subtitle")
+            for item in items
+            if _ka(item)["kind"] == "subtitle"
         )
-        left_items = items.filtered(lambda i: i.kind == "left")
-        details = "".join(
-            self._header_line_arch(item)
-            for item in left_items
-            if not any(
-                self._header_field_is_tags(item.host_model_name, name)
-                for name in item._field_names()
+        # Text / non-side tags: stay under the title; alignment is justify only.
+        # Multi-record fields with inline + right keep the classic far-right column.
+        inline_main = items.filtered(
+            lambda i: _ka(i)["kind"] == "inline"
+            and not (
+                _ka(i)["alignment"] == "right" and self._header_line_has_tags(i)
             )
         )
-        left_tags = "".join(
-            self._header_line_arch(item)
-            for item in left_items
-            if any(
-                self._header_field_is_tags(item.host_model_name, name)
-                for name in item._field_names()
-            )
+        details = "".join(self._header_line_arch(item) for item in inline_main)
+        side_tags = items.filtered(
+            lambda i: _ka(i)["kind"] == "inline"
+            and _ka(i)["alignment"] == "right"
+            and self._header_line_has_tags(i)
         )
         tags = "".join(
-            self._header_line_arch(item)
-            for item in items.filtered(lambda i: i.kind == "right")
+            self._header_line_arch(item, force_tags_column=True) for item in side_tags
         )
         subtitle_block = (
             f"""
-                    <div class="d-flex flex-column mb-1">{subtitles}
+                    <div class="d-flex flex-column mb-1 w-100 dashboard_header_subtitles">{subtitles}
                     </div>"""
             if subtitles
             else ""
         )
         detail_block = (
             f"""
-                    <div class="d-flex align-items-center text-muted small flex-wrap dashboard_contact_info">{details}
+                    <div class="d-flex flex-column w-100 text-muted small dashboard_contact_info dashboard_header_inline_stack">{details}
                     </div>"""
             if details
             else ""
         )
-        left_tags_block = left_tags or ""
         tag_block = (
             f"""
                 <div class="d-flex align-items-start justify-content-end flex-wrap ms-3 dashboard_header_right">{tags}
@@ -2412,10 +2830,10 @@ class DashboardBlueprint(models.Model):
         )
         return f"""
             <div class="d-flex position-relative py-2 overflow-visible align-items-center">{self._header_image_arch()}
-                <div class="d-flex flex-grow-1 flex-column justify-content-center position-relative min-w-0">
-                    <a class="o_employee_redirect d-flex flex-column" type="open">
+                <div class="d-flex flex-grow-1 flex-column justify-content-center position-relative min-w-0 w-100">
+                    <a class="o_employee_redirect d-flex flex-column w-100" type="open">
                         <span class="oe_kanban_action dashboard_kanban_title fs-4 fw-bold text-body"><field name="{title}"/></span>{subtitle_block}{detail_block}
-                    </a>{left_tags_block}
+                    </a>
                 </div>{tag_block}
             </div>"""
 
@@ -2468,58 +2886,108 @@ class DashboardBlueprint(models.Model):
                            options="{{'display': 'buttons'}}"/>
                 </div>"""
         if widget_type == "manage":
-            return """
-                <div class="container-fluid px-0">
-                    <div class="row">
-                        <div class="col-4" name="kanban_manage_views">
-                            <h5 class="o_kanban_card_manage_title">
-                                <span role="separator">View</span>
-                            </h5>
-                            <field name="dashboard_slots" widget="dashboard_slots"
-                                   options="{'display': 'menu', 'section': 'views'}"/>
-                        </div>
-                        <div class="col-4" name="kanban_manage_new">
-                            <h5 class="o_kanban_card_manage_title">
-                                <span role="separator">New</span>
-                            </h5>
-                            <field name="dashboard_slots" widget="dashboard_slots"
-                                   options="{'display': 'menu', 'section': 'new'}"/>
-                        </div>
-                        <div class="col-4" name="kanban_manage_reports">
-                            <h5 class="o_kanban_card_manage_title">
-                                <span role="separator">Reporting</span>
-                            </h5>
-                            <field name="dashboard_slots" widget="dashboard_slots"
-                                   options="{'display': 'menu', 'section': 'reports'}"/>
-                        </div>
-                    </div>
-                </div>"""
+            # Manage sections belong in the kanban card ⋮ menu template, not the body.
+            return ""
         return ""
 
     def _kanban_arch_from_layout(self, layout):
-        """Compose card body from Layout Studio rows/cols."""
+        """Compose card body from Layout Studio rows/cols.
+
+        Uses classic Odoo dashboard row patterns when a row matches known
+        compositions (primary+kpis, totals+shortcuts, full-width graph) so
+        published cards stay tight; other mixes use a Bootstrap grid.
+        """
         self.ensure_one()
         key = self.key
         caption = self.graph_caption or ""
         rows_html = []
         for row in layout.get("rows") or []:
-            cols_html = []
+            cols = []
             for col in row.get("cols") or []:
                 widget = col.get("widget") or {}
                 wtype = widget.get("type")
-                if wtype == "richtext" or wtype not in STUDIO_LAYOUT_WIDGETS:
+                if wtype == "richtext" or wtype == "manage":
                     continue
-                span = int(col.get("span") or 12)
-                inner = self._layout_widget_arch(wtype, key, caption)
-                cols_html.append(
-                    f'<div class="col-{span} mb-3" data-studio-widget="{wtype}">'
+                if wtype not in STUDIO_LAYOUT_CARD_WIDGETS:
+                    continue
+                cols.append(col)
+            if not cols:
+                continue
+            types = [(c.get("widget") or {}).get("type") for c in cols]
+            type_set = set(types)
+            row_id = row.get("id") or ""
+
+            if type_set == {"header"}:
+                inner = self._layout_widget_arch("header", key, caption)
+                rows_html.append(
+                    f'<div data-studio-row="{row_id}" data-studio-widget="header">'
                     f"{inner}</div>"
                 )
-            if cols_html:
+                continue
+
+            if type_set <= {"primary", "kpis"} and "primary" in type_set:
+                # Classic: fluid primary column + auto-sized KPIs.
+                parts = []
+                for col in cols:
+                    wtype = (col.get("widget") or {}).get("type")
+                    inner = self._layout_widget_arch(wtype, key, caption)
+                    if wtype == "primary":
+                        parts.append(
+                            f'<div class="col mb-3 mb-sm-0" data-studio-widget="primary">'
+                            f"{inner}</div>"
+                        )
+                    else:
+                        parts.append(
+                            f'<div class="col-auto" data-studio-widget="kpis">'
+                            f"{inner}</div>"
+                        )
                 rows_html.append(
-                    f'<div class="row" data-studio-row="{row.get("id") or ""}">'
-                    f'{"".join(cols_html)}</div>'
+                    f'<div class="row" data-studio-row="{row_id}">'
+                    f'{"".join(parts)}</div>'
                 )
+                continue
+
+            if type_set <= {"totals", "shortcuts"}:
+                # Classic footer row — do not wrap in col-* (breaks button_box CSS).
+                parts = []
+                for col in cols:
+                    wtype = (col.get("widget") or {}).get("type")
+                    parts.append(
+                        f'<div data-studio-widget="{wtype}">'
+                        f"{self._layout_widget_arch(wtype, key, caption)}</div>"
+                    )
+                rows_html.append(
+                    f'<div class="row footer" data-studio-row="{row_id}">'
+                    f'{"".join(parts)}</div>'
+                )
+                continue
+
+            if type_set == {"graph"}:
+                inner = self._layout_widget_arch("graph", key, caption)
+                rows_html.append(
+                    f'<div class="row mt-auto" data-studio-row="{row_id}">'
+                    f'<div class="w-100" data-studio-widget="graph">{inner}</div>'
+                    f"</div>"
+                )
+                continue
+
+            # Generic grid (e.g. KPIs | chart side-by-side).
+            cols_html = []
+            for col in cols:
+                wtype = (col.get("widget") or {}).get("type")
+                span = int(col.get("span") or 12)
+                inner = self._layout_widget_arch(wtype, key, caption)
+                cell_class = "o_ds_layout_cell h-100"
+                if wtype == "graph":
+                    cell_class += " o_ds_layout_graph"
+                cols_html.append(
+                    f'<div class="col-{span}" data-studio-widget="{wtype}">'
+                    f'<div class="{cell_class}">{inner}</div></div>'
+                )
+            rows_html.append(
+                f'<div class="row g-3 align-items-start" data-studio-row="{row_id}">'
+                f'{"".join(cols_html)}</div>'
+            )
         body = "\n".join(rows_html) or self._legacy_card_body_arch()
         return body
 
@@ -2603,14 +3071,27 @@ class DashboardBlueprint(models.Model):
                     for col in row.get("cols") or []
                 }
                 if "header" in types_used:
+                    # Header first (no extra top margin); body rows get classic spacing.
+                    body_layout = dict(layout)
+                    body_layout["rows"] = [
+                        row
+                        for row in (layout.get("rows") or [])
+                        if not any(
+                            (col.get("widget") or {}).get("type") == "header"
+                            for col in (row.get("cols") or [])
+                        )
+                    ]
+                    header_html = self._header_arch()
+                    body_html = self._kanban_arch_from_layout(body_layout)
                     card_inner = (
-                        f'<div class="p-0 container-fluid">'
-                        f"{self._kanban_arch_from_layout(layout)}</div>"
+                        f"{header_html}"
+                        f'<div class="mt-3 p-0 container-fluid o_ds_layout_body">'
+                        f"{body_html}</div>"
                     )
                 else:
                     card_inner = (
                         f"{self._header_arch()}"
-                        f'<div class="mt-3 p-0 container-fluid">'
+                        f'<div class="mt-3 p-0 container-fluid o_ds_layout_body">'
                         f"{self._kanban_arch_from_layout(layout)}</div>"
                     )
             except UserError:
@@ -2690,7 +3171,100 @@ class DashboardBlueprint(models.Model):
             return self.generated_view_id
         return View.create(vals)
 
-    def _upsert_window_action(self, view):
+    def _host_default_search_view(self):
+        """Primary search view for the host model (lowest priority)."""
+        self.ensure_one()
+        View = self.env["ir.ui.view"].sudo()
+        view_id = View.default_view(self.host_model_name, "search")
+        return View.browse(view_id) if view_id else View.browse()
+
+    def _search_arch(self):
+        """Inherit arch injecting only enabled lens filters."""
+        self.ensure_one()
+        parts = []
+        if self.lens_my_enabled:
+            label = xml_escape((self.lens_my_label or "").strip())
+            parts.append(
+                f'<filter name="dashboard_my_data" string="{label}" '
+                f"domain=\"[('dashboard_my_data', '=', True)]\" "
+                f"invisible=\"not context.get('show_dashboard_my_filter')\"/>"
+            )
+        if self.lens_kpis_enabled:
+            if parts:
+                parts.append("<separator/>")
+            label = xml_escape((self.lens_kpis_label or "").strip())
+            parts.append(
+                f'<filter name="dashboard_with_kpis" string="{label}" '
+                f"domain=\"[('dashboard_with_kpis', '=', True)]\" "
+                f"invisible=\"not context.get('show_dashboard_kpis_filter')\"/>"
+            )
+        inner = "\n            ".join(parts)
+        return (
+            "<data>\n"
+            '  <xpath expr="//search" position="inside">\n'
+            f"            {inner}\n"
+            "  </xpath>\n"
+            "</data>"
+        )
+
+    def _upsert_search_view(self):
+        self.ensure_one()
+        View = self.env["ir.ui.view"].sudo()
+        parent = self._host_default_search_view()
+        vals = {
+            "name": f"dashboard.engine.search.{self.key}",
+            "model": self.host_model_name,
+            "type": "search",
+            "arch": self._search_arch(),
+            "priority": 99,
+            "mode": "primary",
+        }
+        if parent:
+            vals["inherit_id"] = parent.id
+        else:
+            # No host search: standalone primary with enabled filters only.
+            filters = []
+            if self.lens_my_enabled:
+                label = xml_escape((self.lens_my_label or "").strip())
+                filters.append(
+                    f'<filter name="dashboard_my_data" string="{label}" '
+                    f"domain=\"[('dashboard_my_data', '=', True)]\" "
+                    f"invisible=\"not context.get('show_dashboard_my_filter')\"/>"
+                )
+            if self.lens_kpis_enabled:
+                if filters:
+                    filters.append("<separator/>")
+                label = xml_escape((self.lens_kpis_label or "").strip())
+                filters.append(
+                    f'<filter name="dashboard_with_kpis" string="{label}" '
+                    f"domain=\"[('dashboard_with_kpis', '=', True)]\" "
+                    f"invisible=\"not context.get('show_dashboard_kpis_filter')\"/>"
+                )
+            vals["arch"] = f"<search>{''.join(filters)}</search>"
+            vals["inherit_id"] = False
+        if self.generated_search_view_id:
+            self.generated_search_view_id.write(vals)
+            return self.generated_search_view_id
+        return View.create(vals)
+
+    def _lens_action_context(self):
+        """Context keys for generated act_window (lens show + search defaults)."""
+        self.ensure_one()
+        ctx = {
+            "dashboard_blueprint_key": self.key,
+            "initializer": self.key,
+        }
+        if self.lens_my_enabled:
+            ctx["show_dashboard_my_filter"] = True
+            if self.lens_my_default:
+                ctx["search_default_dashboard_my_data"] = True
+        if self.lens_kpis_enabled:
+            ctx["show_dashboard_kpis_filter"] = True
+            if self.lens_kpis_default:
+                ctx["search_default_dashboard_with_kpis"] = True
+        return ctx
+
+    def _upsert_window_action(self, view, search_view=None):
         self.ensure_one()
         Action = self.env["ir.actions.act_window"].sudo()
         vals = {
@@ -2698,10 +3272,8 @@ class DashboardBlueprint(models.Model):
             "res_model": self.host_model_name,
             "view_mode": "kanban,list,form",
             "view_id": view.id,
-            "context": {
-                "dashboard_blueprint_key": self.key,
-                "initializer": self.key,
-            },
+            "search_view_id": search_view.id if search_view else False,
+            "context": self._lens_action_context(),
             "domain": [],
             "target": "current",
         }
@@ -3161,10 +3733,12 @@ class DashboardBlueprint(models.Model):
         return fold
 
     def _restrict_scope_domain(self):
-        """Domain from ticked 'narrows down' scopes (e.g. Only mine).
+        """Domain from ticked 'narrows down' scopes (e.g. My Pipeline).
 
         Include scopes (Pipeline / Leads) stay graph-only: KPI slots keep
-        their own domains. Restrict scopes apply to graph, KPIs and actions.
+        their own domains. Restrict scopes apply to graph, primary button,
+        and right KPIs only — not bottoms or Manage menus.
+        See docs/superpowers/specs/2026-07-28-restrict-scope-surface-matrix-design.md
         """
         self.ensure_one()
         available = self.scope_ids.filtered(lambda s: s.mode == "restrict")
@@ -3178,6 +3752,66 @@ class DashboardBlueprint(models.Model):
         if len(parts) == 1:
             return list(parts[0])
         return list(fields.Domain.AND(parts))
+
+    def _lens_can_resolve_my(self):
+        self.ensure_one()
+        Host = self.env.get(self.host_model_name)
+        if Host is None:
+            return False
+        if "user_id" in Host._fields:
+            return True
+        if not self.graph_model or self.graph_model not in self.env:
+            return False
+        Graph = self.env[self.graph_model]
+        link = self._resolve_graph_path_string()[0] or self.graph_data_field
+        if not link or "." in link:
+            return False
+        return "user_id" in Graph._fields
+
+    def _lens_my_domain(self):
+        self.ensure_one()
+        Host = self.env.get(self.host_model_name)
+        if Host is not None and "user_id" in Host._fields:
+            return [("user_id", "=", self.env.uid)]
+        ids = self._lens_kpis_host_ids(
+            extra_domain=[("user_id", "=", self.env.uid)]
+        )
+        return [("id", "in", ids)] if ids else [("id", "=", False)]
+
+    def _lens_kpis_host_ids(self, extra_domain=None):
+        """Distinct host ids that appear in this blueprint's graph scope."""
+        self.ensure_one()
+        if not self.graph_model or self.graph_model not in self.env:
+            return []
+        link = self._resolve_graph_path_string()[0] or self.graph_data_field
+        if not link or "." in link:
+            return []
+        Graph = self.env[self.graph_model].with_context(
+            _dashboard_fetching_data=True
+        )
+        domain = list(self._safe_domain(self.graph_domain))
+        domain = domain + list(self._restrict_scope_domain() or [])
+        if extra_domain:
+            domain = domain + list(extra_domain)
+        try:
+            groups = Graph.formatted_read_group(
+                domain=domain,
+                groupby=[link],
+                aggregates=["__count"],
+            )
+        except Exception:
+            _logger.debug(
+                "Lens KPI host ids failed for blueprint %s", self.key
+            )
+            return []
+        ids = []
+        seen = set()
+        for group in groups:
+            host_id = self._graph_group_id(group.get(link))
+            if host_id and host_id not in seen:
+                seen.add(host_id)
+                ids.append(host_id)
+        return ids
 
     def _build_graph_payloads(self, records):
         """Return ``{record_id: {"json": str, "type": str}}`` for a recordset.
@@ -3740,7 +4374,11 @@ class DashboardBlueprint(models.Model):
         return resolved
 
     def _eval_context_with_record(self, context_value, record):
-        """Normalize action context and inject {{id}} replacements."""
+        """Normalize action context, {{id}} replacements, and ``__de__`` tokens.
+
+        Token resolution is generic (any model): see
+        ``tools.condition_domain.compile_context_value``.
+        """
         self.ensure_one()
         if not context_value:
             return {}
@@ -3749,10 +4387,12 @@ class DashboardBlueprint(models.Model):
         else:
             raw = str(context_value).replace("{{id}}", str(record.id))
             try:
-                ctx = safe_eval(raw)
+                ctx = json.loads(raw) if raw.lstrip().startswith("{") else None
             except Exception:
+                ctx = None
+            if ctx is None:
                 try:
-                    ctx = json.loads(raw)
+                    ctx = safe_eval(raw)
                 except Exception:
                     return {}
             if not isinstance(ctx, dict):
@@ -3765,10 +4405,15 @@ class DashboardBlueprint(models.Model):
                 resolved[key] = value.replace("{{id}}", str(record.id))
             else:
                 resolved[key] = value
-        return resolved
+        return compile_context_value(
+            resolved,
+            self.env,
+            record=record,
+            model_name=record._name if record is not None else None,
+        )
 
     @api.model
-    def _safe_domain(self, domain_str):
+    def _safe_domain(self, domain_str, strict=False):
         if not domain_str:
             return []
         try:
@@ -3777,9 +4422,19 @@ class DashboardBlueprint(models.Model):
                 if isinstance(domain_str, str)
                 else domain_str
             )
-            return list(domain) if isinstance(domain, (list, tuple)) else []
-        except Exception:
+        except Exception as exc:
+            if strict:
+                raise UserError(
+                    _("Custom Filter must be a valid Python domain list.")
+                ) from exc
             return []
+        if not isinstance(domain, (list, tuple)):
+            if strict:
+                raise UserError(
+                    _("Custom Filter must be a valid Python domain list.")
+                )
+            return []
+        return list(domain)
 
 
 class DashboardBlueprintSlot(models.Model):
@@ -3852,16 +4507,16 @@ class DashboardBlueprintSlot(models.Model):
         help="Optional second aggregate, e.g. expected_revenue:sum"
     )
     relate_field = fields.Char(
-        string="Link to card",
-        help="Many2one path from the count model to this card "
-        "(e.g. partner_id or product_id.categ_id). Leave empty to reuse "
-        "the chart link.",
+        string="Link to Host",
+        help="Many2one path on the count model that points back to this "
+        "host (same meaning as Link to Host on the graph). Leave empty "
+        "to reuse the chart link field.",
     )
     relation_path_id = fields.Many2one(
         "dashboard.relation.path",
         string="Relation Path (legacy)",
         ondelete="restrict",
-        help="Deprecated: prefer Link to card. Kept for migration.",
+        help="Deprecated: prefer Link to Host. Kept for migration.",
     )
     condition_ids = fields.Many2many(
         "dashboard.condition",
@@ -3911,13 +4566,14 @@ class DashboardBlueprintSlot(models.Model):
     )
     relate_field_id = fields.Many2one(
         "ir.model.fields",
-        string="Related Field",
+        string="Link to Host",
         compute="_compute_relate_field_id",
         inverse="_inverse_relate_field_id",
         store=True,
         readonly=False,
         ondelete="set null",
-        help="Leave empty to reuse the chart's link field.",
+        help="Many2one on the count model that links rows to this host. "
+        "Leave empty to reuse the graph Link to Host field.",
     )
     count_measure_field_id = fields.Many2one(
         "ir.model.fields",
@@ -4435,6 +5091,20 @@ class DashboardBlueprintSlot(models.Model):
             env=self.env, path=path_str, source_model=source
         )
 
+    def _honours_restrict_scope(self):
+        """Whether gear restrict scopes (e.g. My Pipeline) apply to this slot.
+
+        Product matrix: right KPIs only, and only when counting the graph
+        model. Bottoms and Manage menus stay partner/action context only.
+        """
+        self.ensure_one()
+        bp = self.blueprint_id
+        return (
+            self.section == "kpi"
+            and bool(self.compute_model)
+            and self.compute_model == bp.graph_model
+        )
+
     def _apply_aggregate(self, values, records, relate, path=None):
         self.ensure_one()
         Model = self.env[self.compute_model]
@@ -4447,7 +5117,7 @@ class DashboardBlueprintSlot(models.Model):
         if not aggregates:
             aggregates = [aggregate]
         domain = self._eval_domain_batch(self.compute_domain, records)
-        if self.compute_model == self.blueprint_id.graph_model:
+        if self._honours_restrict_scope():
             domain = list(domain) + self.blueprint_id._restrict_scope_domain()
         fold_map = None
         if not path and relate and self.blueprint_id._hierarchy_enabled():
@@ -4656,7 +5326,7 @@ class DashboardBlueprintSlot(models.Model):
             return False
 
         domain = self._eval_domain(self.action_domain, record)
-        if self.compute_model == self.blueprint_id.graph_model:
+        if self._honours_restrict_scope():
             domain = list(domain) + self.blueprint_id._restrict_scope_domain()
         if domain:
             existing = result.get("domain") or []
@@ -4664,12 +5334,9 @@ class DashboardBlueprintSlot(models.Model):
                 existing = self.blueprint_id._safe_domain(existing)
             result["domain"] = self.blueprint_id._merge_domains(existing, domain)
 
-        ctx = {}
-        try:
-            raw = (self.action_context or "{}").replace("{{id}}", str(record.id))
-            ctx = json.loads(raw) if raw.startswith("{") else safe_eval(raw)
-        except Exception:
-            ctx = {}
+        ctx = self.blueprint_id._eval_context_with_record(
+            self.action_context, record
+        )
         result_ctx = result.get("context") or {}
         if isinstance(result_ctx, str):
             try:
@@ -4960,9 +5627,9 @@ class DashboardBlueprintScopeLabel(models.Model):
 class DashboardBlueprintHeaderItem(models.Model):
     """One line of the card header, below the title.
 
-    Subtitle / Left join an ordered list of host fields with Shown as.
-    Right renders each selected many2many/one2many as tags. Empty values are
-    skipped so one line covers "Job", "Company" and "Job at Company".
+    Subtitle and inline text stay under the title; alignment only left/center/
+    right-justifies the line. Icons stay on any inline line. Multi-record
+    fields with Inline + Right still use the far-right tags column.
     """
 
     _name = "dashboard.blueprint.header.item"
@@ -4980,14 +5647,22 @@ class DashboardBlueprintHeaderItem(models.Model):
     kind = fields.Selection(
         [
             ("subtitle", "Subtitle"),
-            ("left", "Left"),
-            ("right", "Right"),
+            ("inline", "Inline"),
         ],
         required=True,
         default="subtitle",
-        help="Subtitle and Left stack under the title. Right pins to the "
-        "far right of the card header. Many2many / one2many fields always "
-        "render as tags on the side you choose.",
+        help="Subtitle stacks muted text under the title. Inline joins detail "
+        "rows or tag columns; use Alignment to place them.",
+    )
+    alignment = fields.Selection(
+        [
+            ("left", "Left"),
+            ("center", "Center"),
+            ("right", "Right"),
+        ],
+        required=True,
+        default="left",
+        help="Horizontal placement for this line (subtitle and inline).",
     )
     icon = fields.Selection(
         HEADER_ICONS,
@@ -4997,8 +5672,9 @@ class DashboardBlueprintHeaderItem(models.Model):
         HEADER_SEPARATORS,
         string="Shown as",
         default=", ",
-        help="How multiple field values are joined on Subtitle / Left "
-        "(e.g. Paris, France or Sales Manager at Acme). Ignored for Right.",
+        help="How multiple field values are joined on Subtitle / Inline "
+        "(e.g. Paris, France or Sales Manager at Acme). Ignored for tag "
+        "fields pinned to the far-right column (Inline + Right).",
     )
     # Portable ordered technical names (source of truth for export / seeds).
     field_names = fields.Char(
@@ -5018,9 +5694,9 @@ class DashboardBlueprintHeaderItem(models.Model):
         inverse="_inverse_field_ids",
         store=True,
         readonly=False,
-        help="Ordered host fields for this line. Subtitle / Left join text "
+        help="Ordered host fields for this line. Subtitle / Inline join text "
         "fields with Shown as. Many2many / one2many fields render as tags "
-        "on Left or Right. Right expects many2many / one2many only.",
+        "on Inline Left/Center or the far-right column when Inline + Right.",
     )
     has_multiple_fields = fields.Boolean(
         compute="_compute_has_multiple_fields",
@@ -5081,12 +5757,48 @@ class DashboardBlueprintHeaderItem(models.Model):
         return self._parse_ordered_field_ids(self.ordered_field_ids, self.field_ids)
 
     @api.model
+    def _map_legacy_header_kind(self, old_kind):
+        return {
+            "left": {"kind": "inline", "alignment": "left"},
+            "right": {"kind": "inline", "alignment": "right"},
+            "subtitle": {"kind": "subtitle", "alignment": "left"},
+            "inline": {"kind": "inline", "alignment": "left"},
+        }.get(old_kind, {"kind": "subtitle", "alignment": "left"})
+
+    def _effective_kind_alignment(self):
+        """Kind and alignment used for rendering (pre-migration rows included)."""
+        self.ensure_one()
+        if self.kind in ("left", "right"):
+            return self._map_legacy_header_kind(self.kind)
+        return {
+            "kind": self.kind,
+            "alignment": self.alignment or "left",
+        }
+
+    @api.model
+    def _normalize_kind_alignment_vals(self, vals):
+        vals = dict(vals)
+        kind = vals.get("kind")
+        if kind in ("left", "right", "detail", "tags"):
+            if kind == "detail":
+                kind = "left"
+            elif kind == "tags":
+                kind = "right"
+            mapped = self._map_legacy_header_kind(kind)
+            vals["kind"] = mapped["kind"]
+            vals.setdefault("alignment", mapped["alignment"])
+        elif kind in ("subtitle", "inline"):
+            vals.setdefault("alignment", "left")
+        return vals
+
+    @api.model
     def _coerce_legacy_header_fields(self, vals):
         """Map old field_name / field2_name writes onto field_names."""
+        vals = dict(vals)
         if vals.get("field_names"):
             vals.pop("field_name", None)
             vals.pop("field2_name", None)
-            return vals
+            return self._normalize_kind_alignment_vals(vals)
         names = []
         if vals.get("field_name"):
             names.append(vals["field_name"])
@@ -5096,7 +5808,7 @@ class DashboardBlueprintHeaderItem(models.Model):
         vals.pop("field2_name", None)
         if names:
             vals["field_names"] = ",".join(names)
-        return vals
+        return self._normalize_kind_alignment_vals(vals)
 
     @api.model_create_multi
     def create(self, vals_list):
@@ -5124,20 +5836,10 @@ class DashboardBlueprintHeaderItem(models.Model):
             bp._sync_generated_artifacts()
         return res
 
-    @api.constrains("kind", "field_names", "field_ids")
+    @api.constrains("kind", "alignment", "field_names", "field_ids")
     def _check_right_fields(self):
-        for rec in self:
-            if rec.kind != "right":
-                continue
-            for field in rec._ordered_fields():
-                if field.ttype not in ("many2many", "one2many"):
-                    raise ValidationError(
-                        _(
-                            "%(field)s cannot be shown on the right: pick fields "
-                            "that hold several records.",
-                            field=field.field_description,
-                        )
-                    )
+        """Compatibility hook — right is text justify, not tags-only."""
+        return
 
     def _field_names(self):
         """Fields this line reads, in display order."""
@@ -5292,7 +5994,7 @@ class DashboardUserPref(models.Model):
     )
     custom_filter = fields.Char(
         default="[]",
-        string="Custom Filter…",
+        string="Custom Filter",
         help="Add custom rules to further narrow down the data based on "
         "your business needs.",
     )
