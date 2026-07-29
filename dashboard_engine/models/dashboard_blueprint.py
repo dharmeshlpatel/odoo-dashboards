@@ -1321,6 +1321,7 @@ class DashboardBlueprint(models.Model):
         "label_plural",
         "icon",
         "style",
+        "style_mode",
         "show_if_zero",
         "action_xmlid",
         "action_method",
@@ -1340,6 +1341,7 @@ class DashboardBlueprint(models.Model):
             "label_plural",
             "icon",
             "style",
+            "style_mode",
             "show_if_zero",
             "action_xmlid",
             "action_method",
@@ -4472,9 +4474,24 @@ class DashboardBlueprintSlot(models.Model):
     )
     icon = fields.Char(help="Font Awesome class without 'fa ', e.g. fa-star")
     style = fields.Selection(
-        [("default", "Default"), ("danger", "Danger")],
+        [
+            ("default", "Default"),
+            ("warning", "Warning"),
+            ("danger", "Danger"),
+        ],
         default="default",
         required=True,
+    )
+    style_mode = fields.Selection(
+        [
+            ("static", "Always"),
+            ("when_positive", "When value > 0"),
+        ],
+        string="Style mode",
+        default="static",
+        required=True,
+        help="Always = use Style as painted. "
+        "When value > 0 = Style only if count or amount is positive; else Default.",
     )
     groups_xmlids = fields.Char(
         help="Comma-separated group xmlids required to see this slot."
@@ -5221,6 +5238,18 @@ class DashboardBlueprintSlot(models.Model):
                 plural = slot.label_plural_alt or slot.label_alt or plural
         return singular, plural
 
+    def _resolved_style(self, count, amount):
+        self.ensure_one()
+        base = self.style or "default"
+        if (self.style_mode or "static") != "when_positive":
+            return base
+        positive = False
+        if count is not None and count:
+            positive = True
+        if amount is not None and amount:
+            positive = True
+        return base if positive else "default"
+
     def _to_slot_item(self, record, values=None):
         self.ensure_one()
         if values is None:
@@ -5247,7 +5276,7 @@ class DashboardBlueprintSlot(models.Model):
             "key": self.key,
             "sequence": self.sequence,
             "label": label,
-            "style": self.style or "default",
+            "style": self._resolved_style(count, amount),
             "method": "action_dashboard_engine_slot",
             # Consumed by the dashboard_slots field widget, which passes it to
             # doActionButton; action_dashboard_engine_slot reads it back.

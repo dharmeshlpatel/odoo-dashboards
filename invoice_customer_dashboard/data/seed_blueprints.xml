@@ -1,0 +1,160 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Invoice Customers blueprint preset (Wave 2).
+-->
+<odoo noupdate="1">
+    <record id="blueprint_invoice_customers" model="dashboard.blueprint">
+        <field name="name">Invoice Customers</field>
+        <field name="key">invoice_customers</field>
+        <field name="host_model_id" ref="base.model_res_partner"/>
+        <field name="module_depends">account</field>
+        <field name="menu_name">Customers Dashboard</field>
+        <field name="menu_parent_xmlid">account.menu_finance_receivables</field>
+        <field name="menu_sequence">5</field>
+        <field name="primary_button_label">Invoice Analysis</field>
+        <field name="primary_action_xmlid">account.action_account_invoice_report_all</field>
+        <field name="graph_model">account.invoice.report</field>
+        <field name="graph_data_field">partner_id</field>
+        <field name="graph_measure">price_subtotal:sum</field>
+        <field name="graph_groupby">invoice_date:month</field>
+        <field name="graph_domain">[('move_type', '=', 'out_invoice')]</field>
+        <field name="graph_caption">Invoices</field>
+        <field name="lens_my_enabled" eval="True"/>
+        <field name="lens_my_default" eval="True"/>
+        <field name="lens_my_label">My Partners</field>
+        <field name="lens_kpis_enabled" eval="True"/>
+        <field name="lens_kpis_default" eval="True"/>
+        <field name="lens_kpis_label">With KPIs</field>
+        <field name="state">published</field>
+        <field name="sequence">25</field>
+    </record>
+
+    <record id="scope_inv_posted" model="dashboard.blueprint.scope">
+        <field name="blueprint_id" ref="blueprint_invoice_customers"/>
+        <field name="sequence">10</field>
+        <field name="name">Posted invoices</field>
+        <field name="mode">include</field>
+        <field name="domain">[('state', '!=', 'cancel'), ('move_type', '=', 'out_invoice')]</field>
+        <field name="default_on" eval="True"/>
+    </record>
+
+    <record id="scope_inv_draft" model="dashboard.blueprint.scope">
+        <field name="blueprint_id" ref="blueprint_invoice_customers"/>
+        <field name="sequence">20</field>
+        <field name="name">Draft invoices</field>
+        <field name="mode">include</field>
+        <field name="domain">[('state', '=', 'draft'), ('move_type', '=', 'out_invoice')]</field>
+        <field name="default_on" eval="False"/>
+    </record>
+
+    <record id="slot_inv_open_invoices" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_invoice_customers"/>
+        <field name="key">open_invoices</field>
+        <field name="name">Open Invoices</field>
+        <field name="section">kpi</field>
+        <field name="sequence">10</field>
+        <field name="label">Open Invoice</field>
+        <field name="label_plural">Open Invoices</field>
+        <field name="show_if_zero" eval="True"/>
+        <field name="compute_model">account.move</field>
+        <field name="relate_field">partner_id</field>
+        <field name="compute_domain">[('move_type', '=', 'out_invoice'), ('state', '=', 'posted'), ('payment_state', 'in', ('not_paid', 'partial', 'in_payment'))]</field>
+        <field name="compute_aggregator">__count</field>
+        <field name="action_xmlid">account.action_move_out_invoice_type</field>
+        <field name="action_domain">[('partner_id', '=', '{{id}}'), ('move_type', '=', 'out_invoice'), ('state', '=', 'posted'), ('payment_state', 'in', ('not_paid', 'partial', 'in_payment'))]</field>
+        <field name="module_depends">account</field>
+    </record>
+
+    <record id="slot_inv_overdue_invoices" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_invoice_customers"/>
+        <field name="key">overdue_invoices</field>
+        <field name="name">Overdue Invoices</field>
+        <field name="section">kpi</field>
+        <field name="sequence">20</field>
+        <field name="label">Overdue Invoice</field>
+        <field name="label_plural">Overdue Invoices</field>
+        <field name="style">danger</field>
+        <field name="style_mode">when_positive</field>
+        <field name="show_if_zero" eval="True"/>
+        <field name="compute_model">account.move</field>
+        <field name="relate_field">partner_id</field>
+        <field name="compute_domain">[('move_type', '=', 'out_invoice'), ('state', '=', 'posted'), ('payment_state', 'in', ('not_paid', 'partial', 'in_payment'))]</field>
+        <field name="condition_ids" eval="[(4, ref('condition_inv_overdue_due_date'))]"/>
+        <field name="compute_aggregator">__count</field>
+        <field name="action_xmlid">account.action_move_out_invoice_type</field>
+        <field name="action_domain">[('partner_id', '=', '{{id}}'), ('move_type', '=', 'out_invoice'), ('state', '=', 'posted'), ('payment_state', 'in', ('not_paid', 'partial', 'in_payment'))]</field>
+        <field name="module_depends">account</field>
+    </record>
+
+    <record id="slot_inv_draft_invoices" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_invoice_customers"/>
+        <field name="key">draft_invoices</field>
+        <field name="name">Draft Invoices</field>
+        <field name="section">kpi</field>
+        <field name="sequence">30</field>
+        <field name="label">Draft Invoice</field>
+        <field name="label_plural">Draft Invoices</field>
+        <field name="show_if_zero" eval="True"/>
+        <field name="compute_model">account.move</field>
+        <field name="relate_field">partner_id</field>
+        <field name="compute_domain">[('move_type', '=', 'out_invoice'), ('state', '=', 'draft')]</field>
+        <field name="compute_aggregator">__count</field>
+        <field name="action_xmlid">account.action_move_out_invoice_type</field>
+        <field name="action_domain">[('partner_id', '=', '{{id}}'), ('move_type', '=', 'out_invoice'), ('state', '=', 'draft')]</field>
+        <field name="module_depends">account</field>
+    </record>
+
+    <record id="slot_inv_credit_notes" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_invoice_customers"/>
+        <field name="key">credit_notes</field>
+        <field name="name">Credit Notes</field>
+        <field name="section">kpi</field>
+        <field name="sequence">40</field>
+        <field name="label">Credit Note</field>
+        <field name="label_plural">Credit Notes</field>
+        <field name="show_if_zero" eval="True"/>
+        <field name="compute_model">account.move</field>
+        <field name="relate_field">partner_id</field>
+        <field name="compute_domain">[('move_type', '=', 'out_refund'), ('state', '!=', 'cancel')]</field>
+        <field name="compute_aggregator">__count</field>
+        <field name="action_xmlid">account.action_move_out_refund_type</field>
+        <field name="action_domain">[('partner_id', '=', '{{id}}'), ('move_type', '=', 'out_refund'), ('state', '!=', 'cancel')]</field>
+        <field name="module_depends">account</field>
+    </record>
+
+    <record id="slot_inv_bottom_invoices" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_invoice_customers"/>
+        <field name="key">bottom_invoices</field>
+        <field name="name">Invoices Button</field>
+        <field name="section">bottom</field>
+        <field name="sequence">10</field>
+        <field name="label">Invoices</field>
+        <field name="icon">fa-pencil-square-o</field>
+        <field name="show_if_zero" eval="True"/>
+        <field name="groups_xmlids">account.group_account_invoice</field>
+        <field name="compute_model">account.move</field>
+        <field name="relate_field">partner_id</field>
+        <field name="compute_domain">[('move_type', '=', 'out_invoice'), ('state', '!=', 'cancel')]</field>
+        <field name="action_xmlid">account.action_move_out_invoice_type</field>
+        <field name="action_domain">[('partner_id', '=', '{{id}}'), ('move_type', '=', 'out_invoice')]</field>
+        <field name="module_depends">account</field>
+    </record>
+
+    <record id="slot_inv_bottom_credit_notes" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_invoice_customers"/>
+        <field name="key">bottom_credit_notes</field>
+        <field name="name">Credit Notes Button</field>
+        <field name="section">bottom</field>
+        <field name="sequence">20</field>
+        <field name="label">Credit Notes</field>
+        <field name="icon">fa-file-text-o</field>
+        <field name="show_if_zero" eval="True"/>
+        <field name="groups_xmlids">account.group_account_invoice</field>
+        <field name="compute_model">account.move</field>
+        <field name="relate_field">partner_id</field>
+        <field name="compute_domain">[('move_type', '=', 'out_refund'), ('state', '!=', 'cancel')]</field>
+        <field name="action_xmlid">account.action_move_out_refund_type</field>
+        <field name="action_domain">[('partner_id', '=', '{{id}}'), ('move_type', '=', 'out_refund')]</field>
+        <field name="module_depends">account</field>
+    </record>
+</odoo>

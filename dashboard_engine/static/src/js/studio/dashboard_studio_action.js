@@ -60,6 +60,7 @@ const EMPTY_EDITOR = () => ({
     label_plural: "",
     icon: "",
     style: "default",
+    style_mode: "static",
     show_if_zero: true,
     action_xmlid: "",
     action_method: "",
@@ -94,6 +95,16 @@ const EMPTY_EDITOR = () => ({
     header_image_field: "",
     header_image_style: "avatar",
 });
+
+/** Mirror dashboard.blueprint.slot._resolved_style(count, amount). */
+function resolvedSlotStyle(style, styleMode, count, amount) {
+    const base = style || "default";
+    if ((styleMode || "static") !== "when_positive") {
+        return base;
+    }
+    const positive = !!(count || amount);
+    return positive ? base : "default";
+}
 
 const EMPTY_SETUP = () => ({
     host_model_id: false,
@@ -249,13 +260,20 @@ export class DashboardStudioAction extends Component {
                 return item;
             }
             const label = (ed.label || "").trim() || item.label || item.name;
+            const styleMode = ed.style_mode || item.style_mode || "static";
             return {
                 ...item,
                 label,
                 label_plural: (ed.label_plural || "").trim() || item.label_plural,
                 name: label,
                 icon: ed.icon || item.icon,
-                style: ed.style || item.style,
+                style: resolvedSlotStyle(
+                    ed.style || item.style,
+                    styleMode,
+                    item.count,
+                    item.amount
+                ),
+                style_mode: styleMode,
                 _draft: true,
             };
         });
@@ -1332,6 +1350,7 @@ export class DashboardStudioAction extends Component {
             ed.label_plural = slot.label_plural || "";
             ed.icon = slot.icon || "";
             ed.style = slot.style || "default";
+            ed.style_mode = slot.style_mode || "static";
             ed.show_if_zero = Boolean(slot.show_if_zero);
             ed.action_xmlid = slot.action_xmlid || "";
             ed.action_method = slot.action_method || "";
@@ -1997,6 +2016,7 @@ export class DashboardStudioAction extends Component {
                     label_plural: ed.label_plural,
                     icon: ed.icon || false,
                     style: ed.style || "default",
+                    style_mode: ed.style_mode || "static",
                     show_if_zero: ed.show_if_zero,
                     action_xmlid: ed.action_xmlid || false,
                     action_method: ed.action_method || false,

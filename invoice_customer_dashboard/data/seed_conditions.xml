@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo noupdate="1">
+    <record id="condition_inv_overdue_due_date" model="dashboard.condition">
+        <field name="name">Invoice due date before today</field>
+        <field name="model">account.move</field>
+        <field name="match">all</field>
+        <field name="module_depends">account</field>
+        <field name="note">Due date strictly before today (open invoices filtered on the slot).</field>
+    </record>
+    <record id="rule_inv_overdue_due_date" model="dashboard.condition.rule">
+        <field name="condition_id" ref="condition_inv_overdue_due_date"/>
+        <field name="sequence">10</field>
+        <field name="field_name">invoice_date_due</field>
+        <field name="operator">&lt;</field>
+        <field name="value_type">relative_date</field>
+        <field name="relative_when">today</field>
+    </record>
+</odoo>

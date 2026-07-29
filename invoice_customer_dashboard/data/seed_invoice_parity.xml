@@ -1,0 +1,130 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Invoice Customers totals, menus, payments (soft-deps where needed).
+-->
+<odoo noupdate="1">
+    <record id="slot_inv_box_total_due" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_invoice_customers"/>
+        <field name="key">box_total_due</field>
+        <field name="name">Total Due</field>
+        <field name="section">button_box</field>
+        <field name="sequence">10</field>
+        <field name="label">Total Due</field>
+        <field name="icon">fa-list</field>
+        <field name="show_if_zero" eval="True"/>
+        <field name="groups_xmlids">account.group_account_invoice</field>
+        <field name="amount_field">total_due</field>
+        <field name="action_method">open_follow_up_report</field>
+        <field name="module_depends">account_followup,account_reports</field>
+    </record>
+
+    <record id="slot_inv_box_total_overdue" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_invoice_customers"/>
+        <field name="key">box_total_overdue</field>
+        <field name="name">Total Overdue</field>
+        <field name="section">button_box</field>
+        <field name="sequence">20</field>
+        <field name="label">Total Overdue</field>
+        <field name="icon">fa-list</field>
+        <field name="style">danger</field>
+        <field name="style_mode">when_positive</field>
+        <field name="show_if_zero" eval="False"/>
+        <field name="groups_xmlids">account.group_account_invoice</field>
+        <field name="amount_field">total_overdue</field>
+        <field name="action_method">open_follow_up_report</field>
+        <field name="module_depends">account_followup,account_reports</field>
+    </record>
+
+    <record id="slot_inv_bottom_payments" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_invoice_customers"/>
+        <field name="key">bottom_payments</field>
+        <field name="name">Payments Button</field>
+        <field name="section">bottom</field>
+        <field name="sequence">30</field>
+        <field name="label">Payments</field>
+        <field name="icon">fa-money</field>
+        <field name="show_if_zero" eval="True"/>
+        <field name="groups_xmlids">account.group_account_invoice</field>
+        <field name="compute_model">account.payment</field>
+        <field name="relate_field">partner_id</field>
+        <field name="compute_domain">[('partner_type', '=', 'customer'), ('state', '!=', 'canceled')]</field>
+        <field name="action_xmlid">account.action_account_payments</field>
+        <field name="action_domain">[('partner_id', '=', '{{id}}'), ('partner_type', '=', 'customer')]</field>
+        <field name="module_depends">account</field>
+    </record>
+
+    <record id="slot_inv_menu_view_invoices" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_invoice_customers"/>
+        <field name="key">view_invoices</field>
+        <field name="name">View Invoices</field>
+        <field name="section">menu_views</field>
+        <field name="sequence">10</field>
+        <field name="label">Invoices</field>
+        <field name="show_if_zero" eval="True"/>
+        <field name="action_xmlid">account.action_move_out_invoice_type</field>
+        <field name="action_domain">[('partner_id', '=', '{{id}}'), ('move_type', '=', 'out_invoice')]</field>
+        <field name="module_depends">account</field>
+    </record>
+
+    <record id="slot_inv_menu_view_credit_notes" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_invoice_customers"/>
+        <field name="key">view_credit_notes</field>
+        <field name="name">View Credit Notes</field>
+        <field name="section">menu_views</field>
+        <field name="sequence">20</field>
+        <field name="label">Credit Notes</field>
+        <field name="show_if_zero" eval="True"/>
+        <field name="action_xmlid">account.action_move_out_refund_type</field>
+        <field name="action_domain">[('partner_id', '=', '{{id}}'), ('move_type', '=', 'out_refund')]</field>
+        <field name="module_depends">account</field>
+    </record>
+
+    <record id="slot_inv_menu_view_payments" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_invoice_customers"/>
+        <field name="key">view_payments</field>
+        <field name="name">View Payments</field>
+        <field name="section">menu_views</field>
+        <field name="sequence">30</field>
+        <field name="label">Payments</field>
+        <field name="show_if_zero" eval="True"/>
+        <field name="action_xmlid">account.action_account_payments</field>
+        <field name="action_domain">[('partner_id', '=', '{{id}}'), ('partner_type', '=', 'customer')]</field>
+        <field name="module_depends">account</field>
+    </record>
+
+    <record id="slot_inv_menu_new_invoice" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_invoice_customers"/>
+        <field name="key">new_invoice</field>
+        <field name="name">New Invoice</field>
+        <field name="section">menu_new</field>
+        <field name="sequence">10</field>
+        <field name="label">Invoice</field>
+        <field name="action_xmlid">account.action_move_out_invoice_type</field>
+        <field name="action_context">{"default_move_type": "out_invoice", "default_partner_id": {{id}}}</field>
+        <field name="module_depends">account</field>
+    </record>
+
+    <record id="slot_inv_menu_new_credit_note" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_invoice_customers"/>
+        <field name="key">new_credit_note</field>
+        <field name="name">New Credit Note</field>
+        <field name="section">menu_new</field>
+        <field name="sequence">20</field>
+        <field name="label">Credit Note</field>
+        <field name="action_xmlid">account.action_move_out_refund_type</field>
+        <field name="action_context">{"default_move_type": "out_refund", "default_partner_id": {{id}}}</field>
+        <field name="module_depends">account</field>
+    </record>
+
+    <record id="slot_inv_menu_report_invoices" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_invoice_customers"/>
+        <field name="key">report_invoices</field>
+        <field name="name">Report Invoices</field>
+        <field name="section">menu_reports</field>
+        <field name="sequence">10</field>
+        <field name="label">Invoices</field>
+        <field name="groups_xmlids">account.group_account_invoice</field>
+        <field name="action_xmlid">account.action_account_invoice_report_all</field>
+        <field name="module_depends">account</field>
+    </record>
+</odoo>

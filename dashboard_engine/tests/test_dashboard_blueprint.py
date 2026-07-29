@@ -2619,6 +2619,50 @@ class TestDashboardBlueprint(TransactionCase):
         self.assertFalse(host.ui_number_from_related)
         self.assertTrue(host.ui_number_from_host)
 
+    def test_slot_style_when_positive_resolves_danger_only_if_count(self):
+        Slot = self.env["dashboard.blueprint.slot"]
+        # Prefer a seeded CRM overdue slot if present; else create minimal slot on a test blueprint.
+        slot = self.env.ref(
+            "crm_customer_dashboard.slot_crm_overdue_opportunities",
+            raise_if_not_found=False,
+        )
+        if not slot:
+            self.skipTest("CRM customer preset not installed")
+        slot.write({"style": "danger", "style_mode": "when_positive", "show_if_zero": True})
+        partner = self.env["res.partner"].create({"name": "Health Style Partner"})
+        zero = slot._to_slot_item(partner, values=(0, None))
+        self.assertTrue(zero)
+        self.assertEqual(zero["style"], "default")
+        positive = slot._to_slot_item(partner, values=(2, None))
+        self.assertEqual(positive["style"], "danger")
+
+    def test_slot_style_when_positive_warning_for_amount(self):
+        bp = self.env["dashboard.blueprint"].search(
+            [("key", "=", "sales_customers")], limit=1
+        )
+        if not bp:
+            self.skipTest("Sales customers blueprint missing")
+        slot = self.env["dashboard.blueprint.slot"].create({
+            "blueprint_id": bp.id,
+            "key": "test_health_amount",
+            "name": "Test Health Amount",
+            "section": "button_box",
+            "style": "warning",
+            "style_mode": "when_positive",
+            "show_if_zero": True,
+            "value_mode": "amount",
+            "amount_field": "total_due",
+        })
+        partner = self.env["res.partner"].create({"name": "Amt Health"})
+        self.assertEqual(
+            slot._to_slot_item(partner, values=(None, 0))["style"],
+            "default",
+        )
+        self.assertEqual(
+            slot._to_slot_item(partner, values=(None, 12.5))["style"],
+            "warning",
+        )
+
 
 @tagged("post_install", "-at_install")
 class TestDashboardBlueprintTemplate(TransactionCase):
@@ -3013,3 +3057,51 @@ class TestDashboardBlueprintMultiCompany(TransactionCase):
         b.share_link_ids = [(4, c.id)]
         self.assertIn("kpi_c", a._effective_slots().mapped("key"))
         self.assertIn(c, a._share_component())
+
+    def test_seeded_invoice_customers_slots_exist(self):
+        if not self.env["ir.module.module"].search(
+            [
+                ("name", "=", "invoice_customer_dashboard"),
+                ("state", "=", "installed"),
+            ]
+        ):
+            self.skipTest("invoice_customer_dashboard not installed")
+        bp = self.env.ref(
+            "invoice_customer_dashboard.blueprint_invoice_customers"
+        )
+        keys = set(bp.slot_ids.mapped("key"))
+        for key in (
+            "open_invoices",
+            "overdue_invoices",
+            "box_total_due",
+            "view_invoices",
+            "new_invoice",
+        ):
+            self.assertIn(key, keys)
+        overdue = bp.slot_ids.filtered(lambda s: s.key == "overdue_invoices")
+        self.assertEqual(overdue.style, "danger")
+        self.assertEqual(overdue.style_mode, "when_positive")
+
+    def test_invoice_customers_joins_share_triangle(self):
+        crm = self.env.ref(
+            "crm_customer_dashboard.blueprint_crm_customers",
+            raise_if_not_found=False,
+        )
+        sale = self.env.ref(
+            "sales_customer_dashboard.blueprint_sales_customers",
+            raise_if_not_found=False,
+        )
+        inv = self.env.ref(
+            "invoice_customer_dashboard.blueprint_invoice_customers",
+            raise_if_not_found=False,
+        )
+        if not all((crm, sale, inv)):
+            self.skipTest("partner customer packs incomplete")
+        from odoo.addons.invoice_customer_dashboard.hooks import (
+            link_partner_customer_share_pool,
+        )
+
+        link_partner_customer_share_pool(self.env)
+        self.assertIn(inv, crm.share_link_ids)
+        self.assertIn(crm, inv.share_link_ids)
+        self.assertIn("open_invoices", crm._effective_slots().mapped("key"))

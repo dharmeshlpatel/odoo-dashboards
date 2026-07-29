@@ -570,6 +570,7 @@
                                     <field name="name" string="Technical Name" optional="hide"/>
                                     <field name="label_plural" optional="hide"/>
                                     <field name="style" optional="hide"/>
+                                    <field name="style_mode" optional="hide"/>
                                     <field name="show_if_zero" optional="hide"/>
                                     <field name="module_ids" optional="hide"
                                            widget="many2many_tags"
@@ -605,6 +606,7 @@
                                            optional="hide"/>
                                     <field name="name" string="Technical Name" optional="hide"/>
                                     <field name="style" optional="hide"/>
+                                    <field name="style_mode" optional="hide"/>
                                     <field name="show_if_zero" optional="hide"/>
                                     <field name="action_method" optional="hide"/>
                                     <field name="module_ids" optional="hide"

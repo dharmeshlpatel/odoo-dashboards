@@ -1,7 +1,7 @@
 # Customer 360 Suite — Market Catalog Design
 
 **Date:** 2026-07-29  
-**Status:** Draft (awaiting user review after brainstorm)  
+**Status:** Approved · Wave 1 done (uncommitted) · Wave 2 plan: `docs/superpowers/plans/2026-07-29-customer-360-wave2-invoice-customers.md`  
 **Repo:** `odoo-dashboards-19.1-v2`  
 **Engine:** `dashboard_engine`  
 **Audience:** Full suite (Sales/CRM + Finance + Ops)  

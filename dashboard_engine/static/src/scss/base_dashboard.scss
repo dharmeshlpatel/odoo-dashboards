@@ -1057,6 +1057,11 @@
         .o_dashboard_kpi_danger .fw-bold {
             color: var(--danger) !important;
         }
+
+        .o_dashboard_kpi_warning a,
+        .o_dashboard_kpi_warning .fw-bold {
+            color: var(--warning) !important;
+        }
     }
 
     .bottom_block .o_dashboard_stat_danger,
@@ -1065,6 +1070,15 @@
         .o_stat_text,
         .o_stat_value {
             color: var(--danger) !important;
+        }
+    }
+
+    .bottom_block .o_dashboard_stat_warning,
+    .oe_button_box .o_dashboard_stat_warning {
+        .o_button_icon,
+        .o_stat_text,
+        .o_stat_value {
+            color: var(--warning) !important;
         }
     }
 

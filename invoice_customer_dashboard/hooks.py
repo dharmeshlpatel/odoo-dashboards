@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # Part of GritXi. See LICENSE file for full copyright and licensing details.
 
-"""CRM Customers pack install hooks."""
+"""Invoice Customers pack install hooks."""
 
 PARTNER_CUSTOMER_BLUEPRINT_XMLIDS = (
     "crm_customer_dashboard.blueprint_crm_customers",
@@ -27,7 +27,7 @@ def link_partner_customer_share_pool(env):
 def post_init_hook(env):
     link_partner_customer_share_pool(env)
     bp = env.ref(
-        "crm_customer_dashboard.blueprint_crm_customers",
+        "invoice_customer_dashboard.blueprint_invoice_customers",
         raise_if_not_found=False,
     )
     if bp and bp.state == "published":

@@ -19,7 +19,7 @@
             <button t-foreach="items" t-as="item" t-key="item.key"
                     type="button"
                     class="btn btn-primary"
-                    t-att-class="item.style === 'danger' ? 'o_dashboard_stat_danger' : ''"
+                    t-att-class="item.style === 'danger' ? 'o_dashboard_stat_danger' : item.style === 'warning' ? 'o_dashboard_stat_warning' : ''"
                     t-on-click.stop="() => this.onItemClick(item)">
                 <i t-if="item.icon"
                    t-att-class="'fa fa-fw o_button_icon ' + item.icon"
@@ -40,7 +40,7 @@
             <button t-foreach="items" t-as="item" t-key="item.key"
                     type="button"
                     class="btn oe_stat_button"
-                    t-att-class="item.style === 'danger' ? 'o_dashboard_stat_danger' : ''"
+                    t-att-class="item.style === 'danger' ? 'o_dashboard_stat_danger' : item.style === 'warning' ? 'o_dashboard_stat_warning' : ''"
                     t-on-click.stop="() => this.onItemClick(item)">
                 <i t-if="item.icon"
                    t-att-class="'fa fa-fw o_button_icon ' + item.icon"
@@ -60,10 +60,10 @@
         <t t-else="">
             <div t-foreach="items" t-as="item" t-key="item.key"
                  class="row"
-                 t-att-class="item.style === 'danger' ? 'o_dashboard_kpi_danger' : ''">
+                 t-att-class="item.style === 'danger' ? 'o_dashboard_kpi_danger' : item.style === 'warning' ? 'o_dashboard_kpi_warning' : ''">
                 <div class="col overflow-hidden text-start">
                     <a href="#"
-                       t-att-class="item.style === 'danger' ? 'text-danger fw-bold' : ''"
+                       t-att-class="item.style === 'danger' ? 'text-danger fw-bold' : item.style === 'warning' ? 'text-warning fw-bold' : ''"
                        t-on-click.prevent.stop="() => this.onItemClick(item)">
                         <span>
                             <t t-if="item.count !== undefined"><t t-esc="item.count"/> </t>
@@ -73,7 +73,7 @@
                 </div>
                 <div t-if="item.amount !== undefined" class="col-auto text-end">
                     <span dir="ltr"
-                          t-att-class="item.style === 'danger' ? 'text-danger fw-bold' : 'fw-bold'"
+                          t-att-class="item.style === 'danger' ? 'text-danger fw-bold' : item.style === 'warning' ? 'text-warning fw-bold' : 'fw-bold'"
                           t-esc="formatAmount(item)"/>
                 </div>
             </div>

@@ -109,6 +109,7 @@
         <field name="label">Overdue Opportunity</field>
         <field name="label_plural">Overdue Opportunities</field>
         <field name="style">danger</field>
+        <field name="style_mode">when_positive</field>
         <field name="compute_model">crm.lead</field>
         <field name="relate_field">partner_id</field>
         <!-- Domain lives on the shared condition (relative deadline). -->
