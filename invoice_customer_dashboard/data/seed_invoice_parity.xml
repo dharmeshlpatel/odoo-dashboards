@@ -28,6 +28,7 @@
         <field name="icon">fa-list</field>
         <field name="style">danger</field>
         <field name="style_mode">when_positive</field>
+        <field name="is_attention_signal" eval="True"/>
         <field name="show_if_zero" eval="False"/>
         <field name="groups_xmlids">account.group_account_invoice</field>
         <field name="amount_field">total_overdue</field>

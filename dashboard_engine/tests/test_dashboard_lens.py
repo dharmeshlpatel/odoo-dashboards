@@ -233,3 +233,89 @@ class TestDashboardKanbanLens(TransactionCase):
         self.assertIn("dashboard_with_kpis", arch)
         self.assertIn("show_dashboard_my_filter", arch)
         self.assertIn("show_dashboard_kpis_filter", arch)
+
+    def test_lens_attention_requires_label(self):
+        with self.assertRaises(ValidationError):
+            self.env["dashboard.blueprint"].create(
+                {
+                    "name": "Lens Attention No Label",
+                    "key": "lens_attention_no_label",
+                    "host_model_id": self._partner_model().id,
+                    "lens_attention_enabled": True,
+                    "lens_attention_label": False,
+                }
+            )
+
+    def test_lens_attention_host_ids_from_slot(self):
+        hot = self.env["res.partner"].create({"name": "Attention Hot"})
+        cold = self.env["res.partner"].create({"name": "Attention Cold"})
+        self.env["res.partner"].create(
+            {"name": "Attention Hot Child", "parent_id": hot.id}
+        )
+        # Use child count via graph-like relate on partner.parent_id as
+        # attention signal: hosts that have at least one child.
+        bp = self.env["dashboard.blueprint"].create(
+            {
+                "name": "Lens Attention BP",
+                "key": "lens_attention_bp",
+                "host_model_id": self._partner_model().id,
+                "lens_attention_enabled": True,
+                "lens_attention_label": "Needs attention",
+                "graph_model": "res.partner",
+                "graph_data_field": "parent_id",
+            }
+        )
+        self.env["dashboard.blueprint.slot"].create(
+            {
+                "blueprint_id": bp.id,
+                "key": "attention_children",
+                "name": "Children",
+                "section": "kpi",
+                "label": "Child",
+                "is_attention_signal": True,
+                "compute_model": "res.partner",
+                "relate_field": "parent_id",
+                "compute_domain": "[]",
+                "compute_aggregator": "__count",
+            }
+        )
+        ids = bp._lens_attention_host_ids()
+        self.assertIn(hot.id, ids)
+        self.assertNotIn(cold.id, ids)
+
+        Partner = self.env["res.partner"].with_context(
+            dashboard_blueprint_key=bp.key,
+            initializer=bp.key,
+            dashboard_rendering=True,
+        )
+        found = Partner.search([("dashboard_needs_attention", "=", True)])
+        self.assertIn(hot.id, found.ids)
+        self.assertNotIn(cold.id, found.ids)
+
+    def test_publish_wires_attention_lens(self):
+        bp = self.env["dashboard.blueprint"].create(
+            {
+                "name": "Lens Attention Publish",
+                "key": "lens_attention_publish",
+                "host_model_id": self._partner_model().id,
+                "menu_name": "Lens Attention Publish",
+                "lens_attention_enabled": True,
+                "lens_attention_default": True,
+                "lens_attention_label": "Needs attention",
+                "graph_model": "res.partner",
+                "graph_data_field": "parent_id",
+                "state": "draft",
+            }
+        )
+        bp.action_publish()
+        action = bp.generated_action_id
+        ctx = action.context
+        if isinstance(ctx, str):
+            from odoo.tools.safe_eval import safe_eval
+
+            ctx = safe_eval(ctx)
+        self.assertTrue(ctx.get("show_dashboard_attention_filter"))
+        self.assertTrue(ctx.get("search_default_dashboard_needs_attention"))
+        arch = bp.generated_search_view_id.arch_db or bp.generated_search_view_id.arch
+        self.assertIn("Needs attention", arch)
+        self.assertIn("dashboard_needs_attention", arch)

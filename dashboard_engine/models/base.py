@@ -46,12 +46,19 @@ class BaseModelDashboardEngine(models.AbstractModel):
     dashboard_with_kpis = fields.Boolean(
         store=False, search="_search_dashboard_with_kpis"
     )
+    dashboard_needs_attention = fields.Boolean(
+        store=False, search="_search_dashboard_needs_attention"
+    )
 
     def _search_dashboard_my_data(self, operator, value):
         """Fallback only; dashboard search_fetch rewrites this leaf first."""
         return [("id", "=", False)]
 
     def _search_dashboard_with_kpis(self, operator, value):
+        """Fallback only; dashboard search_fetch rewrites this leaf first."""
+        return [("id", "=", False)]
+
+    def _search_dashboard_needs_attention(self, operator, value):
         """Fallback only; dashboard search_fetch rewrites this leaf first."""
         return [("id", "=", False)]
 
@@ -134,11 +141,12 @@ class BaseModelDashboardEngine(models.AbstractModel):
     def _dashboard_lens_rewrite_domain(self, domain):
         """Replace virtual lens flags with real domains when rendering.
 
-        Two-pass rewrite of virtual flags. When My and With KPIs are both on,
+        Multi-pass rewrite of virtual flags. When My and With KPIs are both on,
         My becomes a host domain and KPIs use the full KPI host-id set;
-        intersection is ``my_domain AND id in kpi_ids``. Do not also narrow
-        KPI graph rows by ``user_id`` — that over-filters hosts that already
-        scope My via host ``user_id`` (e.g. ``res.partner``).
+        intersection is ``my_domain AND id in kpi_ids``. Needs attention is
+        ``id in attention_ids`` and AND-intersects with My / KPIs the same way.
+        Do not also narrow KPI graph rows by ``user_id`` — that over-filters
+        hosts that already scope My via host ``user_id`` (e.g. ``res.partner``).
 
         Gate: ``dashboard_blueprint_key`` present, not
         ``_dashboard_fetching_data``, and blueprint host matches ``self._name``.
@@ -177,6 +185,10 @@ class BaseModelDashboardEngine(models.AbstractModel):
             if _is_flag(leaf, "dashboard_with_kpis"):
                 if _flag_on(leaf):
                     out.append(("id", "in", bp._lens_kpis_host_ids()))
+                continue
+            if _is_flag(leaf, "dashboard_needs_attention"):
+                if _flag_on(leaf):
+                    out.append(("id", "in", bp._lens_attention_host_ids()))
                 continue
             out.append(leaf)
         return out

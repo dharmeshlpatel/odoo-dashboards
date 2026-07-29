@@ -7,6 +7,7 @@ PARTNER_CUSTOMER_BLUEPRINT_XMLIDS = (
     "crm_customer_dashboard.blueprint_crm_customers",
     "sales_customer_dashboard.blueprint_sales_customers",
     "invoice_customer_dashboard.blueprint_invoice_customers",
+    "customer_360_dashboard.blueprint_customer_360",
 )
 
 

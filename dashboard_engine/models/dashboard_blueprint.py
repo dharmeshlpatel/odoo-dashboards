@@ -175,6 +175,13 @@ class DashboardBlueprint(models.Model):
     lens_kpis_enabled = fields.Boolean(string="Show With KPIs filter", default=False)
     lens_kpis_default = fields.Boolean(string="With KPIs on by default", default=False)
     lens_kpis_label = fields.Char(string="With KPIs filter label")
+    lens_attention_enabled = fields.Boolean(
+        string="Show Needs attention filter", default=False
+    )
+    lens_attention_default = fields.Boolean(
+        string="Needs attention on by default", default=False
+    )
+    lens_attention_label = fields.Char(string="Needs attention filter label")
     primary_button_label = fields.Char(
         translate=True,
         default="Open Analysis",
@@ -1016,6 +1023,12 @@ class DashboardBlueprint(models.Model):
             issues.append(_("My filter cannot resolve for this host/graph."))
         if self.lens_kpis_enabled and not (self.lens_kpis_label or "").strip():
             issues.append(_("With KPIs filter is on: set With KPIs filter label."))
+        if self.lens_attention_enabled and not (
+            self.lens_attention_label or ""
+        ).strip():
+            issues.append(
+                _("Needs attention filter is on: set Needs attention filter label.")
+            )
         return issues
 
     def action_health_check(self):
@@ -1196,6 +1209,8 @@ class DashboardBlueprint(models.Model):
         "lens_my_label",
         "lens_kpis_enabled",
         "lens_kpis_label",
+        "lens_attention_enabled",
+        "lens_attention_label",
     )
     def _check_lens_labels(self):
         for rec in self:
@@ -1204,6 +1219,12 @@ class DashboardBlueprint(models.Model):
             if rec.lens_kpis_enabled and not (rec.lens_kpis_label or "").strip():
                 raise ValidationError(
                     _("With KPIs filter is on: set With KPIs filter label.")
+                )
+            if rec.lens_attention_enabled and not (
+                rec.lens_attention_label or ""
+            ).strip():
+                raise ValidationError(
+                    _("Needs attention filter is on: set Needs attention filter label.")
                 )
 
     @api.constrains(
@@ -1322,6 +1343,7 @@ class DashboardBlueprint(models.Model):
         "icon",
         "style",
         "style_mode",
+        "is_attention_signal",
         "show_if_zero",
         "action_xmlid",
         "action_method",
@@ -1342,6 +1364,7 @@ class DashboardBlueprint(models.Model):
             "icon",
             "style",
             "style_mode",
+            "is_attention_signal",
             "show_if_zero",
             "action_xmlid",
             "action_method",
@@ -2373,6 +2396,9 @@ class DashboardBlueprint(models.Model):
             "lens_kpis_enabled",
             "lens_kpis_default",
             "lens_kpis_label",
+            "lens_attention_enabled",
+            "lens_attention_default",
+            "lens_attention_label",
         }
         if sync_fields.intersection(vals):
             for rec in self.filtered(lambda b: b.state == "published"):
@@ -3200,6 +3226,15 @@ class DashboardBlueprint(models.Model):
                 f"domain=\"[('dashboard_with_kpis', '=', True)]\" "
                 f"invisible=\"not context.get('show_dashboard_kpis_filter')\"/>"
             )
+        if self.lens_attention_enabled:
+            if parts:
+                parts.append("<separator/>")
+            label = xml_escape((self.lens_attention_label or "").strip())
+            parts.append(
+                f'<filter name="dashboard_needs_attention" string="{label}" '
+                f"domain=\"[('dashboard_needs_attention', '=', True)]\" "
+                f"invisible=\"not context.get('show_dashboard_attention_filter')\"/>"
+            )
         inner = "\n            ".join(parts)
         return (
             "<data>\n"
@@ -3242,6 +3277,15 @@ class DashboardBlueprint(models.Model):
                     f"domain=\"[('dashboard_with_kpis', '=', True)]\" "
                     f"invisible=\"not context.get('show_dashboard_kpis_filter')\"/>"
                 )
+            if self.lens_attention_enabled:
+                if filters:
+                    filters.append("<separator/>")
+                label = xml_escape((self.lens_attention_label or "").strip())
+                filters.append(
+                    f'<filter name="dashboard_needs_attention" string="{label}" '
+                    f"domain=\"[('dashboard_needs_attention', '=', True)]\" "
+                    f"invisible=\"not context.get('show_dashboard_attention_filter')\"/>"
+                )
             vals["arch"] = f"<search>{''.join(filters)}</search>"
             vals["inherit_id"] = False
         if self.generated_search_view_id:
@@ -3264,6 +3308,10 @@ class DashboardBlueprint(models.Model):
             ctx["show_dashboard_kpis_filter"] = True
             if self.lens_kpis_default:
                 ctx["search_default_dashboard_with_kpis"] = True
+        if self.lens_attention_enabled:
+            ctx["show_dashboard_attention_filter"] = True
+            if self.lens_attention_default:
+                ctx["search_default_dashboard_needs_attention"] = True
         return ctx
 
     def _upsert_window_action(self, view, search_view=None):
@@ -3814,6 +3862,14 @@ class DashboardBlueprint(models.Model):
                 seen.add(host_id)
                 ids.append(host_id)
         return ids
+
+    def _lens_attention_host_ids(self):
+        """Distinct host ids with a positive attention-signal slot value."""
+        self.ensure_one()
+        ids = set()
+        for slot in self._effective_slots().filtered("is_attention_signal"):
+            ids.update(slot._lens_attention_positive_host_ids())
+        return list(ids)
 
     def _build_graph_payloads(self, records):
         """Return ``{record_id: {"json": str, "type": str}}`` for a recordset.
@@ -4492,6 +4548,12 @@ class DashboardBlueprintSlot(models.Model):
         required=True,
         help="Always = use Style as painted. "
         "When value > 0 = Style only if count or amount is positive; else Default.",
+    )
+    is_attention_signal = fields.Boolean(
+        string="Needs attention signal",
+        default=False,
+        help="When True, hosts with a positive value on this slot match the "
+        "Needs attention kanban lens.",
     )
     groups_xmlids = fields.Char(
         help="Comma-separated group xmlids required to see this slot."
@@ -5237,6 +5299,100 @@ class DashboardBlueprintSlot(models.Model):
                 singular = slot.label_alt or singular
                 plural = slot.label_plural_alt or slot.label_alt or plural
         return singular, plural
+
+    def _lens_attention_positive_host_ids(self):
+        """Host ids where this slot's displayed metric is strictly positive."""
+        self.ensure_one()
+        bp = self.blueprint_id
+        Host = self.env.get(bp.host_model_name)
+        if Host is None:
+            return []
+        Host = Host.with_context(_dashboard_fetching_data=True)
+
+        if not self.compute_model or self.compute_model not in self.env:
+            domain = []
+            if (
+                self._wants_amount()
+                and self.amount_field
+                and self.amount_field in Host._fields
+            ):
+                domain = [(self.amount_field, ">", 0)]
+            elif (
+                self._wants_count()
+                and self.count_field
+                and self.count_field in Host._fields
+            ):
+                domain = [(self.count_field, ">", 0)]
+            else:
+                return []
+            try:
+                return Host.search(domain).ids
+            except Exception:
+                _logger.debug(
+                    "Attention host-field search failed %s/%s",
+                    bp.key,
+                    self.key,
+                )
+                return []
+
+        path = self._slot_link_path()
+        if path and not path.is_direct:
+            # Multi-hop attention not supported in v1.
+            return []
+        path_str, _source = self._resolve_slot_path_string()
+        relate = path_str or self.relate_field or bp.graph_data_field
+        if not relate or "." in relate:
+            return []
+
+        Model = self.env[self.compute_model].with_context(
+            _dashboard_fetching_data=True
+        )
+        domain = list(bp._safe_domain(self.compute_domain))
+        domain = self._merge_condition_domain(domain, record=None)
+        if self._honours_restrict_scope():
+            domain = list(domain) + bp._restrict_scope_domain()
+        aggregates = []
+        if self._wants_count() or not self._wants_amount():
+            aggregates.append(self.compute_aggregator or "__count")
+        if self._wants_amount() and self.amount_aggregator:
+            aggregates.append(self.amount_aggregator)
+        if not aggregates:
+            aggregates = [self.compute_aggregator or "__count"]
+        try:
+            groups = Model.formatted_read_group(
+                domain=domain,
+                groupby=[relate],
+                aggregates=aggregates,
+            )
+        except Exception:
+            _logger.debug(
+                "Attention related search failed %s/%s", bp.key, self.key
+            )
+            return []
+
+        ids = []
+        seen = set()
+        for group in groups:
+            host_id = bp._graph_group_id(group.get(relate))
+            if not host_id or host_id in seen:
+                continue
+            positive = False
+            for agg in aggregates:
+                val = group.get(agg)
+                if val is None:
+                    continue
+                try:
+                    if float(val) > 0:
+                        positive = True
+                        break
+                except (TypeError, ValueError):
+                    if val:
+                        positive = True
+                        break
+            if positive:
+                seen.add(host_id)
+                ids.append(host_id)
+        return ids
 
     def _resolved_style(self, count, amount):
         self.ensure_one()

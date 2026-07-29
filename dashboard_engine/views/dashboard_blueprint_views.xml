@@ -292,6 +292,12 @@
                             <field name="lens_kpis_default" invisible="not lens_kpis_enabled"/>
                             <field name="lens_kpis_label" invisible="not lens_kpis_enabled"
                                    required="lens_kpis_enabled"/>
+                            <field name="lens_attention_enabled"/>
+                            <field name="lens_attention_default"
+                                   invisible="not lens_attention_enabled"/>
+                            <field name="lens_attention_label"
+                                   invisible="not lens_attention_enabled"
+                                   required="lens_attention_enabled"/>
                         </group>
                     </group>
                     <notebook>
@@ -571,6 +577,8 @@
                                     <field name="label_plural" optional="hide"/>
                                     <field name="style" optional="hide"/>
                                     <field name="style_mode" optional="hide"/>
+                                    <field name="is_attention_signal" optional="hide"
+                                           string="Attention"/>
                                     <field name="show_if_zero" optional="hide"/>
                                     <field name="module_ids" optional="hide"
                                            widget="many2many_tags"
@@ -607,6 +615,8 @@
                                     <field name="name" string="Technical Name" optional="hide"/>
                                     <field name="style" optional="hide"/>
                                     <field name="style_mode" optional="hide"/>
+                                    <field name="is_attention_signal" optional="hide"
+                                           string="Attention"/>
                                     <field name="show_if_zero" optional="hide"/>
                                     <field name="action_method" optional="hide"/>
                                     <field name="module_ids" optional="hide"

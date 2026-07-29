@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Customer 360 hub: pipeline graph + lenses; slots come from share pool.
+-->
+<odoo noupdate="1">
+    <record id="blueprint_customer_360" model="dashboard.blueprint">
+        <field name="name">Customer 360</field>
+        <field name="key">customer_360</field>
+        <field name="host_model_id" ref="base.model_res_partner"/>
+        <field name="module_depends">crm</field>
+        <field name="menu_name">Customer 360</field>
+        <field name="menu_parent_xmlid">contacts.menu_contacts</field>
+        <field name="menu_sequence">5</field>
+        <field name="primary_button_label">Pipeline Analysis</field>
+        <field name="primary_action_xmlid">crm.crm_lead_action_pipeline</field>
+        <field name="graph_model">crm.lead</field>
+        <field name="graph_data_field">partner_id</field>
+        <field name="graph_measure">__count</field>
+        <field name="graph_groupby">stage_id</field>
+        <field name="graph_domain">[]</field>
+        <field name="graph_caption">Open pipeline</field>
+        <field name="lens_my_enabled" eval="True"/>
+        <field name="lens_my_default" eval="False"/>
+        <field name="lens_my_label">My Partners</field>
+        <field name="lens_kpis_enabled" eval="True"/>
+        <field name="lens_kpis_default" eval="True"/>
+        <field name="lens_kpis_label">With KPIs</field>
+        <field name="lens_attention_enabled" eval="True"/>
+        <field name="lens_attention_default" eval="True"/>
+        <field name="lens_attention_label">Needs attention</field>
+        <field name="state">published</field>
+        <field name="sequence">5</field>
+        <field name="include_child_records" eval="True"/>
+        <field name="primary_action_context">{"default_type": {"__de__": "group_value", "default": "opportunity", "map": [{"groups": ["crm.group_use_lead"], "value": "lead"}]}}</field>
+    </record>
+
+    <record id="scope_c360_pipeline" model="dashboard.blueprint.scope">
+        <field name="blueprint_id" ref="blueprint_customer_360"/>
+        <field name="sequence">10</field>
+        <field name="name">Pipeline</field>
+        <field name="description">Include opportunity-related records in the dashboard analysis.</field>
+        <field name="mode">include</field>
+        <field name="domain">[('type', '=', 'opportunity')]</field>
+        <field name="default_on" eval="True"/>
+    </record>
+
+    <record id="scope_c360_leads" model="dashboard.blueprint.scope">
+        <field name="blueprint_id" ref="blueprint_customer_360"/>
+        <field name="sequence">20</field>
+        <field name="name">Leads</field>
+        <field name="description">Include lead-related records in the dashboard analysis.</field>
+        <field name="mode">include</field>
+        <field name="domain">[('type', '=', 'lead')]</field>
+        <field name="default_on" eval="False"/>
+    </record>
+
+    <record id="scope_c360_mine" model="dashboard.blueprint.scope">
+        <field name="blueprint_id" ref="blueprint_customer_360"/>
+        <field name="sequence">30</field>
+        <field name="name">My Pipeline</field>
+        <field name="description">Show only opportunities that are assigned to you.</field>
+        <field name="mode">restrict</field>
+        <field name="domain">[('user_id', '=', uid)]</field>
+        <field name="default_on" eval="False"/>
+    </record>
+</odoo>

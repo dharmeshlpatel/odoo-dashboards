@@ -3105,3 +3105,34 @@ class TestDashboardBlueprintMultiCompany(TransactionCase):
         self.assertIn(inv, crm.share_link_ids)
         self.assertIn(crm, inv.share_link_ids)
         self.assertIn("open_invoices", crm._effective_slots().mapped("key"))
+
+    def test_seeded_customer_360_attention_and_share(self):
+        if not self.env["ir.module.module"].search(
+            [
+                ("name", "=", "customer_360_dashboard"),
+                ("state", "=", "installed"),
+            ]
+        ):
+            self.skipTest("customer_360_dashboard not installed")
+        bp = self.env.ref("customer_360_dashboard.blueprint_customer_360")
+        self.assertTrue(bp.lens_attention_enabled)
+        self.assertTrue(bp.lens_attention_default)
+        self.assertEqual(bp.lens_attention_label, "Needs attention")
+        crm = self.env.ref(
+            "crm_customer_dashboard.blueprint_crm_customers",
+            raise_if_not_found=False,
+        )
+        if not crm:
+            self.skipTest("crm_customer_dashboard not installed")
+        from odoo.addons.customer_360_dashboard.hooks import (
+            link_partner_customer_share_pool,
+        )
+
+        link_partner_customer_share_pool(self.env)
+        self.assertIn(bp, crm.share_link_ids)
+        self.assertIn(crm, bp.share_link_ids)
+        overdue = crm.slot_ids.filtered(lambda s: s.key == "overdue_opportunities")
+        self.assertTrue(overdue.is_attention_signal)
+        self.assertIn(
+            "overdue_opportunities", bp._effective_slots().mapped("key")
+        )
