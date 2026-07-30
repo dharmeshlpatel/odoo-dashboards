@@ -76,6 +76,7 @@
                 <field name="graph_model" invisible="1"/>
                 <field name="graph_model_id" invisible="1"/>
                 <field name="blueprint_id" invisible="1"/>
+                <field name="scope_warning" invisible="1"/>
                 <field name="groupby_has_date" invisible="1"/>
                 <field name="ordered_groupby_ids" invisible="1"/>
                 <!-- Date field pickers stay on the record but are not shown —
@@ -347,6 +348,12 @@
                                         </group>
                                     </form>
                                 </field>
+                                <field name="scope_warning"
+                                       placeholder="e.g. At least one of 'Pipeline' or 'Leads' must stay on."/>
+                                <div class="text-muted mb-2">
+                                    Shown in the live ⚙️ popup when all Include scopes are unticked.
+                                    Leave empty for no warning.
+                                </div>
                             </div>
 
                             <div class="o_dashboard_blueprint_section mb-3">

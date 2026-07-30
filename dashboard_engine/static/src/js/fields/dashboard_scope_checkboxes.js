@@ -1,6 +1,12 @@
 /** @odoo-module **/
 
-import { Component, onWillUnmount } from "@odoo/owl";
+import {
+    Component,
+    onWillUnmount,
+    onWillUpdateProps,
+    useEffect,
+    useState,
+} from "@odoo/owl";
 import { CheckBox } from "@web/core/checkbox/checkbox";
 import { _t } from "@web/core/l10n/translation";
 import { registry } from "@web/core/registry";
@@ -47,6 +53,15 @@ export class DashboardScopeCheckboxesField extends Component {
         this.debouncedCommitChanges = debounce(this.commitChanges.bind(this), 500);
         useBus(this.props.record.model.bus, "NEED_LOCAL_CHANGES", this.commitChanges.bind(this));
         onWillUnmount(this.commitChanges.bind(this));
+        this.state = useState({ scopeWarning: "" });
+        // useSpecialData resolves asynchronously — items are empty at mount.
+        useEffect(
+            () => {
+                this._updateScopeWarning();
+            },
+            () => [this.specialData.data]
+        );
+        onWillUpdateProps(() => this._updateScopeWarning());
     }
 
     get items() {
@@ -117,6 +132,7 @@ export class DashboardScopeCheckboxesField extends Component {
             }
         }
         this.debouncedCommitChanges();
+        this._updateScopeWarning();
     }
 
     onLabelClick(item) {
@@ -124,6 +140,27 @@ export class DashboardScopeCheckboxesField extends Component {
             return;
         }
         this.onChange(item.id, !this.isSelected(item));
+    }
+
+    _updateScopeWarning() {
+        const warning = this.props.record.data.scope_warning || "";
+        if (!warning) {
+            this.state.scopeWarning = "";
+            return;
+        }
+
+        const includeScopes = this.items.filter((s) => s.mode === "include");
+        if (!includeScopes.length) {
+            this.state.scopeWarning = "";
+            return;
+        }
+
+        const currentIds = this.props.record.data[this.props.name].currentIds;
+        const pendingOn = new Set([...currentIds, ...this.idsToAdd]);
+        this.idsToRemove.forEach((id) => pendingOn.delete(id));
+
+        const anyIncludeOn = includeScopes.some((s) => pendingOn.has(s.id));
+        this.state.scopeWarning = anyIncludeOn ? "" : warning;
     }
 }
 

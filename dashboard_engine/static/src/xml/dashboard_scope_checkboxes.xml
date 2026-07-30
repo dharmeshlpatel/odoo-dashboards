@@ -30,6 +30,11 @@
                     </t>
                 </div>
             </t>
+            <div t-if="state.scopeWarning"
+                 class="alert alert-warning d-flex align-items-center gap-2 py-2 mt-2 mb-0">
+                <i class="fa fa-exclamation-triangle"/>
+                <span t-esc="state.scopeWarning"/>
+            </div>
         </div>
     </t>
 </templates>

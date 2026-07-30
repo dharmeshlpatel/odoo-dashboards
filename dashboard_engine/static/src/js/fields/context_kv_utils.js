@@ -41,9 +41,6 @@ export function rowsFromContextRaw(raw) {
         obj = {};
     }
     const rows = Object.entries(obj).map(([key, value]) => rowFromValue(key, value));
-    if (!rows.length) {
-        rows.push(emptyRow());
-    }
     return rows;
 }
 

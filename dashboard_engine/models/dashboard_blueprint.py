@@ -1150,6 +1150,13 @@ class DashboardBlueprint(models.Model):
     scope_ids = fields.One2many(
         "dashboard.blueprint.scope", "blueprint_id", string="Scopes", copy=True
     )
+    scope_warning = fields.Char(
+        string="Scope warning",
+        translate=True,
+        help="Message shown in the live settings popup when all 'Include' scopes "
+        "are unticked. Leave empty for no warning. "
+        'Example: "At least one of \'Pipeline\' or \'Leads\' must stay on."',
+    )
     pref_ids = fields.One2many(
         "dashboard.user.pref", "blueprint_id", string="User preferences"
     )
@@ -1409,6 +1416,7 @@ class DashboardBlueprint(models.Model):
             "company_id",
             "module_ids",
             "share_link_ids",
+            "scope_warning",
         }
     )
     _STUDIO_HEADER_WRITE_FIELDS = frozenset(
@@ -1480,7 +1488,15 @@ class DashboardBlueprint(models.Model):
             "module_names": self.module_ids.mapped("display_name"),
             "share_link_ids": self.share_link_ids.ids,
             "share_link_names": self.share_link_ids.mapped("display_name"),
-            "generated_menu_name": self.generated_menu_id.display_name or "",
+            "generated_menu_name": (
+                self.generated_menu_id.complete_name
+                or self.generated_menu_id.display_name
+                or ""
+            ),
+            "generated_menu_leaf": self.generated_menu_id.name or "",
+            "generated_menu_parent_id": (
+                self.generated_menu_id.parent_id.id if self.generated_menu_id else False
+            ),
             "multi_company": self.env.user.has_group("base.group_multi_company"),
             "primary_button_label": self.primary_button_label or "",
             "primary_action_xmlid": self.primary_action_xmlid or "",
@@ -1501,6 +1517,7 @@ class DashboardBlueprint(models.Model):
             "header_title_field": self.header_title_field or "",
             "header_image_field": self.header_image_field or "",
             "header_image_style": self.header_image_style or "avatar",
+            "scope_warning": self.scope_warning or "",
             "slots": slots,
             "headers": headers,
             "scopes": scopes,
@@ -1994,13 +2011,59 @@ class DashboardBlueprint(models.Model):
             by_id[scope_id].sequence = (index + 1) * 10
         return self.get_studio_payload()
 
-    def studio_search_actions(self, term="", limit=20):
-        """Return window actions for Studio pickers (xmlid + label)."""
+    def studio_search_actions(self, term="", limit=20, all_models=False):
+        """Return window actions for Studio pickers (xmlid + label).
+
+        Default scope: actions whose ``res_model`` matches ``host_model_name`` or
+        ``graph_model``, plus model-less actions (``res_model`` is False).
+        Pass ``all_models=True`` (UI toggle) to bypass scope.
+
+        Returns a dict — OWL must unpack ``.actions`` in the same change:
+            {
+                'actions': [...],
+                'scoped': bool,
+                'scope_label': str,
+            }
+        """
         self.ensure_one()
         limit = min(int(limit or 20), 50)
         Action = self.env["ir.actions.act_window"]
-        domain = [("name", "ilike", term or "")]
-        actions = Action.search(domain, limit=limit, order="name")
+
+        host_model = self.host_model_name
+        graph_model = self.graph_model or host_model
+        scoped_models = list({m for m in (host_model, graph_model) if m})
+
+        base_domain = [("name", "ilike", term or "")]
+        fallback_used = False
+
+        if not all_models and scoped_models:
+            scoped_domain = base_domain + [
+                "|",
+                ("res_model", "in", scoped_models),
+                ("res_model", "=", False),
+            ]
+            actions = Action.search(scoped_domain, limit=limit, order="name")
+            if not actions:
+                actions = Action.search(base_domain, limit=limit, order="name")
+                fallback_used = True
+        else:
+            actions = Action.search(base_domain, limit=limit, order="name")
+
+        host_label = self.host_model_id.name or host_model or _("host")
+        graph_label = (
+            self.graph_model_id.name
+            if self.graph_model_id
+            else (graph_model or "")
+        )
+        if all_models:
+            scope_label = _("Showing all actions")
+        elif fallback_used:
+            scope_label = _("No matches for scoped models — showing all")
+        else:
+            scope_label = _("Showing actions for %s") % host_label
+            if graph_model and graph_model != host_model:
+                scope_label = f"{scope_label} / {graph_label}"
+
         result = []
         for action in actions:
             xmlid = action.get_external_id().get(action.id) or ""
@@ -2014,7 +2077,11 @@ class DashboardBlueprint(models.Model):
                     "res_model": action.res_model or "",
                 }
             )
-        return result
+        return {
+            "actions": result,
+            "scoped": not fallback_used and not all_models,
+            "scope_label": scope_label,
+        }
 
     def studio_search_models(self, term="", limit=20):
         """ir.model picker for Setup host model."""
@@ -3200,11 +3267,35 @@ class DashboardBlueprint(models.Model):
         return View.create(vals)
 
     def _host_default_search_view(self):
-        """Primary search view for the host model (lowest priority)."""
+        """Primary search view for the host model (lowest priority).
+
+        Prefer a non-engine search view so re-sync never inherits our own
+        generated search (avoids recursive inherit chains).
+        """
         self.ensure_one()
         View = self.env["ir.ui.view"].sudo()
+        external = View.search(
+            [
+                ("model", "=", self.host_model_name),
+                ("type", "=", "search"),
+                ("mode", "=", "primary"),
+                ("name", "not like", "dashboard.engine.search.%"),
+            ],
+            order="priority, id",
+            limit=1,
+        )
+        if external:
+            return external
         view_id = View.default_view(self.host_model_name, "search")
-        return View.browse(view_id) if view_id else View.browse()
+        parent = View.browse(view_id) if view_id else View.browse()
+        if not parent:
+            return parent
+        # Never inherit our own generated search (or any engine search).
+        if self.generated_search_view_id and parent.id == self.generated_search_view_id.id:
+            return View.browse()
+        if (parent.name or "").startswith("dashboard.engine.search."):
+            return View.browse()
+        return parent
 
     def _search_arch(self):
         """Inherit arch injecting only enabled lens filters."""
@@ -6052,6 +6143,10 @@ class DashboardUserPref(models.Model):
     graph_model = fields.Char(related="blueprint_id.graph_model", readonly=True)
     graph_model_id = fields.Many2one(
         related="blueprint_id.graph_model_id", readonly=True
+    )
+    scope_warning = fields.Char(
+        related="blueprint_id.scope_warning",
+        readonly=True,
     )
 
     scope_ids = fields.Many2many(

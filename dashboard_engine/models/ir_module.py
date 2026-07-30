@@ -16,6 +16,15 @@ class IrModuleModule(models.Model):
 
     def write(self, vals):
         res = super().write(vals)
+        # During module install/upgrade, registry fields may not be fully loaded.
+        # Defer blueprint sync to normal runtime/hooks to avoid transient
+        # "field does not exist" validation errors.
+        if (
+            self.env.context.get("install_mode")
+            or self.env.context.get("module")
+            or not self.env.registry.ready
+        ):
+            return res
         if vals.get("state") in ("installed", "uninstalled", "to remove"):
             if "dashboard.blueprint" in self.env:
                 Blueprint = self.env["dashboard.blueprint"].sudo()
