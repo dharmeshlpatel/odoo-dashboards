@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Website 360 host locked to website.website (multi-site).
+  Soft-depends sale/website_sale for order KPIs via website_id.
+-->
+<odoo noupdate="1">
+    <record id="blueprint_website_360" model="dashboard.blueprint">
+        <field name="name">Website 360</field>
+        <field name="key">website_360</field>
+        <field name="host_model_id" ref="website.model_website"/>
+        <field name="module_depends">website,website_sale</field>
+        <field name="menu_name">Website 360</field>
+        <field name="menu_parent_xmlid">website.menu_reporting</field>
+        <field name="menu_sequence">90</field>
+        <field name="primary_button_label">Orders</field>
+        <field name="primary_action_xmlid">sale.action_orders</field>
+        <field name="graph_model">sale.order</field>
+        <field name="graph_data_field">website_id</field>
+        <field name="graph_measure">amount_total:sum</field>
+        <field name="graph_groupby">date_order:month</field>
+        <field name="graph_domain">[('website_id', '!=', False)]</field>
+        <field name="graph_caption">Website sales</field>
+        <field name="lens_my_enabled" eval="False"/>
+        <field name="lens_kpis_enabled" eval="True"/>
+        <field name="lens_kpis_default" eval="True"/>
+        <field name="lens_kpis_label">With KPIs</field>
+        <field name="lens_attention_enabled" eval="True"/>
+        <field name="lens_attention_default" eval="True"/>
+        <field name="lens_attention_label">Needs attention</field>
+        <field name="state">draft</field>
+        <field name="sequence">90</field>
+    </record>
+
+    <record id="scope_web360_confirmed" model="dashboard.blueprint.scope">
+        <field name="blueprint_id" ref="blueprint_website_360"/>
+        <field name="sequence">10</field>
+        <field name="name">Confirmed orders</field>
+        <field name="mode">include</field>
+        <field name="domain">[('state', 'in', ('sale', 'done'))]</field>
+        <field name="default_on" eval="True"/>
+    </record>
+    <record id="scope_web360_quotes" model="dashboard.blueprint.scope">
+        <field name="blueprint_id" ref="blueprint_website_360"/>
+        <field name="sequence">20</field>
+        <field name="name">Carts / quotations</field>
+        <field name="mode">include</field>
+        <field name="domain">[('state', 'in', ('draft', 'sent'))]</field>
+        <field name="default_on" eval="False"/>
+    </record>
+
+    <record id="slot_web360_orders" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_website_360"/>
+        <field name="key">web_orders</field>
+        <field name="name">Orders</field>
+        <field name="section">kpi</field>
+        <field name="sequence">10</field>
+        <field name="label">Order</field>
+        <field name="label_plural">Orders</field>
+        <field name="compute_model">sale.order</field>
+        <field name="relate_field">website_id</field>
+        <field name="compute_domain">[('state', 'in', ('sale', 'done'))]</field>
+        <field name="compute_aggregator">__count</field>
+        <field name="amount_aggregator">amount_total:sum</field>
+        <field name="action_xmlid">sale.action_orders</field>
+        <field name="action_domain">[('website_id', '=', '{{id}}'), ('state', 'in', ('sale', 'done'))]</field>
+        <field name="module_depends">sale,website_sale</field>
+    </record>
+    <record id="slot_web360_carts" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_website_360"/>
+        <field name="key">web_carts</field>
+        <field name="name">Open Carts</field>
+        <field name="section">kpi</field>
+        <field name="sequence">20</field>
+        <field name="label">Open Cart</field>
+        <field name="label_plural">Open Carts</field>
+        <field name="style">warning</field>
+        <field name="style_mode">when_positive</field>
+        <field name="is_attention_signal" eval="True"/>
+        <field name="compute_model">sale.order</field>
+        <field name="relate_field">website_id</field>
+        <field name="compute_domain">[('state', '=', 'draft'), ('website_id', '!=', False)]</field>
+        <field name="compute_aggregator">__count</field>
+        <field name="action_xmlid">sale.action_quotations_with_onboarding</field>
+        <field name="action_domain">[('website_id', '=', '{{id}}'), ('state', '=', 'draft')]</field>
+        <field name="module_depends">sale,website_sale</field>
+    </record>
+    <record id="slot_web360_bottom" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_website_360"/>
+        <field name="key">bottom_orders</field>
+        <field name="name">Orders</field>
+        <field name="section">bottom</field>
+        <field name="sequence">10</field>
+        <field name="label">Orders</field>
+        <field name="icon">fa-globe</field>
+        <field name="show_if_zero" eval="True"/>
+        <field name="compute_model">sale.order</field>
+        <field name="relate_field">website_id</field>
+        <field name="compute_domain">[('website_id', '!=', False)]</field>
+        <field name="action_xmlid">sale.action_orders</field>
+        <field name="action_domain">[('website_id', '=', '{{id}}')]</field>
+        <field name="module_depends">sale,website_sale</field>
+    </record>
+</odoo>

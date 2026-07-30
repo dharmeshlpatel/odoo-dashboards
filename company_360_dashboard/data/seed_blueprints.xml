@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Company 360 host = res.company (matches Wave 4 daily packs).
+  Catalog Q3 (res.partner companies) deferred for share-pool consistency.
+-->
+<odoo noupdate="1">
+    <record id="blueprint_company_360" model="dashboard.blueprint">
+        <field name="name">Company 360</field>
+        <field name="key">company_360</field>
+        <field name="host_model_id" ref="base.model_res_company"/>
+        <field name="module_depends">crm,sale,account</field>
+        <field name="menu_name">Company 360</field>
+        <field name="menu_parent_xmlid">crm.crm_menu_report</field>
+        <field name="menu_sequence">12</field>
+        <field name="primary_button_label">Pipeline Analysis</field>
+        <field name="primary_action_xmlid">crm.crm_lead_action_pipeline</field>
+        <field name="graph_model">crm.lead</field>
+        <field name="graph_data_field">company_id</field>
+        <field name="graph_measure">__count</field>
+        <field name="graph_groupby">stage_id</field>
+        <field name="graph_domain">[('type', '=', 'opportunity')]</field>
+        <field name="graph_caption">Open pipeline</field>
+        <field name="header_title_field">name</field>
+        <field name="lens_my_enabled" eval="False"/>
+        <field name="lens_kpis_enabled" eval="True"/>
+        <field name="lens_kpis_default" eval="True"/>
+        <field name="lens_kpis_label">With KPIs</field>
+        <field name="lens_attention_enabled" eval="True"/>
+        <field name="lens_attention_default" eval="True"/>
+        <field name="lens_attention_label">Needs attention</field>
+        <field name="state">draft</field>
+        <field name="sequence">12</field>
+    </record>
+</odoo>

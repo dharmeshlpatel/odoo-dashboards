@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo noupdate="1">
+    <record id="blueprint_product_category_360" model="dashboard.blueprint">
+        <field name="header_title_field">display_name</field>
+    </record>
+</odoo>

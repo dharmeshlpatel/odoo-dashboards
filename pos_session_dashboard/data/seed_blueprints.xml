@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo noupdate="1">
+    <record id="blueprint_pos_sessions" model="dashboard.blueprint">
+        <field name="name">POS Sessions</field>
+        <field name="key">pos_sessions</field>
+        <field name="host_model_id" ref="point_of_sale.model_pos_session"/>
+        <field name="module_depends">point_of_sale</field>
+        <field name="menu_name">Sessions Dashboard</field>
+        <field name="menu_parent_xmlid">point_of_sale.menu_point_rep</field>
+        <field name="menu_sequence">5</field>
+        <field name="primary_button_label">Orders</field>
+        <field name="primary_action_xmlid">point_of_sale.action_pos_pos_form</field>
+        <field name="graph_model">pos.order</field>
+        <field name="graph_data_field">session_id</field>
+        <field name="graph_measure">amount_total:sum</field>
+        <field name="graph_groupby">date_order:day</field>
+        <field name="graph_domain">[]</field>
+        <field name="graph_caption">Session sales</field>
+        <field name="lens_my_enabled" eval="False"/>
+        <field name="lens_kpis_enabled" eval="True"/>
+        <field name="lens_kpis_default" eval="True"/>
+        <field name="lens_kpis_label">With KPIs</field>
+        <field name="lens_attention_enabled" eval="True"/>
+        <field name="lens_attention_default" eval="True"/>
+        <field name="lens_attention_label">Needs attention</field>
+        <field name="state">draft</field>
+        <field name="sequence">60</field>
+    </record>
+
+    <record id="scope_pos_sess_opened" model="dashboard.blueprint.scope">
+        <field name="blueprint_id" ref="blueprint_pos_sessions"/>
+        <field name="sequence">10</field>
+        <field name="name">Opened</field>
+        <field name="mode">include</field>
+        <field name="domain">[('state', '=', 'opened')]</field>
+        <field name="default_on" eval="True"/>
+    </record>
+    <record id="scope_pos_sess_closed" model="dashboard.blueprint.scope">
+        <field name="blueprint_id" ref="blueprint_pos_sessions"/>
+        <field name="sequence">20</field>
+        <field name="name">Closed</field>
+        <field name="mode">include</field>
+        <field name="domain">[('state', 'in', ('closed', 'closing_control'))]</field>
+        <field name="default_on" eval="False"/>
+    </record>
+
+    <record id="slot_pos_sess_orders" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_pos_sessions"/>
+        <field name="key">orders</field>
+        <field name="name">Orders</field>
+        <field name="section">kpi</field>
+        <field name="sequence">10</field>
+        <field name="label">Order</field>
+        <field name="label_plural">Orders</field>
+        <field name="compute_model">pos.order</field>
+        <field name="relate_field">session_id</field>
+        <field name="compute_domain">[('state', '!=', 'cancel')]</field>
+        <field name="compute_aggregator">__count</field>
+        <field name="amount_aggregator">amount_total:sum</field>
+        <field name="action_xmlid">point_of_sale.action_pos_pos_form</field>
+        <field name="action_domain">[('session_id', '=', '{{id}}')]</field>
+        <field name="module_depends">point_of_sale</field>
+    </record>
+    <record id="slot_pos_sess_open_orders" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_pos_sessions"/>
+        <field name="key">draft_orders</field>
+        <field name="name">Draft Orders</field>
+        <field name="section">kpi</field>
+        <field name="sequence">20</field>
+        <field name="label">Draft Order</field>
+        <field name="label_plural">Draft Orders</field>
+        <field name="style">warning</field>
+        <field name="style_mode">when_positive</field>
+        <field name="is_attention_signal" eval="True"/>
+        <field name="compute_model">pos.order</field>
+        <field name="relate_field">session_id</field>
+        <field name="compute_domain">[('state', '=', 'draft')]</field>
+        <field name="compute_aggregator">__count</field>
+        <field name="action_xmlid">point_of_sale.action_pos_pos_form</field>
+        <field name="action_domain">[('session_id', '=', '{{id}}'), ('state', '=', 'draft')]</field>
+        <field name="module_depends">point_of_sale</field>
+    </record>
+    <record id="slot_pos_sess_bottom" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_pos_sessions"/>
+        <field name="key">bottom_orders</field>
+        <field name="name">Orders</field>
+        <field name="section">bottom</field>
+        <field name="sequence">10</field>
+        <field name="label">Orders</field>
+        <field name="icon">fa-shopping-cart</field>
+        <field name="show_if_zero" eval="True"/>
+        <field name="compute_model">pos.order</field>
+        <field name="relate_field">session_id</field>
+        <field name="compute_domain">[]</field>
+        <field name="action_xmlid">point_of_sale.action_pos_pos_form</field>
+        <field name="action_domain">[('session_id', '=', '{{id}}')]</field>
+        <field name="module_depends">point_of_sale</field>
+    </record>
+</odoo>

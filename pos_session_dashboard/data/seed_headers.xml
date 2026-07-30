@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo noupdate="1">
+    <record id="blueprint_pos_sessions" model="dashboard.blueprint">
+        <field name="header_title_field">name</field>
+    </record>
+    <record id="header_pos_sess_config" model="dashboard.blueprint.header.item">
+        <field name="blueprint_id" ref="blueprint_pos_sessions"/>
+        <field name="sequence">10</field>
+        <field name="kind">subtitle</field>
+        <field name="alignment">left</field>
+        <field name="field_names">config_id</field>
+    </record>
+    <record id="header_pos_sess_user" model="dashboard.blueprint.header.item">
+        <field name="blueprint_id" ref="blueprint_pos_sessions"/>
+        <field name="sequence">20</field>
+        <field name="kind">inline</field>
+        <field name="alignment">left</field>
+        <field name="icon">fa-user</field>
+        <field name="field_names">user_id</field>
+    </record>
+</odoo>

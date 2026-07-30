@@ -11,25 +11,6 @@ PRODUCT_SHARE = (
 )
 
 
-def pre_init_hook(env):
-    """Drop soft-engine blueprints with the same key (no pack xmlid yet)."""
-    cr = env.cr
-    for key in {"sales_products"}:
-        cr.execute(
-            """
-            DELETE FROM dashboard_blueprint bp
-             WHERE bp.key = %s
-               AND NOT EXISTS (
-                    SELECT 1 FROM ir_model_data d
-                     WHERE d.model = 'dashboard.blueprint'
-                       AND d.res_id = bp.id
-                       AND d.module = %s
-               )
-            """,
-            (key, "sales_product_dashboard"),
-        )
-
-
 def link_product_share_pool(env):
     bps = [env.ref(x, raise_if_not_found=False) for x in PRODUCT_SHARE]
     bps = [b for b in bps if b]
@@ -41,10 +22,9 @@ def link_product_share_pool(env):
 
 
 def post_init_hook(env):
-    bp = env.ref(
-        "sales_product_dashboard.blueprint_sales_products",
-        raise_if_not_found=False,
-    )
-    if bp and bp.state == "published":
-        bp._sync_generated_artifacts()
+    bp = env.ref("product_360_dashboard.blueprint_product_360", raise_if_not_found=False)
+    if bp and bp.state != "published":
+        bp.sudo().action_publish()
+    elif bp:
+        bp.sudo()._sync_generated_artifacts()
     link_product_share_pool(env)
