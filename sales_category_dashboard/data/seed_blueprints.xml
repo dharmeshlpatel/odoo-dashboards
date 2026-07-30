@@ -1,0 +1,185 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo noupdate="1">
+    <record id="blueprint_sales_categories" model="dashboard.blueprint">
+        <field name="name">Sales Categories</field>
+        <field name="key">sales_categories</field>
+        <field name="host_model_id" ref="product.model_product_category"/>
+        <field name="module_depends">sale,product</field>
+        <field name="menu_name">Categories Dashboard</field>
+        <field name="menu_parent_xmlid">sale.product_menu_catalog</field>
+        <field name="menu_sequence">55</field>
+        <field name="primary_button_label">Sales Analysis</field>
+        <field name="primary_action_xmlid">sale.action_order_report_all</field>
+        <field name="graph_model">sale.report</field>
+        <field name="graph_data_field">categ_id</field>
+        <field name="graph_measure">price_subtotal:sum</field>
+        <field name="graph_groupby">date:month</field>
+        <field name="graph_caption">Category sales</field>
+        <field name="include_child_records" eval="True"/>
+
+        <field name="lens_my_enabled" eval="True"/>
+        <field name="lens_my_default" eval="False"/>
+        <field name="lens_my_label">My records</field>
+        <field name="lens_kpis_enabled" eval="True"/>
+        <field name="lens_kpis_default" eval="True"/>
+        <field name="lens_kpis_label">With KPIs</field>
+
+        <field name="state">draft</field>
+        <field name="sequence">50</field>
+    </record>
+
+    <record id="scope_scat_orders" model="dashboard.blueprint.scope">
+        <field name="blueprint_id" ref="blueprint_sales_categories"/>
+        <field name="sequence">10</field>
+        <field name="name">Sales Orders</field>
+        <field name="mode">include</field>
+        <field name="domain">[('state', 'in', ('sale', 'done'))]</field>
+        <field name="default_on" eval="True"/>
+    </record>
+    <record id="scope_scat_quotes" model="dashboard.blueprint.scope">
+        <field name="blueprint_id" ref="blueprint_sales_categories"/>
+        <field name="sequence">20</field>
+        <field name="name">Quotations</field>
+        <field name="mode">include</field>
+        <field name="domain">[('state', 'in', ('draft', 'sent'))]</field>
+        <field name="default_on" eval="True"/>
+    </record>
+
+    <record id="slot_scat_quotes" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_sales_categories"/>
+        <field name="key">cat_quotations</field>
+        <field name="name">Quotations</field>
+        <field name="section">kpi</field>
+        <field name="sequence">10</field>
+        <field name="label">Quotation line</field>
+        <field name="label_plural">Quotation lines</field>
+        <field name="compute_model">sale.order.line</field>
+        <field name="relate_field">categ_id</field>
+        <field name="compute_domain">[('state', 'in', ('draft', 'sent'))]</field>
+        <field name="compute_aggregator">__count</field>
+        <field name="action_xmlid">sale.action_quotations_with_onboarding</field>
+        <field name="action_domain">[('order_line.categ_id', 'child_of', '{{id}}'), ('state', 'in', ('draft', 'sent'))]</field>
+        <field name="module_depends">sale,product</field>
+    </record>
+    <record id="slot_scat_to_deliver" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_sales_categories"/>
+        <field name="key">cat_to_deliver</field>
+        <field name="name">To Deliver</field>
+        <field name="section">kpi</field>
+        <field name="sequence">20</field>
+        <field name="label">Line to Deliver</field>
+        <field name="label_plural">Lines to Deliver</field>
+        <field name="compute_model">sale.order.line</field>
+        <field name="relate_field">categ_id</field>
+        <field name="compute_domain">[('state', 'in', ('sale', 'done')), ('qty_to_deliver', '&gt;', 0)]</field>
+        <field name="compute_aggregator">__count</field>
+        <field name="action_xmlid">sale.action_orders</field>
+        <field name="action_domain">[('order_line.categ_id', 'child_of', '{{id}}'), ('state', 'in', ('sale', 'done'))]</field>
+        <field name="module_depends">sale,product</field>
+    </record>
+    <record id="slot_scat_to_invoice" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_sales_categories"/>
+        <field name="key">cat_to_invoice</field>
+        <field name="name">To Invoice</field>
+        <field name="section">kpi</field>
+        <field name="sequence">30</field>
+        <field name="label">Line to Invoice</field>
+        <field name="label_plural">Lines to Invoice</field>
+        <field name="style">warning</field>
+        <field name="style_mode">when_positive</field>
+        <field name="is_attention_signal" eval="True"/>
+        <field name="compute_model">sale.order.line</field>
+        <field name="relate_field">categ_id</field>
+        <field name="compute_domain">[('invoice_status', '=', 'to invoice')]</field>
+        <field name="compute_aggregator">__count</field>
+        <field name="action_xmlid">sale.action_orders_to_invoice</field>
+        <field name="action_domain">[('order_line.categ_id', 'child_of', '{{id}}'), ('invoice_status', '=', 'to invoice')]</field>
+        <field name="module_depends">sale,product</field>
+    </record>
+    <record id="slot_scat_to_upsell" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_sales_categories"/>
+        <field name="key">cat_to_upsell</field>
+        <field name="name">To Upsell</field>
+        <field name="section">kpi</field>
+        <field name="sequence">40</field>
+        <field name="label">Line to Upsell</field>
+        <field name="label_plural">Lines to Upsell</field>
+        <field name="compute_model">sale.order.line</field>
+        <field name="relate_field">categ_id</field>
+        <field name="compute_domain">[('invoice_status', '=', 'upselling')]</field>
+        <field name="compute_aggregator">__count</field>
+        <field name="action_xmlid">sale.action_orders_upselling</field>
+        <field name="action_domain">[('order_line.categ_id', 'child_of', '{{id}}'), ('invoice_status', '=', 'upselling')]</field>
+        <field name="module_depends">sale,product</field>
+    </record>
+
+    <record id="slot_scat_bottom_orders" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_sales_categories"/>
+        <field name="key">bottom_orders</field>
+        <field name="name">Orders</field>
+        <field name="section">bottom</field>
+        <field name="sequence">10</field>
+        <field name="label">Orders</field>
+        <field name="icon">fa-shopping-cart</field>
+        <field name="show_if_zero" eval="True"/>
+        <field name="compute_model">sale.order.line</field>
+        <field name="relate_field">categ_id</field>
+        <field name="compute_domain">[('state', 'in', ('sale', 'done'))]</field>
+        <field name="action_xmlid">sale.action_orders</field>
+        <field name="action_domain">[('order_line.categ_id', 'child_of', '{{id}}'), ('state', 'in', ('sale', 'done'))]</field>
+    </record>
+    <record id="slot_scat_bottom_products" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_sales_categories"/>
+        <field name="key">bottom_products</field>
+        <field name="name">Products</field>
+        <field name="section">bottom</field>
+        <field name="sequence">20</field>
+        <field name="label">Products</field>
+        <field name="icon">fa-cube</field>
+        <field name="show_if_zero" eval="True"/>
+        <field name="compute_model">product.template</field>
+        <field name="relate_field">categ_id</field>
+        <field name="compute_domain">[]</field>
+        <field name="action_xmlid">sale.product_template_action</field>
+        <field name="action_domain">[('categ_id', 'child_of', '{{id}}')]</field>
+    </record>
+    <record id="slot_scat_bottom_transfers" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_sales_categories"/>
+        <field name="key">bottom_transfers</field>
+        <field name="name">Transfers</field>
+        <field name="section">bottom</field>
+        <field name="sequence">30</field>
+        <field name="label">Transfers</field>
+        <field name="icon">fa-truck</field>
+        <field name="show_if_zero" eval="True"/>
+        <field name="compute_model">stock.move</field>
+        <field name="relate_field">product_category_id</field>
+        <field name="compute_domain">[('state', '!=', 'cancel')]</field>
+        <field name="action_xmlid">stock.action_picking_tree_all</field>
+        <field name="action_domain">[('move_ids.product_category_id', 'child_of', '{{id}}')]</field>
+        <field name="module_depends">sale,stock</field>
+    </record>
+
+    <record id="slot_scat_view_orders" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_sales_categories"/>
+        <field name="key">view_orders</field>
+        <field name="name">View Orders</field>
+        <field name="section">menu_views</field>
+        <field name="sequence">10</field>
+        <field name="label">Orders</field>
+        <field name="show_if_zero" eval="True"/>
+        <field name="action_xmlid">sale.action_orders</field>
+        <field name="action_domain">[('order_line.categ_id', 'child_of', '{{id}}')]</field>
+    </record>
+    <record id="slot_scat_report_sales" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_sales_categories"/>
+        <field name="key">report_sales</field>
+        <field name="name">Sales Report</field>
+        <field name="section">menu_reports</field>
+        <field name="sequence">10</field>
+        <field name="label">Sales</field>
+        <field name="show_if_zero" eval="True"/>
+        <field name="action_xmlid">sale.action_order_report_all</field>
+        <field name="action_domain">[('categ_id', 'child_of', '{{id}}')]</field>
+    </record>
+</odoo>

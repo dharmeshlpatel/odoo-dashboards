@@ -1,0 +1,345 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo noupdate="1">
+
+    <record id="blueprint_crm_campaigns" model="dashboard.blueprint">
+        <field name="name">CRM Campaigns</field>
+        <field name="key">crm_campaigns</field>
+        <field name="host_model_id" ref="utm.model_utm_campaign"/>
+        <field name="module_depends">crm,utm</field>
+        <field name="menu_name">Campaigns Dashboard</field>
+        <field name="menu_parent_xmlid">crm.crm_menu_root</field>
+        <field name="menu_sequence">60</field>
+        <field name="primary_button_label">Pipeline Analysis</field>
+        <field name="primary_action_xmlid">crm.crm_lead_action_pipeline</field>
+        <field name="graph_model">crm.lead</field>
+        <field name="graph_data_field">campaign_id</field>
+        <field name="graph_measure">__count</field>
+        <field name="graph_groupby">stage_id</field>
+        <field name="graph_domain">[('type', '=', 'opportunity')]</field>
+        <field name="graph_caption">Open pipeline</field>
+        <field name="header_title_field">name</field>
+
+        <field name="lens_my_enabled" eval="True"/>
+        <field name="lens_my_default" eval="False"/>
+        <field name="lens_my_label">My records</field>
+        <field name="lens_kpis_enabled" eval="True"/>
+        <field name="lens_kpis_default" eval="True"/>
+        <field name="lens_kpis_label">With KPIs</field>
+
+        <field name="state">draft</field>
+        <field name="sequence">60</field>
+    </record>
+
+
+    <record id="slot_crm_campaign_open" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_crm_campaigns"/>
+        <field name="key">open_opportunities</field>
+        <field name="name">Open Opportunities</field>
+        <field name="section">kpi</field>
+        <field name="sequence">10</field>
+        <field name="label">Open Opportunity</field>
+        <field name="label_plural">Open Opportunities</field>
+        <field name="compute_model">crm.lead</field>
+        <field name="relate_field">campaign_id</field>
+        <field name="compute_domain">[('type', '=', 'opportunity'), ('probability', '&lt;', 100), ('active', '=', True)]</field>
+        <field name="compute_aggregator">__count</field>
+        <field name="amount_aggregator">expected_revenue:sum</field>
+        <field name="action_xmlid">crm.crm_lead_action_pipeline</field>
+        <field name="action_domain">[('campaign_id', '=', '{{id}}'), ('type', '=', 'opportunity'), ('probability', '&lt;', 100)]</field>
+    </record>
+    <record id="slot_crm_campaign_overdue" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_crm_campaigns"/>
+        <field name="key">overdue_opportunities</field>
+        <field name="name">Overdue Opportunities</field>
+        <field name="section">kpi</field>
+        <field name="sequence">20</field>
+        <field name="label">Overdue Opportunity</field>
+        <field name="label_plural">Overdue Opportunities</field>
+        <field name="style">danger</field>
+        <field name="style_mode">when_positive</field>
+        <field name="is_attention_signal" eval="True"/>
+        <field name="compute_model">crm.lead</field>
+        <field name="relate_field">campaign_id</field>
+        <field name="compute_domain">[]</field>
+        <field name="condition_ids" eval="[(4, ref('condition_attr_overdue_opportunity'))]"/>
+        <field name="compute_aggregator">__count</field>
+        <field name="amount_aggregator">expected_revenue:sum</field>
+        <field name="action_xmlid">crm.crm_lead_action_pipeline</field>
+        <field name="action_domain">[('campaign_id', '=', '{{id}}')]</field>
+    </record>
+    <record id="slot_crm_campaign_won" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_crm_campaigns"/>
+        <field name="key">won_opportunities</field>
+        <field name="name">Won</field>
+        <field name="section">kpi</field>
+        <field name="sequence">30</field>
+        <field name="label">Won Opportunity</field>
+        <field name="label_plural">Won Opportunities</field>
+        <field name="compute_model">crm.lead</field>
+        <field name="relate_field">campaign_id</field>
+        <field name="compute_domain">[('type', '=', 'opportunity'), ('probability', '=', 100)]</field>
+        <field name="compute_aggregator">__count</field>
+        <field name="amount_aggregator">expected_revenue:sum</field>
+        <field name="action_xmlid">crm.crm_lead_action_pipeline</field>
+        <field name="action_domain">[('campaign_id', '=', '{{id}}'), ('probability', '=', 100)]</field>
+    </record>
+    <record id="slot_crm_campaign_lost" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_crm_campaigns"/>
+        <field name="key">lost_opportunities</field>
+        <field name="name">Lost</field>
+        <field name="section">kpi</field>
+        <field name="sequence">40</field>
+        <field name="label">Lost Opportunity</field>
+        <field name="label_plural">Lost Opportunities</field>
+        <field name="compute_model">crm.lead</field>
+        <field name="relate_field">campaign_id</field>
+        <field name="compute_domain">[('type', '=', 'opportunity'), ('active', '=', False), ('probability', '=', 0)]</field>
+        <field name="compute_aggregator">__count</field>
+        <field name="action_xmlid">crm.crm_lead_action_pipeline</field>
+        <field name="action_domain">[('campaign_id', '=', '{{id}}'), ('active', '=', False)]</field>
+    </record>
+    <record id="slot_crm_campaign_bottom_opps" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_crm_campaigns"/>
+        <field name="key">bottom_opportunities</field>
+        <field name="name">Opportunities</field>
+        <field name="section">bottom</field>
+        <field name="sequence">10</field>
+        <field name="label">Opportunities</field>
+        <field name="icon">fa-star</field>
+        <field name="show_if_zero" eval="True"/>
+        <field name="compute_model">crm.lead</field>
+        <field name="relate_field">campaign_id</field>
+        <field name="compute_domain">[('type', '=', 'opportunity')]</field>
+        <field name="action_xmlid">crm.crm_lead_action_pipeline</field>
+        <field name="action_domain">[('campaign_id', '=', '{{id}}'), ('type', '=', 'opportunity')]</field>
+    </record>
+
+
+    <record id="blueprint_crm_mediums" model="dashboard.blueprint">
+        <field name="name">CRM Mediums</field>
+        <field name="key">crm_mediums</field>
+        <field name="host_model_id" ref="utm.model_utm_medium"/>
+        <field name="module_depends">crm,utm</field>
+        <field name="menu_name">Mediums Dashboard</field>
+        <field name="menu_parent_xmlid">crm.crm_menu_root</field>
+        <field name="menu_sequence">61</field>
+        <field name="primary_button_label">Pipeline Analysis</field>
+        <field name="primary_action_xmlid">crm.crm_lead_action_pipeline</field>
+        <field name="graph_model">crm.lead</field>
+        <field name="graph_data_field">medium_id</field>
+        <field name="graph_measure">__count</field>
+        <field name="graph_groupby">stage_id</field>
+        <field name="graph_domain">[('type', '=', 'opportunity')]</field>
+        <field name="graph_caption">Open pipeline</field>
+        <field name="header_title_field">name</field>
+
+        <field name="lens_my_enabled" eval="True"/>
+        <field name="lens_my_default" eval="False"/>
+        <field name="lens_my_label">My records</field>
+        <field name="lens_kpis_enabled" eval="True"/>
+        <field name="lens_kpis_default" eval="True"/>
+        <field name="lens_kpis_label">With KPIs</field>
+
+        <field name="state">draft</field>
+        <field name="sequence">61</field>
+    </record>
+
+
+    <record id="slot_crm_medium_open" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_crm_mediums"/>
+        <field name="key">open_opportunities</field>
+        <field name="name">Open Opportunities</field>
+        <field name="section">kpi</field>
+        <field name="sequence">10</field>
+        <field name="label">Open Opportunity</field>
+        <field name="label_plural">Open Opportunities</field>
+        <field name="compute_model">crm.lead</field>
+        <field name="relate_field">medium_id</field>
+        <field name="compute_domain">[('type', '=', 'opportunity'), ('probability', '&lt;', 100), ('active', '=', True)]</field>
+        <field name="compute_aggregator">__count</field>
+        <field name="amount_aggregator">expected_revenue:sum</field>
+        <field name="action_xmlid">crm.crm_lead_action_pipeline</field>
+        <field name="action_domain">[('medium_id', '=', '{{id}}'), ('type', '=', 'opportunity'), ('probability', '&lt;', 100)]</field>
+    </record>
+    <record id="slot_crm_medium_overdue" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_crm_mediums"/>
+        <field name="key">overdue_opportunities</field>
+        <field name="name">Overdue Opportunities</field>
+        <field name="section">kpi</field>
+        <field name="sequence">20</field>
+        <field name="label">Overdue Opportunity</field>
+        <field name="label_plural">Overdue Opportunities</field>
+        <field name="style">danger</field>
+        <field name="style_mode">when_positive</field>
+        <field name="is_attention_signal" eval="True"/>
+        <field name="compute_model">crm.lead</field>
+        <field name="relate_field">medium_id</field>
+        <field name="compute_domain">[]</field>
+        <field name="condition_ids" eval="[(4, ref('condition_attr_overdue_opportunity'))]"/>
+        <field name="compute_aggregator">__count</field>
+        <field name="amount_aggregator">expected_revenue:sum</field>
+        <field name="action_xmlid">crm.crm_lead_action_pipeline</field>
+        <field name="action_domain">[('medium_id', '=', '{{id}}')]</field>
+    </record>
+    <record id="slot_crm_medium_won" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_crm_mediums"/>
+        <field name="key">won_opportunities</field>
+        <field name="name">Won</field>
+        <field name="section">kpi</field>
+        <field name="sequence">30</field>
+        <field name="label">Won Opportunity</field>
+        <field name="label_plural">Won Opportunities</field>
+        <field name="compute_model">crm.lead</field>
+        <field name="relate_field">medium_id</field>
+        <field name="compute_domain">[('type', '=', 'opportunity'), ('probability', '=', 100)]</field>
+        <field name="compute_aggregator">__count</field>
+        <field name="amount_aggregator">expected_revenue:sum</field>
+        <field name="action_xmlid">crm.crm_lead_action_pipeline</field>
+        <field name="action_domain">[('medium_id', '=', '{{id}}'), ('probability', '=', 100)]</field>
+    </record>
+    <record id="slot_crm_medium_lost" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_crm_mediums"/>
+        <field name="key">lost_opportunities</field>
+        <field name="name">Lost</field>
+        <field name="section">kpi</field>
+        <field name="sequence">40</field>
+        <field name="label">Lost Opportunity</field>
+        <field name="label_plural">Lost Opportunities</field>
+        <field name="compute_model">crm.lead</field>
+        <field name="relate_field">medium_id</field>
+        <field name="compute_domain">[('type', '=', 'opportunity'), ('active', '=', False), ('probability', '=', 0)]</field>
+        <field name="compute_aggregator">__count</field>
+        <field name="action_xmlid">crm.crm_lead_action_pipeline</field>
+        <field name="action_domain">[('medium_id', '=', '{{id}}'), ('active', '=', False)]</field>
+    </record>
+    <record id="slot_crm_medium_bottom_opps" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_crm_mediums"/>
+        <field name="key">bottom_opportunities</field>
+        <field name="name">Opportunities</field>
+        <field name="section">bottom</field>
+        <field name="sequence">10</field>
+        <field name="label">Opportunities</field>
+        <field name="icon">fa-star</field>
+        <field name="show_if_zero" eval="True"/>
+        <field name="compute_model">crm.lead</field>
+        <field name="relate_field">medium_id</field>
+        <field name="compute_domain">[('type', '=', 'opportunity')]</field>
+        <field name="action_xmlid">crm.crm_lead_action_pipeline</field>
+        <field name="action_domain">[('medium_id', '=', '{{id}}'), ('type', '=', 'opportunity')]</field>
+    </record>
+
+
+    <record id="blueprint_crm_sources" model="dashboard.blueprint">
+        <field name="name">CRM Sources</field>
+        <field name="key">crm_sources</field>
+        <field name="host_model_id" ref="utm.model_utm_source"/>
+        <field name="module_depends">crm,utm</field>
+        <field name="menu_name">Sources Dashboard</field>
+        <field name="menu_parent_xmlid">crm.crm_menu_root</field>
+        <field name="menu_sequence">62</field>
+        <field name="primary_button_label">Pipeline Analysis</field>
+        <field name="primary_action_xmlid">crm.crm_lead_action_pipeline</field>
+        <field name="graph_model">crm.lead</field>
+        <field name="graph_data_field">source_id</field>
+        <field name="graph_measure">__count</field>
+        <field name="graph_groupby">stage_id</field>
+        <field name="graph_domain">[('type', '=', 'opportunity')]</field>
+        <field name="graph_caption">Open pipeline</field>
+        <field name="header_title_field">name</field>
+
+        <field name="lens_my_enabled" eval="True"/>
+        <field name="lens_my_default" eval="False"/>
+        <field name="lens_my_label">My records</field>
+        <field name="lens_kpis_enabled" eval="True"/>
+        <field name="lens_kpis_default" eval="True"/>
+        <field name="lens_kpis_label">With KPIs</field>
+
+        <field name="state">draft</field>
+        <field name="sequence">62</field>
+    </record>
+
+
+    <record id="slot_crm_source_open" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_crm_sources"/>
+        <field name="key">open_opportunities</field>
+        <field name="name">Open Opportunities</field>
+        <field name="section">kpi</field>
+        <field name="sequence">10</field>
+        <field name="label">Open Opportunity</field>
+        <field name="label_plural">Open Opportunities</field>
+        <field name="compute_model">crm.lead</field>
+        <field name="relate_field">source_id</field>
+        <field name="compute_domain">[('type', '=', 'opportunity'), ('probability', '&lt;', 100), ('active', '=', True)]</field>
+        <field name="compute_aggregator">__count</field>
+        <field name="amount_aggregator">expected_revenue:sum</field>
+        <field name="action_xmlid">crm.crm_lead_action_pipeline</field>
+        <field name="action_domain">[('source_id', '=', '{{id}}'), ('type', '=', 'opportunity'), ('probability', '&lt;', 100)]</field>
+    </record>
+    <record id="slot_crm_source_overdue" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_crm_sources"/>
+        <field name="key">overdue_opportunities</field>
+        <field name="name">Overdue Opportunities</field>
+        <field name="section">kpi</field>
+        <field name="sequence">20</field>
+        <field name="label">Overdue Opportunity</field>
+        <field name="label_plural">Overdue Opportunities</field>
+        <field name="style">danger</field>
+        <field name="style_mode">when_positive</field>
+        <field name="is_attention_signal" eval="True"/>
+        <field name="compute_model">crm.lead</field>
+        <field name="relate_field">source_id</field>
+        <field name="compute_domain">[]</field>
+        <field name="condition_ids" eval="[(4, ref('condition_attr_overdue_opportunity'))]"/>
+        <field name="compute_aggregator">__count</field>
+        <field name="amount_aggregator">expected_revenue:sum</field>
+        <field name="action_xmlid">crm.crm_lead_action_pipeline</field>
+        <field name="action_domain">[('source_id', '=', '{{id}}')]</field>
+    </record>
+    <record id="slot_crm_source_won" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_crm_sources"/>
+        <field name="key">won_opportunities</field>
+        <field name="name">Won</field>
+        <field name="section">kpi</field>
+        <field name="sequence">30</field>
+        <field name="label">Won Opportunity</field>
+        <field name="label_plural">Won Opportunities</field>
+        <field name="compute_model">crm.lead</field>
+        <field name="relate_field">source_id</field>
+        <field name="compute_domain">[('type', '=', 'opportunity'), ('probability', '=', 100)]</field>
+        <field name="compute_aggregator">__count</field>
+        <field name="amount_aggregator">expected_revenue:sum</field>
+        <field name="action_xmlid">crm.crm_lead_action_pipeline</field>
+        <field name="action_domain">[('source_id', '=', '{{id}}'), ('probability', '=', 100)]</field>
+    </record>
+    <record id="slot_crm_source_lost" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_crm_sources"/>
+        <field name="key">lost_opportunities</field>
+        <field name="name">Lost</field>
+        <field name="section">kpi</field>
+        <field name="sequence">40</field>
+        <field name="label">Lost Opportunity</field>
+        <field name="label_plural">Lost Opportunities</field>
+        <field name="compute_model">crm.lead</field>
+        <field name="relate_field">source_id</field>
+        <field name="compute_domain">[('type', '=', 'opportunity'), ('active', '=', False), ('probability', '=', 0)]</field>
+        <field name="compute_aggregator">__count</field>
+        <field name="action_xmlid">crm.crm_lead_action_pipeline</field>
+        <field name="action_domain">[('source_id', '=', '{{id}}'), ('active', '=', False)]</field>
+    </record>
+    <record id="slot_crm_source_bottom_opps" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_crm_sources"/>
+        <field name="key">bottom_opportunities</field>
+        <field name="name">Opportunities</field>
+        <field name="section">bottom</field>
+        <field name="sequence">10</field>
+        <field name="label">Opportunities</field>
+        <field name="icon">fa-star</field>
+        <field name="show_if_zero" eval="True"/>
+        <field name="compute_model">crm.lead</field>
+        <field name="relate_field">source_id</field>
+        <field name="compute_domain">[('type', '=', 'opportunity')]</field>
+        <field name="action_xmlid">crm.crm_lead_action_pipeline</field>
+        <field name="action_domain">[('source_id', '=', '{{id}}'), ('type', '=', 'opportunity')]</field>
+    </record>
+
+</odoo>

@@ -1,0 +1,115 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo noupdate="1">
+    <record id="blueprint_stock_categories" model="dashboard.blueprint">
+        <field name="name">Stock Categories</field>
+        <field name="key">stock_categories</field>
+        <field name="host_model_id" ref="product.model_product_category"/>
+        <field name="module_depends">stock,product</field>
+        <field name="menu_name">Categories Dashboard</field>
+        <field name="menu_parent_xmlid">stock.menu_stock_inventory_control</field>
+        <field name="menu_sequence">55</field>
+        <field name="primary_button_label">Moves Analysis</field>
+        <field name="primary_action_xmlid">stock.stock_move_action</field>
+        <field name="graph_model">stock.move</field>
+        <field name="graph_data_field">product_category_id</field>
+        <field name="graph_measure">__count</field>
+        <field name="graph_groupby">date:week</field>
+        <field name="graph_domain">[('state', '!=', 'cancel')]</field>
+        <field name="graph_caption">Moves / week</field>
+        <field name="include_child_records" eval="True"/>
+
+        <field name="lens_my_enabled" eval="True"/>
+        <field name="lens_my_default" eval="False"/>
+        <field name="lens_my_label">My records</field>
+        <field name="lens_kpis_enabled" eval="True"/>
+        <field name="lens_kpis_default" eval="True"/>
+        <field name="lens_kpis_label">With KPIs</field>
+
+        <field name="state">draft</field>
+        <field name="sequence">55</field>
+    </record>
+
+    <record id="slot_stcat_on_hand" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_stock_categories"/>
+        <field name="key">cat_on_hand</field>
+        <field name="name">On Hand</field>
+        <field name="section">kpi</field>
+        <field name="sequence">10</field>
+        <field name="label">On Hand qty</field>
+        <field name="label_plural">On Hand qty</field>
+        <field name="value_mode">amount</field>
+        <field name="compute_model">stock.quant</field>
+        <field name="relate_field">product_categ_id</field>
+        <field name="compute_domain">[('location_id.usage', '=', 'internal')]</field>
+        <field name="compute_aggregator">__count</field>
+        <field name="amount_aggregator">quantity:sum</field>
+        <field name="action_xmlid">stock.action_view_inventory_tree</field>
+        <field name="action_domain">[('product_categ_id', 'child_of', '{{id}}')]</field>
+        <field name="module_depends">stock</field>
+    </record>
+    <record id="slot_stcat_reserved" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_stock_categories"/>
+        <field name="key">cat_reserved</field>
+        <field name="name">Reserved</field>
+        <field name="section">kpi</field>
+        <field name="sequence">20</field>
+        <field name="label">Reserved qty</field>
+        <field name="label_plural">Reserved qty</field>
+        <field name="value_mode">amount</field>
+        <field name="style">warning</field>
+        <field name="style_mode">when_positive</field>
+        <field name="compute_model">stock.quant</field>
+        <field name="relate_field">product_categ_id</field>
+        <field name="compute_domain">[('location_id.usage', '=', 'internal'), ('reserved_quantity', '&gt;', 0)]</field>
+        <field name="compute_aggregator">__count</field>
+        <field name="amount_aggregator">reserved_quantity:sum</field>
+        <field name="module_depends">stock</field>
+    </record>
+    <record id="slot_stcat_reorder" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_stock_categories"/>
+        <field name="key">cat_reorder</field>
+        <field name="name">Reorder</field>
+        <field name="section">kpi</field>
+        <field name="sequence">30</field>
+        <field name="label">Reorder rule</field>
+        <field name="label_plural">Reorder rules</field>
+        <field name="compute_model">stock.warehouse.orderpoint</field>
+        <field name="relate_field">product_category_id</field>
+        <field name="compute_domain">[('active', '=', True)]</field>
+        <field name="compute_aggregator">__count</field>
+        <field name="action_xmlid">stock.action_orderpoint</field>
+        <field name="action_domain">[('product_category_id', 'child_of', '{{id}}')]</field>
+        <field name="module_depends">stock</field>
+    </record>
+
+    <record id="slot_stcat_bottom_products" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_stock_categories"/>
+        <field name="key">bottom_products</field>
+        <field name="name">Products</field>
+        <field name="section">bottom</field>
+        <field name="sequence">10</field>
+        <field name="label">Products</field>
+        <field name="icon">fa-cube</field>
+        <field name="show_if_zero" eval="True"/>
+        <field name="compute_model">product.product</field>
+        <field name="relate_field">categ_id</field>
+        <field name="compute_domain">[]</field>
+        <field name="action_xmlid">stock.stock_product_normal_action</field>
+        <field name="action_domain">[('categ_id', 'child_of', '{{id}}')]</field>
+    </record>
+    <record id="slot_stcat_bottom_transfers" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_stock_categories"/>
+        <field name="key">bottom_transfers</field>
+        <field name="name">Transfers</field>
+        <field name="section">bottom</field>
+        <field name="sequence">20</field>
+        <field name="label">Transfers</field>
+        <field name="icon">fa-truck</field>
+        <field name="show_if_zero" eval="True"/>
+        <field name="compute_model">stock.move</field>
+        <field name="relate_field">product_category_id</field>
+        <field name="compute_domain">[('state', '!=', 'cancel')]</field>
+        <field name="action_xmlid">stock.action_picking_tree_all</field>
+        <field name="action_domain">[('move_ids.product_category_id', 'child_of', '{{id}}')]</field>
+    </record>
+</odoo>

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo noupdate="1">
+    <record id="blueprint_vendor_bills" model="dashboard.blueprint">
+        <field name="header_title_field">display_name</field>
+        <field name="header_image_field">image_128</field>
+        <field name="header_image_style">avatar</field>
+    </record>
+</odoo>

@@ -1,7 +1,7 @@
 # Customer 360 Suite — Market Catalog Design
 
 **Date:** 2026-07-29  
-**Status:** Approved · Waves 1–3 implemented (uncommitted) · Wave 4 next  
+**Status:** Approved · Waves 1–4 implemented (Wave 4 uncommitted)  
 **Repo:** `odoo-dashboards-19.1-v2`  
 **Engine:** `dashboard_engine`  
 **Audience:** Full suite (Sales/CRM + Finance + Ops)  

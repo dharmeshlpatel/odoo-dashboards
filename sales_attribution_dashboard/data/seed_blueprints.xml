@@ -1,0 +1,285 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo noupdate="1">
+
+    <record id="blueprint_sales_campaigns" model="dashboard.blueprint">
+        <field name="name">Sales Campaigns</field>
+        <field name="key">sales_campaigns</field>
+        <field name="host_model_id" ref="utm.model_utm_campaign"/>
+        <field name="module_depends">sale,utm</field>
+        <field name="menu_name">Campaigns Dashboard</field>
+        <field name="menu_parent_xmlid">sale.sale_menu_root</field>
+        <field name="menu_sequence">70</field>
+        <field name="primary_button_label">Sales Analysis</field>
+        <field name="primary_action_xmlid">sale.action_order_report_all</field>
+        <field name="graph_model">sale.report</field>
+        <field name="graph_data_field">campaign_id</field>
+        <field name="graph_measure">price_subtotal:sum</field>
+        <field name="graph_groupby">date:month</field>
+        <field name="graph_caption">Sales by month</field>
+        <field name="header_title_field">name</field>
+
+        <field name="lens_my_enabled" eval="True"/>
+        <field name="lens_my_default" eval="False"/>
+        <field name="lens_my_label">My records</field>
+        <field name="lens_kpis_enabled" eval="True"/>
+        <field name="lens_kpis_default" eval="True"/>
+        <field name="lens_kpis_label">With KPIs</field>
+
+        <field name="state">draft</field>
+        <field name="sequence">70</field>
+    </record>
+
+
+    <record id="slot_sale_campaign_quotes" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_sales_campaigns"/>
+        <field name="key">quotations</field>
+        <field name="name">Quotations</field>
+        <field name="section">kpi</field>
+        <field name="sequence">10</field>
+        <field name="label">Quotation</field>
+        <field name="label_plural">Quotations</field>
+        <field name="compute_model">sale.order</field>
+        <field name="relate_field">campaign_id</field>
+        <field name="compute_domain">[('state', 'in', ('draft', 'sent'))]</field>
+        <field name="compute_aggregator">__count</field>
+        <field name="action_xmlid">sale.action_quotations_with_onboarding</field>
+        <field name="action_domain">[('campaign_id', '=', '{{id}}'), ('state', 'in', ('draft', 'sent'))]</field>
+    </record>
+    <record id="slot_sale_campaign_orders" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_sales_campaigns"/>
+        <field name="key">sales_orders</field>
+        <field name="name">Orders</field>
+        <field name="section">kpi</field>
+        <field name="sequence">20</field>
+        <field name="label">Order</field>
+        <field name="label_plural">Orders</field>
+        <field name="compute_model">sale.order</field>
+        <field name="relate_field">campaign_id</field>
+        <field name="compute_domain">[('state', 'in', ('sale', 'done'))]</field>
+        <field name="compute_aggregator">__count</field>
+        <field name="action_xmlid">sale.action_orders</field>
+        <field name="action_domain">[('campaign_id', '=', '{{id}}'), ('state', 'in', ('sale', 'done'))]</field>
+    </record>
+    <record id="slot_sale_campaign_to_invoice" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_sales_campaigns"/>
+        <field name="key">to_invoice</field>
+        <field name="name">To Invoice</field>
+        <field name="section">kpi</field>
+        <field name="sequence">30</field>
+        <field name="label">Order to Invoice</field>
+        <field name="label_plural">Orders to Invoice</field>
+        <field name="style">warning</field>
+        <field name="style_mode">when_positive</field>
+        <field name="is_attention_signal" eval="True"/>
+        <field name="compute_model">sale.order</field>
+        <field name="relate_field">campaign_id</field>
+        <field name="compute_domain">[('invoice_status', '=', 'to invoice')]</field>
+        <field name="compute_aggregator">__count</field>
+        <field name="action_xmlid">sale.action_orders_to_invoice</field>
+        <field name="action_domain">[('campaign_id', '=', '{{id}}'), ('invoice_status', '=', 'to invoice')]</field>
+    </record>
+    <record id="slot_sale_campaign_bottom_orders" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_sales_campaigns"/>
+        <field name="key">bottom_orders</field>
+        <field name="name">Orders</field>
+        <field name="section">bottom</field>
+        <field name="sequence">10</field>
+        <field name="label">Orders</field>
+        <field name="icon">fa-shopping-cart</field>
+        <field name="show_if_zero" eval="True"/>
+        <field name="compute_model">sale.order</field>
+        <field name="relate_field">campaign_id</field>
+        <field name="compute_domain">[('state', 'in', ('sale', 'done'))]</field>
+        <field name="action_xmlid">sale.action_orders</field>
+        <field name="action_domain">[('campaign_id', '=', '{{id}}')]</field>
+    </record>
+
+
+    <record id="blueprint_sales_mediums" model="dashboard.blueprint">
+        <field name="name">Sales Mediums</field>
+        <field name="key">sales_mediums</field>
+        <field name="host_model_id" ref="utm.model_utm_medium"/>
+        <field name="module_depends">sale,utm</field>
+        <field name="menu_name">Mediums Dashboard</field>
+        <field name="menu_parent_xmlid">sale.sale_menu_root</field>
+        <field name="menu_sequence">71</field>
+        <field name="primary_button_label">Sales Analysis</field>
+        <field name="primary_action_xmlid">sale.action_order_report_all</field>
+        <field name="graph_model">sale.report</field>
+        <field name="graph_data_field">medium_id</field>
+        <field name="graph_measure">price_subtotal:sum</field>
+        <field name="graph_groupby">date:month</field>
+        <field name="graph_caption">Sales by month</field>
+        <field name="header_title_field">name</field>
+
+        <field name="lens_my_enabled" eval="True"/>
+        <field name="lens_my_default" eval="False"/>
+        <field name="lens_my_label">My records</field>
+        <field name="lens_kpis_enabled" eval="True"/>
+        <field name="lens_kpis_default" eval="True"/>
+        <field name="lens_kpis_label">With KPIs</field>
+
+        <field name="state">draft</field>
+        <field name="sequence">71</field>
+    </record>
+
+
+    <record id="slot_sale_medium_quotes" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_sales_mediums"/>
+        <field name="key">quotations</field>
+        <field name="name">Quotations</field>
+        <field name="section">kpi</field>
+        <field name="sequence">10</field>
+        <field name="label">Quotation</field>
+        <field name="label_plural">Quotations</field>
+        <field name="compute_model">sale.order</field>
+        <field name="relate_field">medium_id</field>
+        <field name="compute_domain">[('state', 'in', ('draft', 'sent'))]</field>
+        <field name="compute_aggregator">__count</field>
+        <field name="action_xmlid">sale.action_quotations_with_onboarding</field>
+        <field name="action_domain">[('medium_id', '=', '{{id}}'), ('state', 'in', ('draft', 'sent'))]</field>
+    </record>
+    <record id="slot_sale_medium_orders" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_sales_mediums"/>
+        <field name="key">sales_orders</field>
+        <field name="name">Orders</field>
+        <field name="section">kpi</field>
+        <field name="sequence">20</field>
+        <field name="label">Order</field>
+        <field name="label_plural">Orders</field>
+        <field name="compute_model">sale.order</field>
+        <field name="relate_field">medium_id</field>
+        <field name="compute_domain">[('state', 'in', ('sale', 'done'))]</field>
+        <field name="compute_aggregator">__count</field>
+        <field name="action_xmlid">sale.action_orders</field>
+        <field name="action_domain">[('medium_id', '=', '{{id}}'), ('state', 'in', ('sale', 'done'))]</field>
+    </record>
+    <record id="slot_sale_medium_to_invoice" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_sales_mediums"/>
+        <field name="key">to_invoice</field>
+        <field name="name">To Invoice</field>
+        <field name="section">kpi</field>
+        <field name="sequence">30</field>
+        <field name="label">Order to Invoice</field>
+        <field name="label_plural">Orders to Invoice</field>
+        <field name="style">warning</field>
+        <field name="style_mode">when_positive</field>
+        <field name="is_attention_signal" eval="True"/>
+        <field name="compute_model">sale.order</field>
+        <field name="relate_field">medium_id</field>
+        <field name="compute_domain">[('invoice_status', '=', 'to invoice')]</field>
+        <field name="compute_aggregator">__count</field>
+        <field name="action_xmlid">sale.action_orders_to_invoice</field>
+        <field name="action_domain">[('medium_id', '=', '{{id}}'), ('invoice_status', '=', 'to invoice')]</field>
+    </record>
+    <record id="slot_sale_medium_bottom_orders" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_sales_mediums"/>
+        <field name="key">bottom_orders</field>
+        <field name="name">Orders</field>
+        <field name="section">bottom</field>
+        <field name="sequence">10</field>
+        <field name="label">Orders</field>
+        <field name="icon">fa-shopping-cart</field>
+        <field name="show_if_zero" eval="True"/>
+        <field name="compute_model">sale.order</field>
+        <field name="relate_field">medium_id</field>
+        <field name="compute_domain">[('state', 'in', ('sale', 'done'))]</field>
+        <field name="action_xmlid">sale.action_orders</field>
+        <field name="action_domain">[('medium_id', '=', '{{id}}')]</field>
+    </record>
+
+
+    <record id="blueprint_sales_sources" model="dashboard.blueprint">
+        <field name="name">Sales Sources</field>
+        <field name="key">sales_sources</field>
+        <field name="host_model_id" ref="utm.model_utm_source"/>
+        <field name="module_depends">sale,utm</field>
+        <field name="menu_name">Sources Dashboard</field>
+        <field name="menu_parent_xmlid">sale.sale_menu_root</field>
+        <field name="menu_sequence">72</field>
+        <field name="primary_button_label">Sales Analysis</field>
+        <field name="primary_action_xmlid">sale.action_order_report_all</field>
+        <field name="graph_model">sale.report</field>
+        <field name="graph_data_field">source_id</field>
+        <field name="graph_measure">price_subtotal:sum</field>
+        <field name="graph_groupby">date:month</field>
+        <field name="graph_caption">Sales by month</field>
+        <field name="header_title_field">name</field>
+
+        <field name="lens_my_enabled" eval="True"/>
+        <field name="lens_my_default" eval="False"/>
+        <field name="lens_my_label">My records</field>
+        <field name="lens_kpis_enabled" eval="True"/>
+        <field name="lens_kpis_default" eval="True"/>
+        <field name="lens_kpis_label">With KPIs</field>
+
+        <field name="state">draft</field>
+        <field name="sequence">72</field>
+    </record>
+
+
+    <record id="slot_sale_source_quotes" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_sales_sources"/>
+        <field name="key">quotations</field>
+        <field name="name">Quotations</field>
+        <field name="section">kpi</field>
+        <field name="sequence">10</field>
+        <field name="label">Quotation</field>
+        <field name="label_plural">Quotations</field>
+        <field name="compute_model">sale.order</field>
+        <field name="relate_field">source_id</field>
+        <field name="compute_domain">[('state', 'in', ('draft', 'sent'))]</field>
+        <field name="compute_aggregator">__count</field>
+        <field name="action_xmlid">sale.action_quotations_with_onboarding</field>
+        <field name="action_domain">[('source_id', '=', '{{id}}'), ('state', 'in', ('draft', 'sent'))]</field>
+    </record>
+    <record id="slot_sale_source_orders" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_sales_sources"/>
+        <field name="key">sales_orders</field>
+        <field name="name">Orders</field>
+        <field name="section">kpi</field>
+        <field name="sequence">20</field>
+        <field name="label">Order</field>
+        <field name="label_plural">Orders</field>
+        <field name="compute_model">sale.order</field>
+        <field name="relate_field">source_id</field>
+        <field name="compute_domain">[('state', 'in', ('sale', 'done'))]</field>
+        <field name="compute_aggregator">__count</field>
+        <field name="action_xmlid">sale.action_orders</field>
+        <field name="action_domain">[('source_id', '=', '{{id}}'), ('state', 'in', ('sale', 'done'))]</field>
+    </record>
+    <record id="slot_sale_source_to_invoice" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_sales_sources"/>
+        <field name="key">to_invoice</field>
+        <field name="name">To Invoice</field>
+        <field name="section">kpi</field>
+        <field name="sequence">30</field>
+        <field name="label">Order to Invoice</field>
+        <field name="label_plural">Orders to Invoice</field>
+        <field name="style">warning</field>
+        <field name="style_mode">when_positive</field>
+        <field name="is_attention_signal" eval="True"/>
+        <field name="compute_model">sale.order</field>
+        <field name="relate_field">source_id</field>
+        <field name="compute_domain">[('invoice_status', '=', 'to invoice')]</field>
+        <field name="compute_aggregator">__count</field>
+        <field name="action_xmlid">sale.action_orders_to_invoice</field>
+        <field name="action_domain">[('source_id', '=', '{{id}}'), ('invoice_status', '=', 'to invoice')]</field>
+    </record>
+    <record id="slot_sale_source_bottom_orders" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_sales_sources"/>
+        <field name="key">bottom_orders</field>
+        <field name="name">Orders</field>
+        <field name="section">bottom</field>
+        <field name="sequence">10</field>
+        <field name="label">Orders</field>
+        <field name="icon">fa-shopping-cart</field>
+        <field name="show_if_zero" eval="True"/>
+        <field name="compute_model">sale.order</field>
+        <field name="relate_field">source_id</field>
+        <field name="compute_domain">[('state', 'in', ('sale', 'done'))]</field>
+        <field name="action_xmlid">sale.action_orders</field>
+        <field name="action_domain">[('source_id', '=', '{{id}}')]</field>
+    </record>
+
+</odoo>

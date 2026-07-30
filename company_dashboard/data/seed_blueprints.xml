@@ -1,0 +1,257 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo noupdate="1">
+    <record id="blueprint_company_crm" model="dashboard.blueprint">
+        <field name="name">Company CRM</field>
+        <field name="key">company_crm</field>
+        <field name="host_model_id" ref="base.model_res_company"/>
+        <field name="module_depends">crm</field>
+        <field name="menu_name">Companies CRM Dashboard</field>
+        <field name="menu_parent_xmlid">crm.crm_menu_root</field>
+        <field name="menu_sequence">80</field>
+        <field name="primary_button_label">Pipeline Analysis</field>
+        <field name="primary_action_xmlid">crm.crm_lead_action_pipeline</field>
+        <field name="graph_model">crm.lead</field>
+        <field name="graph_data_field">company_id</field>
+        <field name="graph_measure">__count</field>
+        <field name="graph_groupby">stage_id</field>
+        <field name="graph_domain">[('type', '=', 'opportunity')]</field>
+        <field name="graph_caption">Open pipeline</field>
+        <field name="header_title_field">name</field>
+
+        <field name="lens_my_enabled" eval="True"/>
+        <field name="lens_my_default" eval="False"/>
+        <field name="lens_my_label">My records</field>
+        <field name="lens_kpis_enabled" eval="True"/>
+        <field name="lens_kpis_default" eval="True"/>
+        <field name="lens_kpis_label">With KPIs</field>
+
+        <field name="state">draft</field>
+        <field name="sequence">80</field>
+    </record>
+    <record id="slot_co_crm_open" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_company_crm"/>
+        <field name="key">open_opportunities</field>
+        <field name="name">Open Opportunities</field>
+        <field name="section">kpi</field>
+        <field name="sequence">10</field>
+        <field name="label">Open Opportunity</field>
+        <field name="label_plural">Open Opportunities</field>
+        <field name="compute_model">crm.lead</field>
+        <field name="relate_field">company_id</field>
+        <field name="compute_domain">[('type', '=', 'opportunity'), ('probability', '&lt;', 100), ('active', '=', True)]</field>
+        <field name="compute_aggregator">__count</field>
+        <field name="amount_aggregator">expected_revenue:sum</field>
+        <field name="action_xmlid">crm.crm_lead_action_pipeline</field>
+        <field name="action_domain">[('company_id', '=', '{{id}}'), ('type', '=', 'opportunity')]</field>
+        <field name="module_depends">crm</field>
+    </record>
+    <record id="slot_co_crm_overdue" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_company_crm"/>
+        <field name="key">overdue_opportunities</field>
+        <field name="name">Overdue Opportunities</field>
+        <field name="section">kpi</field>
+        <field name="sequence">20</field>
+        <field name="label">Overdue Opportunity</field>
+        <field name="label_plural">Overdue Opportunities</field>
+        <field name="style">danger</field>
+        <field name="style_mode">when_positive</field>
+        <field name="is_attention_signal" eval="True"/>
+        <field name="compute_model">crm.lead</field>
+        <field name="relate_field">company_id</field>
+        <field name="compute_domain">[('type', '=', 'opportunity'), ('date_deadline', '!=', False), ('date_closed', '=', False)]</field>
+        <field name="compute_aggregator">__count</field>
+        <field name="action_xmlid">crm.crm_lead_action_pipeline</field>
+        <field name="action_domain">[('company_id', '=', '{{id}}')]</field>
+        <field name="module_depends">crm</field>
+    </record>
+    <record id="slot_co_crm_bottom" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_company_crm"/>
+        <field name="key">bottom_opportunities</field>
+        <field name="name">Opportunities</field>
+        <field name="section">bottom</field>
+        <field name="sequence">10</field>
+        <field name="label">Opportunities</field>
+        <field name="icon">fa-star</field>
+        <field name="show_if_zero" eval="True"/>
+        <field name="compute_model">crm.lead</field>
+        <field name="relate_field">company_id</field>
+        <field name="compute_domain">[('type', '=', 'opportunity')]</field>
+        <field name="action_xmlid">crm.crm_lead_action_pipeline</field>
+        <field name="action_domain">[('company_id', '=', '{{id}}')]</field>
+        <field name="module_depends">crm</field>
+    </record>
+
+    <record id="blueprint_company_sales" model="dashboard.blueprint">
+        <field name="name">Company Sales</field>
+        <field name="key">company_sales</field>
+        <field name="host_model_id" ref="base.model_res_company"/>
+        <field name="module_depends">sale</field>
+        <field name="menu_name">Companies Sales Dashboard</field>
+        <field name="menu_parent_xmlid">sale.sale_menu_root</field>
+        <field name="menu_sequence">80</field>
+        <field name="primary_button_label">Sales Analysis</field>
+        <field name="primary_action_xmlid">sale.action_order_report_all</field>
+        <field name="graph_model">sale.report</field>
+        <field name="graph_data_field">company_id</field>
+        <field name="graph_measure">price_subtotal:sum</field>
+        <field name="graph_groupby">date:month</field>
+        <field name="graph_caption">Sales by month</field>
+        <field name="header_title_field">name</field>
+
+        <field name="lens_my_enabled" eval="True"/>
+        <field name="lens_my_default" eval="False"/>
+        <field name="lens_my_label">My records</field>
+        <field name="lens_kpis_enabled" eval="True"/>
+        <field name="lens_kpis_default" eval="True"/>
+        <field name="lens_kpis_label">With KPIs</field>
+
+        <field name="state">draft</field>
+        <field name="sequence">81</field>
+    </record>
+    <record id="slot_co_sale_orders" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_company_sales"/>
+        <field name="key">sales_orders</field>
+        <field name="name">Orders</field>
+        <field name="section">kpi</field>
+        <field name="sequence">10</field>
+        <field name="label">Order</field>
+        <field name="label_plural">Orders</field>
+        <field name="compute_model">sale.order</field>
+        <field name="relate_field">company_id</field>
+        <field name="compute_domain">[('state', 'in', ('sale', 'done'))]</field>
+        <field name="compute_aggregator">__count</field>
+        <field name="action_xmlid">sale.action_orders</field>
+        <field name="action_domain">[('company_id', '=', '{{id}}'), ('state', 'in', ('sale', 'done'))]</field>
+        <field name="module_depends">sale</field>
+    </record>
+    <record id="slot_co_sale_to_invoice" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_company_sales"/>
+        <field name="key">to_invoice</field>
+        <field name="name">To Invoice</field>
+        <field name="section">kpi</field>
+        <field name="sequence">20</field>
+        <field name="label">Order to Invoice</field>
+        <field name="label_plural">Orders to Invoice</field>
+        <field name="style">warning</field>
+        <field name="style_mode">when_positive</field>
+        <field name="is_attention_signal" eval="True"/>
+        <field name="compute_model">sale.order</field>
+        <field name="relate_field">company_id</field>
+        <field name="compute_domain">[('invoice_status', '=', 'to invoice')]</field>
+        <field name="compute_aggregator">__count</field>
+        <field name="action_xmlid">sale.action_orders_to_invoice</field>
+        <field name="action_domain">[('company_id', '=', '{{id}}'), ('invoice_status', '=', 'to invoice')]</field>
+        <field name="module_depends">sale</field>
+    </record>
+    <record id="slot_co_sale_bottom" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_company_sales"/>
+        <field name="key">bottom_orders</field>
+        <field name="name">Orders</field>
+        <field name="section">bottom</field>
+        <field name="sequence">10</field>
+        <field name="label">Orders</field>
+        <field name="icon">fa-shopping-cart</field>
+        <field name="show_if_zero" eval="True"/>
+        <field name="compute_model">sale.order</field>
+        <field name="relate_field">company_id</field>
+        <field name="compute_domain">[('state', 'in', ('sale', 'done'))]</field>
+        <field name="action_xmlid">sale.action_orders</field>
+        <field name="action_domain">[('company_id', '=', '{{id}}')]</field>
+        <field name="module_depends">sale</field>
+    </record>
+
+    <record id="blueprint_company_invoice" model="dashboard.blueprint">
+        <field name="name">Company Invoices</field>
+        <field name="key">company_invoice</field>
+        <field name="host_model_id" ref="base.model_res_company"/>
+        <field name="module_depends">account</field>
+        <field name="menu_name">Companies Invoice Dashboard</field>
+        <field name="menu_parent_xmlid">account.menu_finance_receivables</field>
+        <field name="menu_sequence">80</field>
+        <field name="primary_button_label">Invoice Analysis</field>
+        <field name="primary_action_xmlid">account.action_account_invoice_report_all</field>
+        <field name="graph_model">account.invoice.report</field>
+        <field name="graph_data_field">company_id</field>
+        <field name="graph_measure">price_subtotal:sum</field>
+        <field name="graph_groupby">invoice_date:month</field>
+        <field name="graph_domain">[('move_type', '=', 'out_invoice')]</field>
+        <field name="graph_caption">Invoices</field>
+        <field name="header_title_field">name</field>
+
+        <field name="lens_my_enabled" eval="True"/>
+        <field name="lens_my_default" eval="False"/>
+        <field name="lens_my_label">My records</field>
+        <field name="lens_kpis_enabled" eval="True"/>
+        <field name="lens_kpis_default" eval="True"/>
+        <field name="lens_kpis_label">With KPIs</field>
+
+        <field name="state">draft</field>
+        <field name="sequence">82</field>
+    </record>
+    <record id="slot_co_inv_open" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_company_invoice"/>
+        <field name="key">open_invoices</field>
+        <field name="name">Open Invoices</field>
+        <field name="section">kpi</field>
+        <field name="sequence">10</field>
+        <field name="label">Open Invoice</field>
+        <field name="label_plural">Open Invoices</field>
+        <field name="compute_model">account.move</field>
+        <field name="relate_field">company_id</field>
+        <field name="compute_domain">[('move_type', '=', 'out_invoice'), ('state', '=', 'posted'), ('payment_state', 'in', ('not_paid', 'partial', 'in_payment'))]</field>
+        <field name="compute_aggregator">__count</field>
+        <field name="action_xmlid">account.action_move_out_invoice_type</field>
+        <field name="action_domain">[('company_id', '=', '{{id}}'), ('move_type', '=', 'out_invoice')]</field>
+        <field name="module_depends">account</field>
+    </record>
+    <record id="condition_co_inv_overdue" model="dashboard.condition">
+        <field name="name">Company invoice overdue due date</field>
+        <field name="model">account.move</field>
+        <field name="match">all</field>
+        <field name="module_depends">account</field>
+    </record>
+    <record id="rule_co_inv_overdue" model="dashboard.condition.rule">
+        <field name="condition_id" ref="condition_co_inv_overdue"/>
+        <field name="sequence">10</field>
+        <field name="field_name">invoice_date_due</field>
+        <field name="operator">&lt;</field>
+        <field name="value_type">relative_date</field>
+        <field name="relative_when">today</field>
+    </record>
+    <record id="slot_co_inv_overdue" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_company_invoice"/>
+        <field name="key">overdue_invoices</field>
+        <field name="name">Overdue Invoices</field>
+        <field name="section">kpi</field>
+        <field name="sequence">20</field>
+        <field name="label">Overdue Invoice</field>
+        <field name="label_plural">Overdue Invoices</field>
+        <field name="style">danger</field>
+        <field name="style_mode">when_positive</field>
+        <field name="is_attention_signal" eval="True"/>
+        <field name="compute_model">account.move</field>
+        <field name="relate_field">company_id</field>
+        <field name="compute_domain">[('move_type', '=', 'out_invoice'), ('state', '=', 'posted'), ('payment_state', 'in', ('not_paid', 'partial', 'in_payment')), ('invoice_date_due', '!=', False)]</field>
+        <field name="condition_ids" eval="[(4, ref('condition_co_inv_overdue'))]"/>
+        <field name="compute_aggregator">__count</field>
+        <field name="action_xmlid">account.action_move_out_invoice_type</field>
+        <field name="action_domain">[('company_id', '=', '{{id}}')]</field>
+        <field name="module_depends">account</field>
+    </record>
+    <record id="slot_co_inv_bottom" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_company_invoice"/>
+        <field name="key">bottom_invoices</field>
+        <field name="name">Invoices</field>
+        <field name="section">bottom</field>
+        <field name="sequence">10</field>
+        <field name="label">Invoices</field>
+        <field name="icon">fa-pencil-square-o</field>
+        <field name="show_if_zero" eval="True"/>
+        <field name="compute_model">account.move</field>
+        <field name="relate_field">company_id</field>
+        <field name="compute_domain">[('move_type', '=', 'out_invoice')]</field>
+        <field name="action_xmlid">account.action_move_out_invoice_type</field>
+        <field name="action_domain">[('company_id', '=', '{{id}}')]</field>
+        <field name="module_depends">account</field>
+    </record>
+</odoo>
