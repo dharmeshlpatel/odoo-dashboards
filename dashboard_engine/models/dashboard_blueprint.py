@@ -169,6 +169,24 @@ class DashboardBlueprint(models.Model):
         "Left empty → under Dashboard Engine root.",
     )
     menu_sequence = fields.Integer(default=50, string="Menu Sequence")
+    menu_group_ids = fields.Many2many(
+        "res.groups",
+        "dashboard_blueprint_menu_group_rel",
+        "blueprint_id",
+        "group_id",
+        string="Menu Visibility",
+        help="If set, the generated menu is only visible to these groups "
+        "(same as ir.ui.menu Visibility). Empty → Odoo uses action access.",
+    )
+    menu_web_icon = fields.Char(
+        string="Web Icon File",
+        help="Optional icon path, e.g. module_name,static/description/icon.png",
+    )
+    menu_web_icon_data = fields.Binary(
+        string="Web Icon Image",
+        attachment=True,
+        help="Optional uploaded image for the generated menu icon.",
+    )
     lens_my_enabled = fields.Boolean(string="Show My filter", default=False)
     lens_my_default = fields.Boolean(string="My filter on by default", default=False)
     lens_my_label = fields.Char(string="My filter label")
@@ -1413,6 +1431,9 @@ class DashboardBlueprint(models.Model):
             "menu_name",
             "menu_parent_id",
             "menu_sequence",
+            "menu_group_ids",
+            "menu_web_icon",
+            "menu_web_icon_data",
             "company_id",
             "module_ids",
             "share_link_ids",
@@ -1426,20 +1447,48 @@ class DashboardBlueprint(models.Model):
         {"name", "description", "mode", "domain", "default_on", "sequence"}
     )
 
-    def _studio_slot_dict(self, slot):
+    def _studio_slot_dict(self, slot, owned=True):
         data = {f: slot[f] for f in self._STUDIO_SLOT_FIELDS}
         data["condition_ids"] = slot.condition_ids.ids
         data["condition_names"] = slot.condition_ids.mapped("name")
+        data["owned"] = bool(owned)
+        data["source_blueprint_id"] = slot.blueprint_id.id
+        data["source_blueprint_name"] = slot.blueprint_id.name or ""
+        data["source_blueprint_key"] = slot.blueprint_id.key or ""
         return data
+
+    def _studio_menu_full_path(self):
+        """Preview Full Path like ir.ui.menu.complete_name."""
+        self.ensure_one()
+        leaf = self.menu_name or self.name or ""
+        parent = self.menu_parent_id
+        if parent:
+            return "%s/%s" % (parent.complete_name or parent.display_name, leaf)
+        root = self.env.ref(
+            "dashboard_engine.menu_dashboard_engine_root", raise_if_not_found=False
+        )
+        if root:
+            return "%s/%s" % (root.complete_name or root.display_name, leaf)
+        return leaf
+
+    def _studio_menu_action_label(self):
+        """Readonly Action line for Setup (generated window action)."""
+        self.ensure_one()
+        action = self.generated_action_id
+        if action:
+            return "ir.actions.act_window,%s" % (action.display_name or action.name)
+        if self.host_model_name:
+            return "ir.actions.act_window,%s" % (self.menu_name or self.name or "Dashboard")
+        return ""
 
     def get_studio_payload(self):
         """JSON-friendly snapshot for the Studio OWL client action."""
         self.ensure_one()
+        # Studio edits this blueprint only. Share-pool slots still appear on
+        # the live kanban card via _effective_slots(), not in Studio.
         slots = [
-            self._studio_slot_dict(slot)
-            for slot in self.slot_ids.sorted(
-                lambda s: (s.section or "", s.sequence, s.id)
-            )
+            self._studio_slot_dict(slot, owned=True)
+            for slot in self.slot_ids.sorted("sequence")
         ]
         headers = []
         for item in self.header_line_ids.sorted("sequence"):
@@ -1482,6 +1531,14 @@ class DashboardBlueprint(models.Model):
             "menu_parent_id": self.menu_parent_id.id or False,
             "menu_parent_name": self.menu_parent_id.display_name or "",
             "menu_sequence": self.menu_sequence,
+            "menu_group_ids": self.menu_group_ids.ids,
+            "menu_group_names": [
+                g.full_name or g.display_name or g.name for g in self.menu_group_ids
+            ],
+            "menu_web_icon": self.menu_web_icon or "",
+            "menu_web_icon_data": self.menu_web_icon_data or False,
+            "menu_full_path": self._studio_menu_full_path(),
+            "menu_action_label": self._studio_menu_action_label(),
             "company_id": self.company_id.id or False,
             "company_name": self.company_id.display_name or "",
             "module_ids": self.module_ids.ids,
@@ -1733,7 +1790,7 @@ class DashboardBlueprint(models.Model):
         for key, value in (vals or {}).items():
             if key not in self._STUDIO_BP_WRITE_FIELDS:
                 continue
-            if key in ("module_ids", "share_link_ids"):
+            if key in ("module_ids", "share_link_ids", "menu_group_ids"):
                 ids = value if isinstance(value, (list, tuple)) else []
                 clean[key] = [(6, 0, [int(i) for i in ids if i])]
             elif key == "host_model_id":
@@ -1750,6 +1807,10 @@ class DashboardBlueprint(models.Model):
                 clean[key] = int(value) if value else False
             elif key == "menu_sequence":
                 clean[key] = int(value or 0)
+            elif key == "menu_web_icon_data":
+                clean[key] = value or False
+            elif key == "menu_web_icon":
+                clean[key] = value or False
             elif key == "graph_domain":
                 clean[key] = self._studio_validate_graph_domain(value)
             elif key == "include_child_records":
@@ -1795,7 +1856,7 @@ class DashboardBlueprint(models.Model):
 
     def studio_write_slot(self, slot_id, vals):
         self.ensure_one()
-        slot = self.slot_ids.filtered(lambda s: s.id == slot_id)[:1]
+        slot = self.slot_ids.filtered(lambda s: s.id == int(slot_id))[:1]
         if not slot:
             raise UserError(_("Unknown slot on this dashboard."))
         clean = self._studio_prepare_slot_vals(vals)
@@ -1859,9 +1920,10 @@ class DashboardBlueprint(models.Model):
 
     def studio_unlink_slot(self, slot_id):
         self.ensure_one()
-        slot = self.slot_ids.filtered(lambda s: s.id == slot_id)[:1]
-        if slot:
-            slot.unlink()
+        slot = self.slot_ids.filtered(lambda s: s.id == int(slot_id))[:1]
+        if not slot:
+            return self.get_studio_payload()
+        slot.unlink()
         return self.get_studio_payload()
 
     def studio_reorder_slots(self, section, ordered_ids):
@@ -2169,6 +2231,26 @@ class DashboardBlueprint(models.Model):
         companies = self.env["res.company"].search(domain, limit=limit, order="name")
         return [{"id": c.id, "name": c.display_name or c.name} for c in companies]
 
+    def studio_search_visibility_groups(self, term="", limit=20):
+        """Group picker for Setup Menu Visibility (ir.ui.menu.group_ids)."""
+        self.ensure_one()
+        limit = min(int(limit or 20), 50)
+        domain = []
+        if term:
+            domain = [
+                "|",
+                ("name", "ilike", term),
+                ("full_name", "ilike", term),
+            ]
+        groups = self.env["res.groups"].search(domain, limit=limit, order="name")
+        return [
+            {
+                "id": group.id,
+                "name": group.full_name or group.display_name or group.name,
+            }
+            for group in groups
+        ]
+
     @api.model
     def studio_search_groups(self, term="", limit=20):
         """Group picker for friendly action-context (xmlid + label)."""
@@ -2388,7 +2470,12 @@ class DashboardBlueprint(models.Model):
             or self.primary_button_label
             or "",
             "graph_caption": self.graph_caption or "",
-            "slots": self._build_slots_payload(record),
+            # Studio map must list the same slots as the editor, even when
+            # the sample record has zeros (live kanban still hides them).
+            "slots": self.with_context(
+                dashboard_studio_preview=True,
+                dashboard_studio_local_only=True,
+            )._build_slots_payload(record),
             "graph_bars": graph_bars,
             "graph_type": graph_type,
             "graph_json": graph_json,
@@ -2446,6 +2533,9 @@ class DashboardBlueprint(models.Model):
             "menu_name",
             "menu_parent_xmlid",
             "menu_sequence",
+            "menu_group_ids",
+            "menu_web_icon",
+            "menu_web_icon_data",
             "primary_button_label",
             "primary_action_xmlid",
             "primary_action_domain",
@@ -3439,6 +3529,9 @@ class DashboardBlueprint(models.Model):
             "parent_id": parent.id if parent else False,
             "sequence": self.menu_sequence,
             "active": True,
+            "group_ids": [(6, 0, self.menu_group_ids.ids)],
+            "web_icon": self.menu_web_icon or False,
+            "web_icon_data": self.menu_web_icon_data or False,
         }
         if self.generated_menu_id:
             self.generated_menu_id.write(vals)
@@ -3578,6 +3671,8 @@ class DashboardBlueprint(models.Model):
             return {}
         ctx = dict(self.env.context)
         candidates = self._effective_slots()
+        if self.env.context.get("dashboard_studio_local_only"):
+            candidates = self.slot_ids.sorted("sequence")
         visible = self.env["dashboard.blueprint.slot"].browse(
             [s.id for s in candidates if s._is_visible(ctx)]
         )
@@ -5505,7 +5600,9 @@ class DashboardBlueprintSlot(models.Model):
         # Hide when every metric this Shows mode supplies is zero.
         # Amount-only host fields (e.g. total_due / total_invoiced) use the
         # same show_if_zero flag as count badges — model-agnostic.
-        if not self.show_if_zero:
+        if not self.show_if_zero and not self.env.context.get(
+            "dashboard_studio_preview"
+        ):
             count_empty = count is None or not count
             amount_empty = amount is None or not amount
             mode = self.value_mode or "count"

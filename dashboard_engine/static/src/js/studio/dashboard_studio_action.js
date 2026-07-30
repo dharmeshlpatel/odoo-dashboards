@@ -46,13 +46,55 @@ const HEADER_SEPARATORS = [
 ];
 
 const ZONES = [
-    { id: "header", label: "Header", icon: "fa-header", section: null },
-    { id: "primary", label: "Chart & Primary", icon: "fa-area-chart", section: null },
-    { id: "kpis", label: "KPIs", icon: "fa-tachometer", section: "kpi" },
-    { id: "totals", label: "Totals", icon: "fa-calculator", section: "button_box" },
-    { id: "shortcuts", label: "Shortcuts", icon: "fa-external-link", section: "bottom" },
-    { id: "manage", label: "Manage menu", icon: "fa-bars", section: "menu" },
-    { id: "config", label: "Configuration", icon: "fa-cog", section: null },
+    {
+        id: "header",
+        label: "Header",
+        icon: "fa-header",
+        section: null,
+        subtitle: "Title, image, and subtitle lines shown on the card",
+    },
+    {
+        id: "primary",
+        label: "Chart & Primary",
+        icon: "fa-area-chart",
+        section: null,
+        subtitle: "Graph data source, measure, and primary action button",
+    },
+    {
+        id: "kpis",
+        label: "KPIs",
+        icon: "fa-tachometer",
+        section: "kpi",
+        subtitle: "Count badges shown in the KPI strip",
+    },
+    {
+        id: "totals",
+        label: "Totals",
+        icon: "fa-calculator",
+        section: "button_box",
+        subtitle: "Currency/amount boxes shown below the chart",
+    },
+    {
+        id: "shortcuts",
+        label: "Shortcuts",
+        icon: "fa-external-link",
+        section: "bottom",
+        subtitle: "Quick-action chips on the card",
+    },
+    {
+        id: "manage",
+        label: "Manage menu",
+        icon: "fa-bars",
+        section: "menu",
+        subtitle: "Actions in the ⋮ menu on the live card",
+    },
+    {
+        id: "config",
+        label: "Configuration",
+        icon: "fa-cog",
+        section: null,
+        subtitle: "Scopes, graph model, and date filters",
+    },
 ];
 
 const EMPTY_EDITOR = () => ({
@@ -79,7 +121,7 @@ const EMPTY_EDITOR = () => ({
     primary_button_label: "",
     primary_action_xmlid: "",
     primary_action_context: "{}",
-    contextRows: [createEmptyContextRow()],
+    contextRows: [],
     graph_caption: "",
     graph_measure: "",
     graph_groupby: "",
@@ -113,6 +155,10 @@ const EMPTY_SETUP = () => ({
     menu_parent_id: false,
     menu_parent_name: "",
     menu_sequence: 50,
+    menu_group_ids: [],
+    menu_group_names: [],
+    menu_web_icon: "",
+    menu_web_icon_data: false,
     company_id: false,
     company_name: "",
     module_ids: [],
@@ -159,6 +205,7 @@ export class DashboardStudioAction extends Component {
                 module: "",
                 share: "",
                 company: "",
+                visibility: "",
             },
             setupResults: {
                 host: [],
@@ -166,6 +213,7 @@ export class DashboardStudioAction extends Component {
                 module: [],
                 share: [],
                 company: [],
+                visibility: [],
             },
             contextGroupQuery: {},
             contextGroupHits: {},
@@ -182,11 +230,15 @@ export class DashboardStudioAction extends Component {
                 samples: [],
             },
             actionQuery: "",
+            actionsShowAll: false,
+            actionScopeLabel: "",
+            actionScoped: true,
             sampleQuery: "",
             sampleId: null,
             preview: null,
             previewLoading: false,
             dirty: false,
+            dirtyToken: 0,
             layoutDirty: false,
             loading: true,
             saving: false,
@@ -212,6 +264,10 @@ export class DashboardStudioAction extends Component {
 
     get zoneMeta() {
         return ZONES.find((z) => z.id === this.state.zone) || ZONES[2];
+    }
+
+    get zoneSubtitle() {
+        return this.zoneMeta.subtitle || _t("Full configuration for this block.");
     }
 
     get slotsForZone() {
@@ -286,6 +342,7 @@ export class DashboardStudioAction extends Component {
                 id: s.id,
                 key: s.key,
                 label: s.label,
+                label_plural: s.label_plural,
                 name: s.name || s.label,
                 icon: s.icon,
                 count: null,
@@ -293,64 +350,76 @@ export class DashboardStudioAction extends Component {
             }));
     }
 
-    get kpisPreview() {
-        let items;
-        if (this.state.preview?.ok && this.state.preview.slots?.kpis) {
-            items = this.state.preview.slots.kpis.slice(0, 8);
-        } else {
-            items = this._slotsFromPayload("kpi").slice(0, 8);
+    /**
+     * Keep the card map aligned with the right-hand editor list.
+     * Live preview may hide zero-value slots; merge fills those gaps.
+     * Only this dashboard's configured slots are shown (not share-pool peers).
+     */
+    _mergeMapSlots(liveItems, section) {
+        const configured = this._slotsFromPayload(section);
+        const live = Array.isArray(liveItems) ? liveItems : [];
+        if (!configured.length) {
+            return configured;
         }
-        return this._overlaySelectedSlot(items);
+        if (!this.state.preview?.ok) {
+            return configured;
+        }
+        const byKey = new Map();
+        for (const item of live) {
+            byKey.set(item.key ?? item.id, item);
+        }
+        return configured.map((cfg) => {
+            const key = cfg.key ?? cfg.id;
+            return byKey.has(key) ? byKey.get(key) : cfg;
+        });
+    }
+
+    get kpisPreview() {
+        const live = this.state.preview?.ok ? this.state.preview.slots?.kpis : null;
+        return this._overlaySelectedSlot(this._mergeMapSlots(live, "kpi").slice(0, 8));
     }
 
     get totalsPreview() {
-        let items;
-        if (this.state.preview?.ok && this.state.preview.slots?.button_box) {
-            items = this.state.preview.slots.button_box.slice(0, 6);
-        } else {
-            items = this._slotsFromPayload("button_box").slice(0, 6);
-        }
-        return this._overlaySelectedSlot(items);
+        const live = this.state.preview?.ok
+            ? this.state.preview.slots?.button_box
+            : null;
+        return this._overlaySelectedSlot(
+            this._mergeMapSlots(live, "button_box").slice(0, 6)
+        );
     }
 
     get shortcutsPreview() {
-        let items;
-        if (this.state.preview?.ok && this.state.preview.slots?.buttons) {
-            items = this.state.preview.slots.buttons.slice(0, 6);
-        } else {
-            items = this._slotsFromPayload("bottom").slice(0, 6);
-        }
-        return this._overlaySelectedSlot(items);
+        const live = this.state.preview?.ok ? this.state.preview.slots?.buttons : null;
+        return this._overlaySelectedSlot(
+            this._mergeMapSlots(live, "bottom").slice(0, 6)
+        );
     }
 
     get manageViewsPreview() {
-        let items;
-        if (this.state.preview?.ok) {
-            items = this.state.preview.slots?.menu?.views || [];
-        } else {
-            items = this._slotsFromPayload("menu_views");
-        }
-        return this._overlaySelectedSlot(items).slice(0, 4);
+        const live = this.state.preview?.ok
+            ? this.state.preview.slots?.menu?.views
+            : null;
+        return this._overlaySelectedSlot(
+            this._mergeMapSlots(live, "menu_views").slice(0, 4)
+        );
     }
 
     get manageNewPreview() {
-        let items;
-        if (this.state.preview?.ok) {
-            items = this.state.preview.slots?.menu?.new || [];
-        } else {
-            items = this._slotsFromPayload("menu_new");
-        }
-        return this._overlaySelectedSlot(items).slice(0, 4);
+        const live = this.state.preview?.ok
+            ? this.state.preview.slots?.menu?.new
+            : null;
+        return this._overlaySelectedSlot(
+            this._mergeMapSlots(live, "menu_new").slice(0, 4)
+        );
     }
 
     get manageReportsPreview() {
-        let items;
-        if (this.state.preview?.ok) {
-            items = this.state.preview.slots?.menu?.reports || [];
-        } else {
-            items = this._slotsFromPayload("menu_reports");
-        }
-        return this._overlaySelectedSlot(items).slice(0, 4);
+        const live = this.state.preview?.ok
+            ? this.state.preview.slots?.menu?.reports
+            : null;
+        return this._overlaySelectedSlot(
+            this._mergeMapSlots(live, "menu_reports").slice(0, 4)
+        );
     }
 
     get previewTitle() {
@@ -701,13 +770,20 @@ export class DashboardStudioAction extends Component {
     }
 
     get canSave() {
+        // Touch dirtyToken so OWL re-renders the toolbar Save button.
+        void this.state.dirtyToken;
         if (this.state.studioMode === "setup") {
             return this.state.setupDirty;
         }
-        if (this.state.zone === "config") {
-            return this.state.dirty;
-        }
         return this.state.dirty;
+    }
+
+    get selectedSlotOwned() {
+        const slot = this.selectedSlot;
+        if (!slot) {
+            return true;
+        }
+        return slot.owned !== false;
     }
 
     get headerChipHost() {
@@ -737,8 +813,52 @@ export class DashboardStudioAction extends Component {
         return ids.map((id, i) => ({ id, name: names[i] || `#${id}` }));
     }
 
+    get menuVisibilityChips() {
+        const ids = this.state.setup.menu_group_ids || [];
+        const names = this.state.setup.menu_group_names || [];
+        return ids.map((id, i) => ({ id, name: names[i] || `#${id}` }));
+    }
+
+    get menuFullPathPreview() {
+        const leaf =
+            this.state.setup.menu_name ||
+            this.state.payload?.menu_name ||
+            this.state.payload?.name ||
+            "";
+        const parent =
+            this.state.setup.menu_parent_name ||
+            this.state.payload?.menu_parent_name ||
+            "";
+        if (parent && leaf) {
+            return `${parent}/${leaf}`;
+        }
+        return this.state.payload?.menu_full_path || leaf || "";
+    }
+
+    get menuActionLabelPreview() {
+        return this.state.payload?.menu_action_label || "";
+    }
+
     markDirty() {
         this.state.dirty = true;
+        // Force a state tick so toolbar Save (t-att-disabled) re-evaluates.
+        this.state.dirtyToken = (this.state.dirtyToken || 0) + 1;
+    }
+
+    _confirmDiscardIfDirty() {
+        if (!this.state.dirty) {
+            return true;
+        }
+        if (
+            confirm(
+                _t("You have unsaved changes. Discard them and continue?")
+            )
+        ) {
+            this.state.dirty = false;
+            this.state.dirtyToken = (this.state.dirtyToken || 0) + 1;
+            return true;
+        }
+        return false;
     }
 
     markSetupDirty() {
@@ -757,6 +877,10 @@ export class DashboardStudioAction extends Component {
             menu_parent_id: payload.menu_parent_id || false,
             menu_parent_name: payload.menu_parent_name || "",
             menu_sequence: payload.menu_sequence ?? 50,
+            menu_group_ids: [...(payload.menu_group_ids || [])],
+            menu_group_names: [...(payload.menu_group_names || [])],
+            menu_web_icon: payload.menu_web_icon || "",
+            menu_web_icon_data: payload.menu_web_icon_data || false,
             company_id: payload.company_id || false,
             company_name: payload.company_name || "",
             module_ids: [...(payload.module_ids || [])],
@@ -771,6 +895,7 @@ export class DashboardStudioAction extends Component {
             module: [],
             share: [],
             company: [],
+            visibility: [],
         };
     }
 
@@ -1260,18 +1385,28 @@ export class DashboardStudioAction extends Component {
 
     async searchActions(term) {
         this.state.actionQuery = term;
-        const actions = await this.orm.call(
+        const res = await this.orm.call(
             "dashboard.blueprint",
             "studio_search_actions",
-            [[this.blueprintId], term || "", 25]
+            [[this.blueprintId], term || "", 25, this.state.actionsShowAll || false]
         );
-        this.state.catalogs.actions = actions;
+        this.state.catalogs.actions = res.actions || [];
+        this.state.actionScopeLabel = res.scope_label || "";
+        this.state.actionScoped = Boolean(res.scoped);
+    }
+
+    toggleActionsShowAll() {
+        this.state.actionsShowAll = !this.state.actionsShowAll;
+        this.searchActions(this.state.actionQuery || "");
     }
 
     selectZone(zoneId) {
-        if (this.state.dirty) {
-            // Soft discard when switching zones keeps UX fluid; Publish still required for live.
-            this.state.dirty = false;
+        if (zoneId === this.state.zone) {
+            // Re-clicking the same card-map zone must not wipe unsaved edits.
+            return;
+        }
+        if (!this._confirmDiscardIfDirty()) {
+            return;
         }
         this.state.zone = zoneId;
         this.state.selectedSlotId = null;
@@ -1284,15 +1419,25 @@ export class DashboardStudioAction extends Component {
     }
 
     selectSlot(slotId) {
+        if (slotId === this.state.selectedSlotId) {
+            return;
+        }
+        if (!this._confirmDiscardIfDirty()) {
+            return;
+        }
         this.state.selectedSlotId = slotId;
         this._syncEditorFromSelection();
-        this.state.dirty = false;
     }
 
     selectHeader(headerId) {
+        if (headerId === this.state.selectedHeaderId) {
+            return;
+        }
+        if (!this._confirmDiscardIfDirty()) {
+            return;
+        }
         this.state.selectedHeaderId = headerId;
         this._syncEditorFromSelection();
-        this.state.dirty = false;
     }
 
     _syncEditorFromSelection() {
@@ -1510,10 +1655,24 @@ export class DashboardStudioAction extends Component {
 
     removeContextRow(index) {
         this.state.editor.contextRows.splice(index, 1);
-        if (!this.state.editor.contextRows.length) {
-            this.state.editor.contextRows.push(createEmptyContextRow());
-        }
         this._touchContextRows();
+    }
+
+    async updateConfigBlueprint(field, value) {
+        try {
+            const payload = await this.orm.call(
+                "dashboard.blueprint",
+                "studio_write_blueprint",
+                [[this.blueprintId], { [field]: value || false }]
+            );
+            await this.applyPayload(payload, false);
+        } catch (error) {
+            this.notification.add(
+                error?.data?.message || error.message || _t("Config update failed"),
+                { type: "danger" }
+            );
+            await this.loadPayload();
+        }
     }
 
     async onLinkPathHopChange(hopIndex, ev) {
@@ -1753,6 +1912,7 @@ export class DashboardStudioAction extends Component {
             module: [],
             share: [],
             company: [],
+            visibility: [],
         };
     }
 
@@ -1789,6 +1949,7 @@ export class DashboardStudioAction extends Component {
             module: "studio_search_modules",
             share: "studio_search_share_blueprints",
             company: "studio_search_companies",
+            visibility: "studio_search_visibility_groups",
         };
         const method = methodMap[kind];
         if (!method) {
@@ -1822,6 +1983,59 @@ export class DashboardStudioAction extends Component {
         this.state.setup.menu_parent_name = name;
         this.state.setupQuery.menu = "";
         this.state.setupResults.menu = [];
+        this.markSetupDirty();
+    }
+
+    pickSetupVisibilityGroup(ev) {
+        const id = parseInt(ev.currentTarget.dataset.id, 10);
+        const name = ev.currentTarget.dataset.name || "";
+        if (!id || this.state.setup.menu_group_ids.includes(id)) {
+            this.state.setupQuery.visibility = "";
+            this.state.setupResults.visibility = [];
+            return;
+        }
+        this.state.setup.menu_group_ids = [...this.state.setup.menu_group_ids, id];
+        this.state.setup.menu_group_names = [
+            ...this.state.setup.menu_group_names,
+            name,
+        ];
+        this.state.setupQuery.visibility = "";
+        this.state.setupResults.visibility = [];
+        this.markSetupDirty();
+    }
+
+    removeSetupVisibilityGroup(ev) {
+        const id = parseInt(ev.currentTarget.dataset.id, 10);
+        const idx = this.state.setup.menu_group_ids.indexOf(id);
+        if (idx >= 0) {
+            this.state.setup.menu_group_ids.splice(idx, 1);
+            this.state.setup.menu_group_names.splice(idx, 1);
+            this.markSetupDirty();
+        }
+    }
+
+    onSetupMenuWebIconInput(ev) {
+        this.state.setup.menu_web_icon = ev.target.value;
+        this.markSetupDirty();
+    }
+
+    onSetupMenuWebIconFile(ev) {
+        const file = ev.target.files && ev.target.files[0];
+        if (!file) {
+            return;
+        }
+        const reader = new FileReader();
+        reader.onload = () => {
+            const raw = String(reader.result || "");
+            const base64 = raw.includes(",") ? raw.split(",")[1] : raw;
+            this.state.setup.menu_web_icon_data = base64;
+            this.markSetupDirty();
+        };
+        reader.readAsDataURL(file);
+    }
+
+    clearSetupMenuWebIconImage() {
+        this.state.setup.menu_web_icon_data = false;
         this.markSetupDirty();
     }
 
@@ -1923,6 +2137,9 @@ export class DashboardStudioAction extends Component {
                 menu_name: setup.menu_name || false,
                 menu_parent_id: setup.menu_parent_id || false,
                 menu_sequence: setup.menu_sequence,
+                menu_group_ids: setup.menu_group_ids || [],
+                menu_web_icon: setup.menu_web_icon || false,
+                menu_web_icon_data: setup.menu_web_icon_data || false,
                 company_id: setup.company_id || false,
                 module_ids: setup.module_ids || [],
                 share_link_ids: setup.share_link_ids || [],
@@ -2211,6 +2428,7 @@ export class DashboardStudioAction extends Component {
                     [[this.blueprintId], { kind: "subtitle", field_names: "" }]
                 );
                 await this.applyPayload(payload);
+                this.markDirty();
                 this.notification.add(_t("Header line added"), { type: "success" });
                 return;
             }
@@ -2232,6 +2450,9 @@ export class DashboardStudioAction extends Component {
                 [[this.blueprintId], section, { label, label_plural: label }]
             );
             await this.applyPayload(payload);
+            // Create already wrote to the DB; keep Save active so the user
+            // can refine the new item and persist editor changes.
+            this.markDirty();
             this.notification.add(_t("Item added"), { type: "success" });
         } catch (error) {
             this.notification.add(error?.data?.message || error.message || _t("Add failed"), {
@@ -2257,6 +2478,13 @@ export class DashboardStudioAction extends Component {
             return;
         }
         if (!this.selectedSlot) {
+            return;
+        }
+        if (this.selectedSlot.owned === false) {
+            this.notification.add(
+                _t("Shared item — remove it on its source dashboard, or unlink the pack in Setup."),
+                { type: "warning" }
+            );
             return;
         }
         if (!confirm(_t("Remove this item from the card?"))) {
@@ -2570,6 +2798,37 @@ export class DashboardStudioAction extends Component {
     }
 
     async publish() {
+        const p = this.state.payload || {};
+        const liveLeaf = p.generated_menu_leaf || "";
+        const nextName = p.menu_name || "";
+        const liveParent = p.generated_menu_parent_id || false;
+        const nextParent = p.menu_parent_id || false;
+        const menuWouldChange =
+            Boolean(liveLeaf) &&
+            (nextName !== liveLeaf || nextParent !== liveParent);
+        if (menuWouldChange) {
+            const fromLabel = p.generated_menu_name || liveLeaf;
+            const toParent = p.menu_parent_name || _t("(no parent)");
+            const toLabel = nextName
+                ? `${toParent} / ${nextName}`
+                : toParent;
+            const confirmed = await new Promise((resolve) => {
+                this.dialog.add(ConfirmationDialog, {
+                    title: _t("Publish menu change?"),
+                    body: _t(
+                        "Publish will rename/move the menu entry from '%s' to '%s'. Continue?"
+                    )
+                        .replace("%s", fromLabel)
+                        .replace("%s", toLabel),
+                    confirm: () => resolve(true),
+                    cancel: () => resolve(false),
+                    confirmLabel: _t("Publish"),
+                });
+            });
+            if (!confirmed) {
+                return;
+            }
+        }
         await this.orm.call("dashboard.blueprint", "action_publish", [[this.blueprintId]]);
         await this.loadPayload();
         this.notification.add(_t("Published — live card updated"), { type: "success" });

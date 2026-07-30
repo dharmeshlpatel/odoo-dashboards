@@ -1,23 +1,76 @@
 .o_dashboard_studio {
-    --ds-accent: #0f766e;
-    --ds-accent-soft: rgba(15, 118, 110, 0.12);
-    --ds-border: #e5e7eb;
-    --ds-panel: #f8fafc;
-    --ds-card: #ffffff;
-    --ds-ink: #0f172a;
-    background: linear-gradient(160deg, #f1f5f9 0%, #eef2ff 45%, #f8fafc 100%);
+    /* Odoo Enterprise brand primary (purple) — same as btn-primary / --primary. */
+    --ds-accent: var(--primary, #714B67);
+    --ds-accent-soft: rgba(113, 75, 103, 0.12);
+    --ds-action: #017e84; /* Enterprise action / links only */
+    --ds-border: #e7e9ed;
+    --ds-border-strong: #d8dadd;
+    --ds-panel: #f9fafb;
+    --ds-card: #fff;
+    --ds-ink: #111827;
+    --ds-muted: #6b7280;
+    --ds-radius: 0.25rem;
+    background: #f9fafb;
     color: var(--ds-ink);
     min-height: 100%;
+
+    /* Form controls — match Enterprise boxed inputs (no focus glow). */
+    .form-control,
+    .form-select,
+    .input-group-text {
+        border-radius: var(--ds-radius);
+        border: 1px solid var(--ds-border);
+        background-color: #fff;
+        color: var(--ds-ink);
+        box-shadow: none;
+    }
+    .form-control::placeholder {
+        color: #9ca3af;
+    }
+    .form-control:focus,
+    .form-select:focus {
+        border-color: #b89aaf; /* mix primary + border */
+        box-shadow: none;
+        outline: 0;
+        background-color: #fff;
+    }
+    .form-check-input {
+        border-color: var(--ds-border-strong);
+        border-radius: 0.15rem;
+        &:checked {
+            background-color: var(--ds-accent);
+            border-color: var(--ds-accent);
+        }
+        &:focus {
+            box-shadow: none;
+            border-color: var(--ds-accent);
+        }
+    }
+    /* Do not restyle Bootstrap btn-primary — keep Enterprise purple from theme. */
+    .btn {
+        border-radius: var(--ds-radius);
+        box-shadow: none !important;
+    }
+    .btn-group > .btn {
+        border-radius: 0;
+    }
+    .btn-group > .btn:first-child {
+        border-top-left-radius: var(--ds-radius);
+        border-bottom-left-radius: var(--ds-radius);
+    }
+    .btn-group > .btn:last-child {
+        border-top-right-radius: var(--ds-radius);
+        border-bottom-right-radius: var(--ds-radius);
+    }
 
     .o_ds_toolbar {
         display: flex;
         align-items: center;
         justify-content: space-between;
         gap: 1rem;
-        padding: 0.85rem 1.25rem;
-        background: rgba(255, 255, 255, 0.92);
+        padding: 0.75rem 1rem;
+        background: var(--ds-card);
         border-bottom: 1px solid var(--ds-border);
-        backdrop-filter: blur(8px);
     }
     .o_ds_toolbar_brand {
         display: flex;
@@ -39,21 +92,24 @@
 
     .o_ds_modes {
         display: flex;
-        gap: 0.35rem;
-        padding: 0.5rem 1.25rem 0;
-        background: rgba(255, 255, 255, 0.7);
+        gap: 0.25rem;
+        padding: 0.5rem 1rem 0;
+        background: var(--ds-card);
+        border-bottom: 1px solid var(--ds-border);
         button {
-            border: 1px solid var(--ds-border);
-            background: #fff;
-            border-radius: 8px;
-            padding: 0.35rem 0.9rem;
-            font-size: 0.85rem;
-            font-weight: 600;
-            color: #475569;
+            border: 0;
+            border-bottom: 2px solid transparent;
+            background: transparent;
+            border-radius: 0;
+            padding: 0.45rem 0.85rem;
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: var(--ds-muted);
+            margin-bottom: -1px;
             &.active {
-                background: var(--ds-ink);
-                color: #fff;
-                border-color: var(--ds-ink);
+                background: transparent;
+                color: var(--ds-accent);
+                border-bottom-color: var(--ds-accent);
             }
         }
     }
@@ -66,72 +122,153 @@
         }
     }
     .o_ds_setup_mode {
+        max-width: 980px;
+        margin-left: auto;
+        margin-right: auto;
+
         .o_ds_setup_grid {
             display: grid;
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: 1rem;
-            @media (max-width: 900px) {
-                grid-template-columns: 1fr;
-            }
+            grid-template-columns: 1fr;
+            gap: 1.25rem;
         }
         .o_ds_setup_card {
             background: var(--ds-card);
             border: 1px solid var(--ds-border);
-            border-radius: 12px;
-            padding: 1.25rem 1.35rem;
-            box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+            border-radius: var(--ds-radius);
+            padding: 1.25rem 1.5rem;
+            box-shadow: none;
+            min-width: 0;
+        }
+        .o_ds_setup_field {
+            margin-bottom: 1rem;
+            &:last-child {
+                margin-bottom: 0;
+            }
+        }
+        .o_ds_setup_value,
+        .o_ds_setup_card .form-control {
+            min-height: 38px;
+            height: auto;
+            white-space: normal;
+            overflow-wrap: anywhere;
+            word-break: break-word;
+        }
+        .o_ds_setup_value {
+            display: flex;
+            align-items: center;
+            padding-top: 0.45rem;
+            padding-bottom: 0.45rem;
+            line-height: 1.35;
+        }
+        .o_ds_setup_picker .form-control {
+            width: 100%;
         }
         .o_ds_setup_results {
-            max-height: 180px;
+            max-height: 200px;
             overflow: auto;
         }
-        .o_ds_setup_chips .btn-close {
-            font-size: 0.55rem;
-            vertical-align: middle;
+        .o_ds_setup_chips {
+            min-height: 2rem;
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 0.25rem;
+            .btn-close {
+                font-size: 0.55rem;
+                vertical-align: middle;
+            }
+        }
+        .o_ds_setup_file {
+            width: 100%;
+            min-height: 38px;
+        }
+        .o_ds_setup_icon_preview {
+            max-height: 48px;
+            max-width: 48px;
+            object-fit: contain;
         }
     }
     .o_ds_layout_mode {
         .o_ds_layout_col {
-            background: #f8fafc;
+            background: var(--ds-panel);
             min-height: 72px;
+            border-radius: var(--ds-radius);
         }
         .badge.text-bg-teal {
             background: var(--ds-accent);
             color: #fff;
         }
         .o_ds_layout_live_strip {
-            background: #f8fafc;
+            background: var(--ds-panel);
             border-color: var(--ds-border) !important;
+            border-radius: var(--ds-radius);
+        }
+        .o_ds_layout_preview {
+            gap: 2px;
+            min-height: 28px;
+        }
+        .o_ds_layout_tile {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 0.25rem 0.35rem;
+            border-radius: var(--ds-radius);
+            font-size: 0.7rem;
+            line-height: 1.2;
+            color: #fff;
+            text-align: center;
+            overflow: hidden;
+            background: #6c757d;
+            .o_ds_layout_tile_span {
+                opacity: 0.85;
+                font-size: 0.65rem;
+            }
+            &.o_ds_layout_tile_header { background: #495057; }
+            &.o_ds_layout_tile_primary { background: var(--ds-accent); }
+            &.o_ds_layout_tile_graph { background: #5a3c52; }
+            &.o_ds_layout_tile_kpis { background: #6c757d; }
+            &.o_ds_layout_tile_totals { background: #868e96; }
+            &.o_ds_layout_tile_shortcuts { background: #8a6b80; }
+            &.o_ds_layout_tile_manage { background: #343a40; }
+        }
+    }
+    .o_ds_dev_options {
+        border: 1px dashed var(--ds-border);
+        border-radius: var(--ds-radius);
+        padding: 0.35rem 0.6rem;
+        summary {
+            cursor: pointer;
+            user-select: none;
         }
     }
     .o_ds_zones {
         display: flex;
         flex-wrap: wrap;
         gap: 0.35rem;
-        padding: 0.65rem 1.25rem;
-        background: rgba(255, 255, 255, 0.7);
+        padding: 0.65rem 1rem;
+        background: var(--ds-card);
         border-bottom: 1px solid var(--ds-border);
     }
     .o_ds_zone_btn {
         border: 1px solid transparent;
         background: transparent;
-        border-radius: 999px;
+        border-radius: var(--ds-radius);
         padding: 0.35rem 0.8rem;
         font-size: 0.82rem;
-        color: #475569;
+        color: var(--ds-muted);
         display: inline-flex;
         align-items: center;
         gap: 0.4rem;
         transition: 0.15s ease;
         &:hover {
-            background: #fff;
+            background: var(--ds-panel);
             border-color: var(--ds-border);
         }
         &.active {
             background: var(--ds-accent);
             color: #fff;
             border-color: var(--ds-accent);
-            box-shadow: 0 6px 16px rgba(15, 118, 110, 0.25);
         }
     }
 
@@ -141,6 +278,11 @@
         gap: 1rem;
         padding: 1rem 1.25rem 1.25rem;
         min-height: 0;
+        &:has(.o_ds_workspace) {
+            grid-template-columns: 1fr;
+            padding: 0;
+            gap: 0;
+        }
     }
     @media (max-width: 992px) {
         .o_ds_body {
@@ -149,13 +291,109 @@
         }
     }
 
+    /* Odoo Studio–like Content workspace */
+    .o_ds_workspace {
+        display: grid;
+        grid-template-columns: 76px minmax(280px, 1fr) minmax(460px, 560px);
+        min-height: 0;
+        height: 100%;
+        background: #fff;
+        border-top: 1px solid var(--ds-border);
+    }
+    @media (max-width: 1100px) {
+        .o_ds_workspace {
+            grid-template-columns: 72px 1fr;
+            grid-template-rows: auto 1fr;
+            .o_ds_properties_pane {
+                grid-column: 1 / -1;
+                max-height: 42vh;
+            }
+        }
+    }
+
+    .o_ds_toolbox {
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
+        border-right: 1px solid var(--ds-border);
+        background: var(--ds-panel);
+        overflow: auto;
+        padding-bottom: 0.5rem;
+    }
+    .o_ds_toolbox_label {
+        font-size: 0.65rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--ds-muted);
+        text-align: center;
+        padding: 0.55rem 0.25rem 0.35rem;
+        font-weight: 700;
+    }
+    .o_ds_toolbox_btn {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.2rem;
+        border: 0;
+        border-left: 3px solid transparent;
+        background: transparent;
+        padding: 0.55rem 0.25rem;
+        font-size: 0.62rem;
+        font-weight: 600;
+        color: var(--ds-muted);
+        line-height: 1.15;
+        .fa {
+            font-size: 1rem;
+            margin-bottom: 0.1rem;
+        }
+        &:hover {
+            background: var(--ds-card);
+            color: var(--ds-ink);
+        }
+        &.active {
+            background: var(--ds-card);
+            color: var(--ds-accent);
+            border-left-color: var(--ds-accent);
+        }
+    }
+
+    .o_ds_studio_mark {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0.35rem 0.55rem;
+        border-radius: var(--ds-radius);
+        background: var(--ds-accent);
+        color: #fff;
+        font-size: 0.72rem;
+        font-weight: 800;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+    }
+
+    .o_ds_properties_pane {
+        border-radius: 0 !important;
+        box-shadow: none !important;
+        border: 0 !important;
+        border-left: 1px solid var(--ds-border) !important;
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        background: #fff;
+    }
+
     .o_ds_map_pane,
     .o_ds_editor_pane {
         background: var(--ds-card);
         border: 1px solid var(--ds-border);
-        border-radius: 16px;
-        box-shadow: 0 10px 30px rgba(15, 23, 42, 0.05);
+        border-radius: var(--ds-radius);
         min-height: 0;
+    }
+    .o_ds_workspace .o_ds_map_pane {
+        border-radius: 0;
+        box-shadow: none;
+        border: 0;
+        border-right: 1px solid var(--ds-border);
     }
     .o_ds_map_pane {
         padding: 1rem;
@@ -165,7 +403,7 @@
         font-size: 0.72rem;
         text-transform: uppercase;
         letter-spacing: 0.06em;
-        color: #64748b;
+        color: var(--ds-muted);
         margin-bottom: 0.6rem;
         font-weight: 600;
     }
@@ -174,36 +412,34 @@
         flex-direction: column;
         gap: 0.55rem;
         padding: 0.85rem;
-        border-radius: 14px;
-        background:
-            radial-gradient(circle at top right, rgba(15, 118, 110, 0.08), transparent 40%),
-            var(--ds-panel);
-        border: 1px dashed #cbd5e1;
+        border-radius: var(--ds-radius);
+        background: var(--ds-panel);
+        border: 1px dashed var(--ds-border);
         &.is-live {
             border-style: solid;
-            border-color: rgba(15, 118, 110, 0.35);
-            box-shadow: inset 0 0 0 1px rgba(15, 118, 110, 0.08);
+            border-color: #b89aaf;
+            box-shadow: inset 0 0 0 1px var(--ds-accent-soft);
         }
     }
     .o_ds_sample_picker {
         .form-control,
         .form-select {
-            border-radius: 8px;
+            border-radius: var(--ds-radius);
         }
     }
     .o_ds_card_zone {
         background: #fff;
         border: 1px solid var(--ds-border);
-        border-radius: 12px;
+        border-radius: var(--ds-radius);
         padding: 0.7rem 0.8rem;
         cursor: pointer;
         transition: 0.15s ease;
         &:hover {
-            border-color: #94a3b8;
+            border-color: var(--ds-border-strong);
         }
         &.is-active {
             border-color: var(--ds-accent);
-            box-shadow: 0 0 0 3px var(--ds-accent-soft);
+            box-shadow: 0 0 0 0.2rem var(--ds-accent-soft);
         }
     }
     .o_ds_header_zone {
@@ -253,10 +489,10 @@
         display: inline-flex;
         align-items: center;
         gap: 0.3rem;
-        background: #ecfdf5;
-        color: #0f766e;
-        border: 1px solid #99f6e4;
-        border-radius: 999px;
+        background: var(--ds-accent-soft);
+        color: var(--ds-accent);
+        border: 1px solid #b89aaf;
+        border-radius: var(--ds-radius);
         padding: 0.1rem 0.45rem;
         font-size: 0.72rem;
         max-width: 100%;
@@ -268,7 +504,7 @@
         width: 42px;
         height: 42px;
         border-radius: 50%;
-        background: linear-gradient(135deg, #99f6e4, #5eead4);
+        background: #d4c2ce;
         flex: 0 0 auto;
         margin-top: 0.15rem;
     }
@@ -286,7 +522,7 @@
         span {
             flex: 1;
             border-radius: 3px 3px 0 0;
-            background: linear-gradient(180deg, #14b8a6, #0f766e);
+            background: linear-gradient(180deg, #9a7a90, var(--ds-accent));
             opacity: 0.85;
             &:nth-child(1) { height: 35%; }
             &:nth-child(2) { height: 62%; }
@@ -311,7 +547,7 @@
         display: inline-block;
         background: var(--ds-accent);
         color: #fff;
-        border-radius: 8px;
+        border-radius: var(--ds-radius);
         padding: 0.25rem 0.65rem;
         font-size: 0.78rem;
         font-weight: 600;
@@ -320,7 +556,7 @@
         font-size: 0.68rem;
         text-transform: uppercase;
         letter-spacing: 0.05em;
-        color: #64748b;
+        color: var(--ds-muted);
         margin-bottom: 0.35rem;
         font-weight: 600;
     }
@@ -332,7 +568,7 @@
         margin-bottom: 0.15rem;
         &.is-selected {
             background: var(--ds-accent-soft);
-            border-radius: 4px;
+            border-radius: var(--ds-radius);
             padding: 0.1rem 0.25rem;
             margin-left: -0.25rem;
             margin-right: -0.25rem;
@@ -345,9 +581,9 @@
     }
     .o_ds_chip {
         display: inline-block;
-        background: #f1f5f9;
-        border: 1px solid #e2e8f0;
-        border-radius: 999px;
+        background: var(--ds-panel);
+        border: 1px solid var(--ds-border);
+        border-radius: var(--ds-radius);
         padding: 0.15rem 0.55rem;
         font-size: 0.72rem;
         &.is-selected {
@@ -358,7 +594,7 @@
     .o_ds_chip_primary {
         background: var(--ds-accent-soft);
         border-color: transparent;
-        color: #115e59;
+        color: var(--ds-accent);
         font-weight: 600;
     }
     .o_ds_manage_preview {
@@ -371,14 +607,14 @@
     }
     .o_ds_config_strip {
         cursor: pointer;
-        background: #f8fafc;
+        background: var(--ds-panel);
         transition: 0.15s ease;
         &:hover {
-            border-color: #94a3b8;
+            border-color: var(--ds-border-strong);
         }
         &.is-active {
             border-color: var(--ds-accent);
-            box-shadow: 0 0 0 3px var(--ds-accent-soft);
+            box-shadow: 0 0 0 0.2rem var(--ds-accent-soft);
         }
         code {
             font-size: 0.75em;
@@ -400,6 +636,7 @@
     }
     .o_ds_struct_actions {
         flex-shrink: 0;
+        gap: 0.35rem;
         .btn {
             display: inline-flex;
             align-items: center;
@@ -407,37 +644,27 @@
             gap: 0.35rem;
             min-height: 2rem;
             min-width: 2rem;
-            padding: 0.25rem 0.6rem;
+            padding: 0.25rem 0.55rem;
             line-height: 1;
             white-space: nowrap;
-            font-weight: 600;
+            font-weight: 500;
             font-size: 0.8125rem;
+            border-radius: var(--ds-radius) !important;
             .fa {
                 margin: 0;
                 line-height: 1;
             }
         }
-        .o_ds_btn_accent {
-            background: var(--ds-accent);
-            border-color: var(--ds-accent);
-            color: #fff;
-            &:hover,
-            &:focus {
-                background: #0d9488;
-                border-color: #0d9488;
-                color: #fff;
-            }
-            &:disabled {
-                opacity: 0.55;
-            }
-        }
+        /* Trash: outline secondary (Enterprise), not red fill. */
         .o_ds_btn_danger {
-            color: #b91c1c;
+            color: var(--ds-ink);
+            background: #fff;
+            border: 1px solid var(--ds-border-strong);
             &:hover,
             &:focus {
-                color: #fff;
-                background: #dc2626;
-                border-color: #dc2626;
+                color: var(--ds-ink);
+                background: var(--ds-panel);
+                border-color: var(--ds-border-strong);
             }
         }
     }
@@ -462,12 +689,12 @@
         width: 100%;
         border: 1px solid var(--ds-border);
         background: #fff;
-        border-radius: 10px;
+        border-radius: var(--ds-radius);
         padding: 0.55rem 0.7rem;
         text-align: left;
         transition: 0.12s ease;
         &:hover {
-            border-color: #94a3b8;
+            border-color: var(--ds-border-strong);
         }
         &.active {
             border-color: var(--ds-accent);
@@ -475,13 +702,24 @@
         }
     }
     .o_ds_fieldset {
+        background: transparent;
+        border: 0;
+        border-radius: 0;
+        padding: 0 0 1rem;
+        margin-bottom: 1rem;
+        border-bottom: 1px solid var(--ds-border);
+        &:last-child {
+            border-bottom: 0;
+            margin-bottom: 0;
+            padding-bottom: 0;
+        }
         h3 {
-            font-size: 0.78rem;
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-            color: #64748b;
+            font-size: 0.8125rem;
+            text-transform: none;
+            letter-spacing: 0;
+            color: var(--ds-ink);
             font-weight: 700;
-            margin: 0 0 0.65rem;
+            margin: 0 0 0.75rem;
         }
     }
     .o_ds_field_row {
@@ -511,7 +749,7 @@
             max-width: 100%;
         }
         .o_ds_link_sep {
-            color: #64748b;
+            color: var(--ds-muted);
             font-weight: 700;
             user-select: none;
         }
@@ -541,7 +779,7 @@
         align-items: center;
         padding: 0.35rem 0.4rem;
         border: 1px solid var(--ds-border);
-        border-radius: 8px;
+        border-radius: var(--ds-radius);
         background: #fff;
         cursor: grab;
         &:active {
@@ -595,54 +833,120 @@
     .o_ds_header_line_list {
         display: flex;
         flex-direction: column;
-        gap: 0.35rem;
+        gap: 0.65rem;
         margin-bottom: 0.5rem;
     }
     .o_ds_header_line_row {
         display: grid;
-        grid-template-columns: 2.5rem 5.5rem 5.5rem 5.5rem minmax(10rem, 1.4fr) 7rem 2rem;
-        gap: 0.35rem;
+        grid-template-columns: 2.5rem minmax(0, 1fr);
+        gap: 0.6rem 0.75rem;
         align-items: start;
-        padding: 0.35rem 0.4rem;
+        padding: 0.7rem 0.8rem;
         border: 1px solid var(--ds-border);
-        border-radius: 8px;
+        border-radius: var(--ds-radius);
         background: #fff;
         cursor: pointer;
         &.is-selected {
-            border-color: var(--ds-accent, #0f766e);
-            box-shadow: 0 0 0 1px var(--ds-accent, #0f766e);
+            border-color: var(--ds-accent);
+            box-shadow: 0 0 0 1px var(--ds-accent);
         }
         &:active {
             cursor: grabbing;
         }
-        &.o_ds_header_line_header {
-            border: none;
-            background: transparent;
-            padding: 0 0.4rem;
-            cursor: default;
-            align-items: center;
+    }
+    .o_ds_header_top_actions {
+        grid-column: 1 / -1;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: -0.1rem;
+    }
+    .o_ds_header_line_title {
+        font-size: 0.72rem;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: var(--ds-muted);
+        font-weight: 700;
+    }
+    .o_ds_header_drag_col {
+        align-self: stretch;
+        justify-content: flex-start;
+        padding-top: 0.1rem;
+    }
+    .o_ds_header_meta_grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 0.6rem;
+        width: 100%;
+    }
+    .o_ds_header_meta_field {
+        display: flex;
+        flex-direction: column;
+        gap: 0.2rem;
+        span {
+            font-size: 0.74rem;
+            font-weight: 600;
+            color: var(--ds-muted);
         }
     }
     .o_ds_header_fields_col {
         min-width: 0;
+        grid-column: 1 / 3;
+    }
+    @media (max-width: 1300px) {
+        .o_ds_header_meta_grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+        .o_ds_header_fields_col {
+            grid-column: 1 / -1;
+        }
+    }
+    @media (max-width: 980px) {
+        .o_ds_header_line_row {
+            grid-template-columns: 1fr;
+        }
+        .o_ds_header_drag_col {
+            flex-direction: row;
+            justify-content: flex-start;
+            gap: 0.4rem;
+        }
+        .o_ds_header_meta_grid {
+            grid-template-columns: 1fr;
+        }
+        .o_ds_header_fields_col {
+            grid-column: auto;
+        }
     }
     .o_ds_field {
         display: flex;
         flex-direction: column;
-        gap: 0.25rem;
-        margin-bottom: 0.7rem;
+        gap: 0.35rem;
+        margin-bottom: 0.75rem;
         span {
-            font-size: 0.78rem;
-            font-weight: 600;
-            color: #334155;
+            font-size: 0.8125rem;
+            font-weight: 700;
+            color: var(--ds-ink);
+            line-height: 1.2;
         }
     }
     .o_ds_check {
         display: flex;
-        align-items: center;
-        gap: 0.45rem;
+        align-items: flex-start;
+        gap: 0.5rem;
         margin-bottom: 0.45rem;
-        font-size: 0.9rem;
+        font-size: 0.8125rem;
+        font-weight: 500;
+        color: var(--ds-ink);
+        line-height: 1.25;
+        input[type="checkbox"] {
+            margin-top: 0.15rem;
+            flex: 0 0 auto;
+            width: 1rem;
+            height: 1rem;
+            border: 1px solid var(--ds-border-strong);
+            border-radius: 0.15rem;
+            accent-color: var(--ds-accent);
+        }
     }
     .o_ds_action_hits {
         display: flex;
@@ -658,7 +962,7 @@
         align-items: flex-start;
         border: 1px solid var(--ds-border);
         background: #fff;
-        border-radius: 8px;
+        border-radius: var(--ds-radius);
         padding: 0.4rem 0.55rem;
         text-align: left;
         font-size: 0.78rem;

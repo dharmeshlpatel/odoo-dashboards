@@ -57,6 +57,46 @@ class TestDashboardStudio(TransactionCase):
         self.assertEqual(kpi["label"], "Child")
         self.assertEqual(kpi["label_plural"], "Children")
         self.assertIn("condition_ids", kpi)
+        self.assertTrue(kpi.get("owned"))
+
+    def test_get_studio_payload_excludes_shared_slots(self):
+        """Studio lists this dashboard's slots only (share pool is runtime)."""
+        host = self.env["ir.model"]._get("res.partner")
+        hub = self.env["dashboard.blueprint"].create(
+            {
+                "name": "Studio Hub",
+                "key": "test_studio_hub_%s" % self.env.uid,
+                "host_model_id": host.id,
+                "sequence": 1,
+            }
+        )
+        pack = self.env["dashboard.blueprint"].create(
+            {
+                "name": "Studio Pack",
+                "key": "test_studio_pack_%s" % self.env.uid,
+                "host_model_id": host.id,
+                "sequence": 2,
+            }
+        )
+        shared = self.env["dashboard.blueprint.slot"].create(
+            {
+                "blueprint_id": pack.id,
+                "key": "shared_open",
+                "name": "Shared Open",
+                "section": "kpi",
+                "label": "Shared Open",
+                "show_if_zero": True,
+                "compute_model": "res.partner",
+                "relate_field": "parent_id",
+            }
+        )
+        hub.share_link_ids = [(4, pack.id)]
+        self.assertIn(shared, hub._effective_slots())
+        payload = hub.get_studio_payload()
+        self.assertNotIn(shared.id, [s["id"] for s in payload["slots"]])
+        preview = hub.studio_preview_payload()
+        kpi_keys = [s.get("key") for s in (preview.get("slots") or {}).get("kpis") or []]
+        self.assertNotIn("shared_open", kpi_keys)
 
     def test_studio_write_slot_updates_kpi_label(self):
         bp = self._studio_blueprint()
@@ -127,7 +167,89 @@ class TestDashboardStudio(TransactionCase):
         icons = bp.studio_header_icons()
         self.assertTrue(any(i["value"] == "fa-envelope" for i in icons))
         actions = bp.studio_search_actions("partner", limit=10)
-        self.assertTrue(isinstance(actions, list))
+        self.assertTrue(isinstance(actions, dict))
+        self.assertIn("actions", actions)
+        self.assertIn("scope_label", actions)
+        self.assertTrue(isinstance(actions["actions"], list))
+
+        scoped = bp.studio_search_actions("", limit=20, all_models=False)
+        self.assertTrue(scoped.get("scope_label"))
+        if scoped.get("scoped"):
+            allowed = {bp.host_model_name, bp.graph_model or bp.host_model_name}
+            for hit in scoped["actions"]:
+                res_model = hit.get("res_model") or False
+                if res_model:
+                    self.assertIn(res_model, allowed)
+
+        all_hits = bp.studio_search_actions("", limit=20, all_models=True)
+        self.assertFalse(all_hits["scoped"])
+        self.assertEqual(all_hits["scope_label"], "Showing all actions")
+
+    @staticmethod
+    def _menu_publish_would_confirm(payload):
+        """Mirror Studio OWL publish() confirm gate (payload contract)."""
+        live_leaf = payload.get("generated_menu_leaf") or ""
+        if not live_leaf:
+            return False
+        next_name = payload.get("menu_name") or ""
+        live_parent = payload.get("generated_menu_parent_id") or False
+        next_parent = payload.get("menu_parent_id") or False
+        return next_name != live_leaf or next_parent != live_parent
+
+    def test_scope_warning_studio_write_payload_and_pref(self):
+        bp = self._studio_blueprint()
+        msg = "At least one of 'Pipeline' or 'Leads' must stay on."
+        payload = bp.studio_write_blueprint({"scope_warning": msg})
+        self.assertEqual(bp.scope_warning, msg)
+        self.assertEqual(payload.get("scope_warning"), msg)
+
+        pref = self.env["dashboard.user.pref"].create(
+            {
+                "blueprint_id": bp.id,
+                "user_id": self.env.user.id,
+            }
+        )
+        self.assertEqual(pref.scope_warning, msg)
+
+        payload = bp.studio_write_blueprint({"scope_warning": False})
+        self.assertFalse(bp.scope_warning)
+        self.assertEqual(payload.get("scope_warning") or "", "")
+        pref.invalidate_recordset()
+        self.assertFalse(pref.scope_warning)
+
+    def test_publish_confirm_payload_menu_contract(self):
+        """Payload fields must drive the Studio Publish confirm dialog."""
+        bp = self._studio_blueprint()
+        parent = self.env.ref("base.menu_administration")
+        bp.write(
+            {
+                "menu_name": "Studio Partners Menu",
+                "menu_parent_id": parent.id,
+            }
+        )
+        payload = bp.get_studio_payload()
+        self.assertFalse(payload.get("generated_menu_leaf"))
+        self.assertFalse(self._menu_publish_would_confirm(payload))
+
+        bp.action_publish()
+        payload = bp.get_studio_payload()
+        self.assertEqual(payload["generated_menu_leaf"], "Studio Partners Menu")
+        self.assertEqual(payload["generated_menu_parent_id"], parent.id)
+        self.assertTrue(payload.get("generated_menu_name"))
+        self.assertFalse(self._menu_publish_would_confirm(payload))
+
+        # Live menu out of sync with blueprint (confirm gate uses leaf vs menu_name).
+        bp.generated_menu_id.write({"name": "Stale Live Menu"})
+        bp.invalidate_recordset()
+        payload = bp.get_studio_payload()
+        self.assertEqual(payload["menu_name"], "Studio Partners Menu")
+        self.assertEqual(payload["generated_menu_leaf"], "Stale Live Menu")
+        self.assertTrue(self._menu_publish_would_confirm(payload))
+
+        bp.action_publish()
+        payload = bp.get_studio_payload()
+        self.assertEqual(payload["generated_menu_leaf"], "Studio Partners Menu")
+        self.assertFalse(self._menu_publish_would_confirm(payload))
 
     def test_studio_preview_payload_live(self):
         bp = self._studio_blueprint()
@@ -140,6 +262,21 @@ class TestDashboardStudio(TransactionCase):
         self.assertIn("Studio Preview", preview["title"])
         self.assertIn("kpis", preview["slots"])
         self.assertTrue(isinstance(preview["graph_bars"], list))
+
+    def test_studio_preview_keeps_zero_kpis(self):
+        """Studio live map must not hide KPIs the editor still lists."""
+        bp = self._studio_blueprint()
+        slot = bp.slot_ids.filtered(lambda s: s.key == "child_count")
+        slot.show_if_zero = False
+        partner = self.env["res.partner"].create({"name": "Zero KPI Co"})
+        # Live kanban hides zeros.
+        live = bp._build_slots_payload(partner)
+        self.assertFalse(any(k["key"] == "child_count" for k in live["kpis"]))
+        # Studio preview keeps them so left map matches the right list.
+        preview = bp.studio_preview_payload(partner.id)
+        self.assertTrue(preview["ok"])
+        keys = [k["key"] for k in preview["slots"]["kpis"]]
+        self.assertIn("child_count", keys)
 
     def test_action_open_studio_for_key(self):
         bp = self._studio_blueprint()
