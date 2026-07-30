@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Salesperson 360 header (res.users). -->
+<odoo noupdate="1">
+    <record id="blueprint_salesperson_360" model="dashboard.blueprint">
+        <field name="header_title_field">name</field>
+        <field name="header_image_field">image_128</field>
+        <field name="header_image_style">avatar</field>
+    </record>
+
+    <record id="header_sp360_login" model="dashboard.blueprint.header.item">
+        <field name="blueprint_id" ref="blueprint_salesperson_360"/>
+        <field name="sequence">10</field>
+        <field name="kind">subtitle</field>
+        <field name="alignment">left</field>
+        <field name="field_names">login</field>
+    </record>
+    <record id="header_sp360_email" model="dashboard.blueprint.header.item">
+        <field name="blueprint_id" ref="blueprint_salesperson_360"/>
+        <field name="sequence">20</field>
+        <field name="kind">inline</field>
+        <field name="alignment">left</field>
+        <field name="icon">fa-envelope</field>
+        <field name="field_names">email</field>
+    </record>
+</odoo>

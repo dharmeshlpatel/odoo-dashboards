@@ -1,0 +1,301 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Sales Team daily boards on crm.team (CRM + Sales).
+  Draft at seed; post_init publishes to avoid recursive search-view inherit.
+-->
+<odoo noupdate="1">
+    <!-- Overdue opportunity condition (team pack self-contained). -->
+    <record id="condition_team_overdue_opportunity" model="dashboard.condition">
+        <field name="name">Overdue open opportunity (team)</field>
+        <field name="model">crm.lead</field>
+        <field name="match">all</field>
+        <field name="module_depends">crm</field>
+        <field name="note">Deadline before today, still open, type opportunity.</field>
+    </record>
+    <record id="rule_team_overdue_type" model="dashboard.condition.rule">
+        <field name="condition_id" ref="condition_team_overdue_opportunity"/>
+        <field name="sequence">10</field>
+        <field name="field_name">type</field>
+        <field name="operator">=</field>
+        <field name="value_type">static</field>
+        <field name="value_char">opportunity</field>
+    </record>
+    <record id="rule_team_overdue_open" model="dashboard.condition.rule">
+        <field name="condition_id" ref="condition_team_overdue_opportunity"/>
+        <field name="sequence">20</field>
+        <field name="field_name">date_closed</field>
+        <field name="operator">=</field>
+        <field name="value_type">false</field>
+    </record>
+    <record id="rule_team_overdue_deadline" model="dashboard.condition.rule">
+        <field name="condition_id" ref="condition_team_overdue_opportunity"/>
+        <field name="sequence">30</field>
+        <field name="field_name">date_deadline</field>
+        <field name="operator">&lt;</field>
+        <field name="value_type">relative_date</field>
+        <field name="relative_when">today</field>
+    </record>
+
+    <!-- ========== CRM Sales Team ========== -->
+    <record id="blueprint_crm_sales_team" model="dashboard.blueprint">
+        <field name="name">CRM Sales Team</field>
+        <field name="key">crm_sales_team</field>
+        <field name="host_model_id" ref="crm.model_crm_team"/>
+        <field name="module_depends">crm</field>
+        <field name="menu_name">Sales Team Dashboard</field>
+        <field name="menu_parent_xmlid">crm.crm_menu_report</field>
+        <field name="menu_sequence">15</field>
+        <field name="primary_button_label">Pipeline Analysis</field>
+        <field name="primary_action_xmlid">crm.crm_lead_action_pipeline</field>
+        <field name="primary_label_alt">Leads Analysis</field>
+        <field name="graph_model">crm.lead</field>
+        <field name="graph_data_field">team_id</field>
+        <field name="graph_measure">__count</field>
+        <field name="graph_groupby">stage_id</field>
+        <field name="graph_domain">[]</field>
+        <field name="graph_caption">Open pipeline</field>
+        <field name="include_child_records" eval="False"/>
+        <field name="lens_my_enabled" eval="False"/>
+        <field name="lens_kpis_enabled" eval="True"/>
+        <field name="lens_kpis_default" eval="True"/>
+        <field name="lens_kpis_label">With KPIs</field>
+        <field name="state">draft</field>
+        <field name="sequence">40</field>
+    </record>
+
+    <record id="scope_crm_team_pipeline" model="dashboard.blueprint.scope">
+        <field name="blueprint_id" ref="blueprint_crm_sales_team"/>
+        <field name="sequence">10</field>
+        <field name="name">Pipeline</field>
+        <field name="mode">include</field>
+        <field name="domain">[('type', '=', 'opportunity')]</field>
+        <field name="default_on" eval="True"/>
+    </record>
+    <record id="scope_crm_team_leads" model="dashboard.blueprint.scope">
+        <field name="blueprint_id" ref="blueprint_crm_sales_team"/>
+        <field name="sequence">20</field>
+        <field name="name">Leads</field>
+        <field name="mode">include</field>
+        <field name="domain">[('type', '=', 'lead')]</field>
+        <field name="default_on" eval="False"/>
+    </record>
+    <record id="scope_crm_team_mine" model="dashboard.blueprint.scope">
+        <field name="blueprint_id" ref="blueprint_crm_sales_team"/>
+        <field name="sequence">30</field>
+        <field name="name">My Pipeline</field>
+        <field name="mode">restrict</field>
+        <field name="domain">[('user_id', '=', uid)]</field>
+        <field name="default_on" eval="False"/>
+    </record>
+
+    <record id="blueprint_crm_sales_team" model="dashboard.blueprint">
+        <field name="primary_label_alt_scope_id" ref="scope_crm_team_pipeline"/>
+        <field name="primary_label_alt">Leads Analysis</field>
+    </record>
+
+    <record id="slot_crm_team_open" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_crm_sales_team"/>
+        <field name="key">open_opportunities</field>
+        <field name="name">Open Opportunities</field>
+        <field name="section">kpi</field>
+        <field name="sequence">20</field>
+        <field name="label">Open Opportunity</field>
+        <field name="label_plural">Open Opportunities</field>
+        <field name="compute_model">crm.lead</field>
+        <field name="relate_field">team_id</field>
+        <field name="compute_domain">[('type', '=', 'opportunity'), ('probability', '&lt;', 100), ('active', '=', True)]</field>
+        <field name="compute_aggregator">__count</field>
+        <field name="amount_aggregator">expected_revenue:sum</field>
+        <field name="action_xmlid">crm.crm_lead_action_pipeline</field>
+        <field name="action_domain">[('type', '=', 'opportunity'), ('probability', '&lt;', 100), ('active', '=', True), ('team_id', '=', '{{id}}')]</field>
+        <field name="action_context">{"default_type": "opportunity", "default_team_id": {{id}}}</field>
+        <field name="module_depends">crm</field>
+    </record>
+    <record id="slot_crm_team_overdue" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_crm_sales_team"/>
+        <field name="key">overdue_opportunities</field>
+        <field name="name">Overdue Opportunities</field>
+        <field name="section">kpi</field>
+        <field name="sequence">30</field>
+        <field name="label">Overdue Opportunity</field>
+        <field name="label_plural">Overdue Opportunities</field>
+        <field name="style">danger</field>
+        <field name="style_mode">when_positive</field>
+        <field name="is_attention_signal" eval="True"/>
+        <field name="compute_model">crm.lead</field>
+        <field name="relate_field">team_id</field>
+        <field name="compute_domain">[]</field>
+        <field name="condition_ids" eval="[(4, ref('condition_team_overdue_opportunity'))]"/>
+        <field name="compute_aggregator">__count</field>
+        <field name="amount_aggregator">expected_revenue:sum</field>
+        <field name="action_xmlid">crm.crm_lead_action_pipeline</field>
+        <field name="action_domain">[('team_id', '=', '{{id}}')]</field>
+        <field name="action_context">{"default_type": "opportunity", "default_team_id": {{id}}}</field>
+        <field name="module_depends">crm</field>
+    </record>
+    <record id="slot_crm_team_menu_opportunities" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_crm_sales_team"/>
+        <field name="key">view_opportunities</field>
+        <field name="name">View Opportunities</field>
+        <field name="section">menu_views</field>
+        <field name="sequence">20</field>
+        <field name="label">Opportunities</field>
+        <field name="show_if_zero" eval="True"/>
+        <field name="action_xmlid">crm.crm_lead_action_pipeline</field>
+        <field name="action_domain">[('team_id', '=', '{{id}}')]</field>
+        <field name="module_depends">crm</field>
+    </record>
+    <record id="slot_crm_team_bottom" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_crm_sales_team"/>
+        <field name="key">bottom_opportunities</field>
+        <field name="name">Opportunities Button</field>
+        <field name="section">bottom</field>
+        <field name="sequence">10</field>
+        <field name="label">Opportunities</field>
+        <field name="icon">fa-star</field>
+        <field name="show_if_zero" eval="True"/>
+        <field name="groups_xmlids">sales_team.group_sale_salesman</field>
+        <field name="compute_model">crm.lead</field>
+        <field name="relate_field">team_id</field>
+        <field name="compute_domain">[('type', '=', 'opportunity')]</field>
+        <field name="action_xmlid">crm.crm_lead_action_pipeline</field>
+        <field name="action_domain">[('team_id', '=', '{{id}}'), ('type', '=', 'opportunity')]</field>
+        <field name="action_context">{"search_default_team_id": [{{id}}], "default_team_id": {{id}}, "default_type": "opportunity"}</field>
+        <field name="module_depends">crm,sales_team</field>
+    </record>
+
+    <!-- ========== Sales Team ========== -->
+    <record id="blueprint_sales_team" model="dashboard.blueprint">
+        <field name="name">Sales Team</field>
+        <field name="key">sales_team</field>
+        <field name="host_model_id" ref="crm.model_crm_team"/>
+        <field name="module_depends">sale</field>
+        <field name="menu_name">Sales Team Dashboard</field>
+        <field name="menu_parent_xmlid">sale.menu_sale_report</field>
+        <field name="menu_sequence">15</field>
+        <field name="primary_button_label">Sales Analysis</field>
+        <field name="primary_action_xmlid">sale.action_orders</field>
+        <field name="graph_model">sale.order</field>
+        <field name="graph_data_field">team_id</field>
+        <field name="graph_measure">amount_total:sum</field>
+        <field name="graph_groupby">date_order:month</field>
+        <field name="graph_domain">[]</field>
+        <field name="graph_caption">Sales Orders</field>
+        <field name="include_child_records" eval="False"/>
+        <field name="lens_my_enabled" eval="False"/>
+        <field name="lens_kpis_enabled" eval="True"/>
+        <field name="lens_kpis_default" eval="True"/>
+        <field name="lens_kpis_label">With KPIs</field>
+        <field name="state">draft</field>
+        <field name="sequence">41</field>
+    </record>
+
+    <record id="scope_sale_team_orders" model="dashboard.blueprint.scope">
+        <field name="blueprint_id" ref="blueprint_sales_team"/>
+        <field name="sequence">10</field>
+        <field name="name">Sales Orders</field>
+        <field name="mode">include</field>
+        <field name="domain">[('state', 'in', ('sale', 'done'))]</field>
+        <field name="default_on" eval="True"/>
+    </record>
+    <record id="scope_sale_team_quotations" model="dashboard.blueprint.scope">
+        <field name="blueprint_id" ref="blueprint_sales_team"/>
+        <field name="sequence">20</field>
+        <field name="name">Quotations</field>
+        <field name="mode">include</field>
+        <field name="domain">[('state', 'in', ('draft', 'sent'))]</field>
+        <field name="default_on" eval="False"/>
+    </record>
+    <record id="scope_sale_team_mine" model="dashboard.blueprint.scope">
+        <field name="blueprint_id" ref="blueprint_sales_team"/>
+        <field name="sequence">30</field>
+        <field name="name">My Orders</field>
+        <field name="mode">restrict</field>
+        <field name="domain">[('user_id', '=', uid)]</field>
+        <field name="default_on" eval="False"/>
+    </record>
+
+    <record id="slot_sale_team_quotations" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_sales_team"/>
+        <field name="key">quotations</field>
+        <field name="name">Quotations</field>
+        <field name="section">kpi</field>
+        <field name="sequence">10</field>
+        <field name="label">Quotation</field>
+        <field name="label_plural">Quotations</field>
+        <field name="compute_model">sale.order</field>
+        <field name="relate_field">team_id</field>
+        <field name="compute_domain">[('state', 'in', ('draft', 'sent'))]</field>
+        <field name="compute_aggregator">__count</field>
+        <field name="amount_aggregator">amount_total:sum</field>
+        <field name="action_xmlid">sale.action_quotations_with_onboarding</field>
+        <field name="action_domain">[('state', 'in', ('draft', 'sent')), ('team_id', '=', '{{id}}')]</field>
+        <field name="module_depends">sale</field>
+    </record>
+    <record id="slot_sale_team_orders" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_sales_team"/>
+        <field name="key">sales_orders</field>
+        <field name="name">Sales Orders</field>
+        <field name="section">kpi</field>
+        <field name="sequence">20</field>
+        <field name="label">Sales Order</field>
+        <field name="label_plural">Sales Orders</field>
+        <field name="compute_model">sale.order</field>
+        <field name="relate_field">team_id</field>
+        <field name="compute_domain">[('state', 'in', ('sale', 'done'))]</field>
+        <field name="compute_aggregator">__count</field>
+        <field name="amount_aggregator">amount_total:sum</field>
+        <field name="action_xmlid">sale.action_orders</field>
+        <field name="action_domain">[('state', 'in', ('sale', 'done')), ('team_id', '=', '{{id}}')]</field>
+        <field name="module_depends">sale</field>
+    </record>
+    <record id="slot_sale_team_to_invoice" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_sales_team"/>
+        <field name="key">to_invoice</field>
+        <field name="name">To Invoice</field>
+        <field name="section">kpi</field>
+        <field name="sequence">30</field>
+        <field name="label">Order to Invoice</field>
+        <field name="label_plural">Orders to Invoice</field>
+        <field name="style">warning</field>
+        <field name="style_mode">when_positive</field>
+        <field name="is_attention_signal" eval="True"/>
+        <field name="compute_model">sale.order</field>
+        <field name="relate_field">team_id</field>
+        <field name="compute_domain">[('invoice_status', '=', 'to invoice')]</field>
+        <field name="compute_aggregator">__count</field>
+        <field name="action_xmlid">sale.action_orders_to_invoice</field>
+        <field name="action_domain">[('invoice_status', '=', 'to invoice'), ('team_id', '=', '{{id}}')]</field>
+        <field name="module_depends">sale</field>
+    </record>
+    <record id="slot_sale_team_menu_orders" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_sales_team"/>
+        <field name="key">view_orders</field>
+        <field name="name">View Orders</field>
+        <field name="section">menu_views</field>
+        <field name="sequence">10</field>
+        <field name="label">Orders</field>
+        <field name="show_if_zero" eval="True"/>
+        <field name="action_xmlid">sale.action_orders</field>
+        <field name="action_domain">[('team_id', '=', '{{id}}')]</field>
+        <field name="module_depends">sale</field>
+    </record>
+    <record id="slot_sale_team_bottom" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_sales_team"/>
+        <field name="key">bottom_sales</field>
+        <field name="name">Sales Button</field>
+        <field name="section">bottom</field>
+        <field name="sequence">10</field>
+        <field name="label">Sales</field>
+        <field name="icon">fa-usd</field>
+        <field name="show_if_zero" eval="True"/>
+        <field name="groups_xmlids">sales_team.group_sale_salesman</field>
+        <field name="compute_model">sale.order</field>
+        <field name="relate_field">team_id</field>
+        <field name="compute_domain">[('state', '!=', 'cancel')]</field>
+        <field name="action_xmlid">sale.action_orders</field>
+        <field name="action_domain">[('team_id', '=', '{{id}}')]</field>
+        <field name="action_context">{"search_default_team_id": [{{id}}], "default_team_id": {{id}}}</field>
+        <field name="module_depends">sale,sales_team</field>
+    </record>
+</odoo>

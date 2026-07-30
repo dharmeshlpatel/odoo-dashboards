@@ -7,6 +7,8 @@ PARTNER_CUSTOMER_BLUEPRINT_XMLIDS = (
     "crm_customer_dashboard.blueprint_crm_customers",
     "sales_customer_dashboard.blueprint_sales_customers",
     "invoice_customer_dashboard.blueprint_invoice_customers",
+    "website_sales_customer_dashboard.blueprint_website_customers",
+    "pos_sales_customer_dashboard.blueprint_pos_customers",
     "customer_360_dashboard.blueprint_customer_360",
 )
 
@@ -32,4 +34,7 @@ def post_init_hook(env):
         raise_if_not_found=False,
     )
     if bp and bp.state == "published":
+        # Re-apply menu parent after upgrade (noupdate seed).
+        if bp.menu_parent_xmlid != "crm.crm_menu_report":
+            bp.sudo().write({"menu_parent_xmlid": "crm.crm_menu_report"})
         bp._sync_generated_artifacts()

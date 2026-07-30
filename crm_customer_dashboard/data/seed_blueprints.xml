@@ -25,6 +25,7 @@
         <field name="lens_kpis_enabled" eval="True"/>
         <field name="lens_kpis_default" eval="True"/>
         <field name="lens_kpis_label">With KPIs</field>
+        <field name="scope_warning">You cannot disable both 'Pipeline' and 'Leads' because at least one must stay on.</field>
         <field name="state">published</field>
         <field name="sequence">10</field>
     </record>

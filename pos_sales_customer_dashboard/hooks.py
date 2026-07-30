@@ -1,24 +1,34 @@
 # -*- coding: utf-8 -*-
 # Part of GritXi. See LICENSE file for full copyright and licensing details.
 
+PARTNER_CUSTOMER_BLUEPRINT_XMLIDS = (
+    "crm_customer_dashboard.blueprint_crm_customers",
+    "sales_customer_dashboard.blueprint_sales_customers",
+    "invoice_customer_dashboard.blueprint_invoice_customers",
+    "website_sales_customer_dashboard.blueprint_website_customers",
+    "pos_sales_customer_dashboard.blueprint_pos_customers",
+    "customer_360_dashboard.blueprint_customer_360",
+)
 
-def _link_pos_website_share(env):
-    pos = env.ref(
-        "pos_sales_customer_dashboard.blueprint_pos_customers",
-        raise_if_not_found=False,
-    )
-    web = env.ref(
-        "website_sales_customer_dashboard.blueprint_website_customers",
-        raise_if_not_found=False,
-    )
-    if not pos or not web:
+
+def link_partner_customer_share_pool(env):
+    bps = []
+    for xid in PARTNER_CUSTOMER_BLUEPRINT_XMLIDS:
+        bp = env.ref(xid, raise_if_not_found=False)
+        if bp:
+            bps.append(bp)
+    if len(bps) < 2:
         return
-    pos.sudo().write({"share_link_ids": [(6, 0, [web.id])]})
-    web.sudo().write({"share_link_ids": [(6, 0, [pos.id])]})
+    for bp in bps:
+        others = [other.id for other in bps if other.id != bp.id]
+        bp.sudo().write({"share_link_ids": [(6, 0, others)]})
 
 
 def post_init_hook(env):
-    _link_pos_website_share(env)
-    bp = env.ref("pos_sales_customer_dashboard.blueprint_pos_customers", raise_if_not_found=False)
+    link_partner_customer_share_pool(env)
+    bp = env.ref(
+        "pos_sales_customer_dashboard.blueprint_pos_customers",
+        raise_if_not_found=False,
+    )
     if bp and bp.state == "published":
         bp._sync_generated_artifacts()

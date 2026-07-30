@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 # Part of GritXi. See LICENSE file for full copyright and licensing details.
 
+"""Salesperson 360 pack install hooks."""
+
 USERS_SALESPERSON_BLUEPRINT_XMLIDS = (
     "crm_salesperson_dashboard.blueprint_crm_salespersons",
     "sales_salesperson_dashboard.blueprint_sales_salespersons",
@@ -9,6 +11,7 @@ USERS_SALESPERSON_BLUEPRINT_XMLIDS = (
 
 
 def link_salesperson_share_pool(env):
+    """Link CRM / Sales salesperson + 360 hub into one share pool."""
     bps = []
     for xid in USERS_SALESPERSON_BLUEPRINT_XMLIDS:
         bp = env.ref(xid, raise_if_not_found=False)
@@ -22,20 +25,12 @@ def link_salesperson_share_pool(env):
 
 
 def post_init_hook(env):
-    slot = env.ref(
-        "sales_salesperson_dashboard.slot_sale_sp_to_invoice",
-        raise_if_not_found=False,
-    )
-    if slot and not slot.is_attention_signal:
-        slot.sudo().write({
-            "is_attention_signal": True,
-            "style": "warning",
-            "style_mode": "when_positive",
-        })
-    link_salesperson_share_pool(env)
     bp = env.ref(
-        "sales_salesperson_dashboard.blueprint_sales_salespersons",
+        "salesperson_360_dashboard.blueprint_salesperson_360",
         raise_if_not_found=False,
     )
-    if bp and bp.state == "published":
-        bp._sync_generated_artifacts()
+    if bp and bp.state != "published":
+        bp.sudo().action_publish()
+    elif bp:
+        bp.sudo()._sync_generated_artifacts()
+    link_salesperson_share_pool(env)

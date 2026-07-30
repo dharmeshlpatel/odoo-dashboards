@@ -68,22 +68,24 @@
     <record id="slot_inv_overdue_invoices" model="dashboard.blueprint.slot">
         <field name="blueprint_id" ref="blueprint_invoice_customers"/>
         <field name="key">overdue_invoices</field>
-        <field name="name">Overdue Invoices</field>
+        <field name="name">Overdue Amount</field>
         <field name="section">kpi</field>
         <field name="sequence">20</field>
-        <field name="label">Overdue Invoice</field>
-        <field name="label_plural">Overdue Invoices</field>
+        <field name="label">Overdue Amount</field>
+        <field name="label_plural">Overdue Amount</field>
+        <field name="value_mode">amount</field>
         <field name="style">danger</field>
         <field name="style_mode">when_positive</field>
         <field name="is_attention_signal" eval="True"/>
         <field name="show_if_zero" eval="True"/>
         <field name="compute_model">account.move</field>
         <field name="relate_field">partner_id</field>
-        <field name="compute_domain">[('move_type', '=', 'out_invoice'), ('state', '=', 'posted'), ('payment_state', 'in', ('not_paid', 'partial', 'in_payment'))]</field>
+        <field name="compute_domain">[('move_type', 'in', ('out_invoice', 'out_refund')), ('state', '=', 'posted'), ('payment_state', 'in', ('not_paid', 'partial'))]</field>
         <field name="condition_ids" eval="[(4, ref('condition_inv_overdue_due_date'))]"/>
         <field name="compute_aggregator">__count</field>
+        <field name="amount_aggregator">amount_residual:sum</field>
         <field name="action_xmlid">account.action_move_out_invoice_type</field>
-        <field name="action_domain">[('partner_id', '=', '{{id}}'), ('move_type', '=', 'out_invoice'), ('state', '=', 'posted'), ('payment_state', 'in', ('not_paid', 'partial', 'in_payment'))]</field>
+        <field name="action_domain">[('partner_id', '=', '{{id}}'), ('move_type', 'in', ('out_invoice', 'out_refund')), ('state', '=', 'posted'), ('payment_state', 'in', ('not_paid', 'partial'))]</field>
         <field name="module_depends">account</field>
     </record>
 

@@ -2,7 +2,7 @@
 # Part of GritXi. See LICENSE file for full copyright and licensing details.
 {
     "name": "Invoice Customers Dashboard",
-    "version": "19.0.1.0.1",
+    "version": "19.0.1.0.2",
     "category": "Accounting/Accounting",
     "summary": "Invoice Customers kanban dashboard preset for Dynamic Dashboard Engine",
     "description": """

@@ -1,22 +1,24 @@
 # -*- coding: utf-8 -*-
 # Part of GritXi. See LICENSE file for full copyright and licensing details.
 {
-    "name": "Customer 360 Dashboard",
-    "version": "19.0.1.0.2",
+    "name": "Sales Team Dashboards",
+    "version": "19.0.1.0.1",
     "category": "Sales/CRM",
-    "summary": "Customer 360 hub kanban dashboard for Dynamic Dashboard Engine",
+    "summary": "CRM and Sales Team daily kanban dashboards (crm.team host)",
     "description": """
-Customer 360 Dashboard
-======================
+Sales Team Dashboards
+=====================
 
-Manager hub on ``res.partner`` that composes shared CRM / Sales / Invoice /
-Website customer slots and enables the Needs attention lens.
+Daily boards on ``crm.team`` for CRM pipeline and Sales orders.
+Share pool links both blueprints so slots compose across apps.
 """,
     "author": "GritXi Technologies Pvt. Ltd.",
     "website": "https://www.gritxi.com/",
     "depends": [
         "dashboard_engine",
         "crm",
+        "sale",
+        "sales_team",
     ],
     "data": [
         "data/seed_blueprints.xml",
