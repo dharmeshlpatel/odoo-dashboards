@@ -21,15 +21,15 @@
     <record id="slot_inv_box_total_overdue" model="dashboard.blueprint.slot">
         <field name="blueprint_id" ref="blueprint_invoice_customers"/>
         <field name="key">box_total_overdue</field>
-        <field name="name">Total Overdue</field>
+        <field name="name">Overdue Amount</field>
         <field name="section">button_box</field>
         <field name="sequence">20</field>
-        <field name="label">Total Overdue</field>
+        <field name="label">Overdue Amount</field>
         <field name="icon">fa-list</field>
         <field name="style">danger</field>
         <field name="style_mode">when_positive</field>
         <field name="is_attention_signal" eval="True"/>
-        <field name="show_if_zero" eval="False"/>
+        <field name="show_if_zero" eval="True"/>
         <field name="groups_xmlids">account.group_account_invoice</field>
         <field name="amount_field">total_overdue</field>
         <field name="action_method">open_follow_up_report</field>

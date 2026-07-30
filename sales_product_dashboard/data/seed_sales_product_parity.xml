@@ -28,6 +28,28 @@
         <field name="action_method">action_open_quants</field>
         <field name="module_depends">sale,stock</field>
     </record>
+    <record id="slot_sales_prod_box_reserved" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_sales_products"/>
+        <field name="key">box_reserved</field>
+        <field name="name">Reserved</field>
+        <field name="section">button_box</field>
+        <field name="sequence">15</field>
+        <field name="label">Reserved</field>
+        <field name="icon">fa-lock</field>
+        <field name="show_if_zero" eval="True"/>
+        <field name="style">warning</field>
+        <field name="style_mode">when_positive</field>
+        <field name="is_attention_signal" eval="True"/>
+        <field name="value_mode">amount</field>
+        <field name="compute_model">stock.quant</field>
+        <field name="relate_field">product_id</field>
+        <field name="compute_domain">[('location_id.usage', '=', 'internal'), ('reserved_quantity', '&gt;', 0)]</field>
+        <field name="compute_aggregator">__count</field>
+        <field name="amount_aggregator">reserved_quantity:sum</field>
+        <field name="action_xmlid">stock.action_view_inventory_tree</field>
+        <field name="action_domain">[('product_id', '=', '{{id}}'), ('location_id.usage', '=', 'internal'), ('reserved_quantity', '&gt;', 0)]</field>
+        <field name="module_depends">sale,stock</field>
+    </record>
     <record id="slot_sales_prod_box_forecasted" model="dashboard.blueprint.slot">
         <field name="blueprint_id" ref="blueprint_sales_products"/>
         <field name="key">box_forecasted</field>

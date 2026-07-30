@@ -9,7 +9,7 @@
         <field name="host_model_id" ref="base.model_res_partner"/>
         <field name="module_depends">point_of_sale</field>
         <field name="menu_name">Customers Dashboard</field>
-        <field name="menu_parent_xmlid">point_of_sale.menu_point_root</field>
+        <field name="menu_parent_xmlid">point_of_sale.menu_point_rep</field>
         <field name="primary_button_label">POS Orders</field>
         <field name="primary_action_xmlid">point_of_sale.action_pos_pos_form</field>
         <field name="graph_model">pos.order</field>

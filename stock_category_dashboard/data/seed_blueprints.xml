@@ -6,7 +6,7 @@
         <field name="host_model_id" ref="product.model_product_category"/>
         <field name="module_depends">stock,product</field>
         <field name="menu_name">Categories Dashboard</field>
-        <field name="menu_parent_xmlid">stock.menu_stock_inventory_control</field>
+        <field name="menu_parent_xmlid">stock.menu_warehouse_report</field>
         <field name="menu_sequence">55</field>
         <field name="primary_button_label">Moves Analysis</field>
         <field name="primary_action_xmlid">stock.stock_move_action</field>
@@ -31,12 +31,13 @@
 
     <record id="slot_stcat_on_hand" model="dashboard.blueprint.slot">
         <field name="blueprint_id" ref="blueprint_stock_categories"/>
-        <field name="key">cat_on_hand</field>
+        <field name="key">box_cat_on_hand</field>
         <field name="name">On Hand</field>
-        <field name="section">kpi</field>
+        <field name="section">button_box</field>
         <field name="sequence">10</field>
-        <field name="label">On Hand qty</field>
-        <field name="label_plural">On Hand qty</field>
+        <field name="label">On Hand</field>
+        <field name="icon">fa-cubes</field>
+        <field name="show_if_zero" eval="True"/>
         <field name="value_mode">amount</field>
         <field name="compute_model">stock.quant</field>
         <field name="relate_field">product_categ_id</field>
@@ -49,15 +50,17 @@
     </record>
     <record id="slot_stcat_reserved" model="dashboard.blueprint.slot">
         <field name="blueprint_id" ref="blueprint_stock_categories"/>
-        <field name="key">cat_reserved</field>
+        <field name="key">box_cat_reserved</field>
         <field name="name">Reserved</field>
-        <field name="section">kpi</field>
+        <field name="section">button_box</field>
         <field name="sequence">20</field>
-        <field name="label">Reserved qty</field>
-        <field name="label_plural">Reserved qty</field>
+        <field name="label">Reserved</field>
+        <field name="icon">fa-lock</field>
+        <field name="show_if_zero" eval="True"/>
         <field name="value_mode">amount</field>
         <field name="style">warning</field>
         <field name="style_mode">when_positive</field>
+        <field name="is_attention_signal" eval="True"/>
         <field name="compute_model">stock.quant</field>
         <field name="relate_field">product_categ_id</field>
         <field name="compute_domain">[('location_id.usage', '=', 'internal'), ('reserved_quantity', '&gt;', 0)]</field>
@@ -70,7 +73,7 @@
         <field name="key">cat_reorder</field>
         <field name="name">Reorder</field>
         <field name="section">kpi</field>
-        <field name="sequence">30</field>
+        <field name="sequence">10</field>
         <field name="label">Reorder rule</field>
         <field name="label_plural">Reorder rules</field>
         <field name="compute_model">stock.warehouse.orderpoint</field>

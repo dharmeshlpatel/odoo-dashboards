@@ -7,7 +7,7 @@
         <field name="host_model_id" ref="base.model_res_partner"/>
         <field name="module_depends">website_sale</field>
         <field name="menu_name">Customers Dashboard</field>
-        <field name="menu_parent_xmlid">sale.sale_menu_root</field>
+        <field name="menu_parent_xmlid">website.menu_reporting</field>
         <field name="menu_sequence">40</field>
         <field name="primary_button_label">Online Orders</field>
         <field name="primary_action_xmlid">sale.action_orders</field>

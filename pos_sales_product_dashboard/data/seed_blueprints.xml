@@ -7,7 +7,7 @@
         <field name="host_model_id" ref="product.model_product_product"/>
         <field name="module_depends">point_of_sale,product</field>
         <field name="menu_name">Products Dashboard</field>
-        <field name="menu_parent_xmlid">point_of_sale.menu_point_root</field>
+        <field name="menu_parent_xmlid">point_of_sale.menu_point_rep</field>
         <field name="menu_sequence">50</field>
         <field name="primary_button_label">POS Orders</field>
         <field name="primary_action_xmlid">point_of_sale.action_pos_pos_form</field>

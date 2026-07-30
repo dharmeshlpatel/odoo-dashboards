@@ -7,7 +7,7 @@
         <field name="host_model_id" ref="utm.model_utm_campaign"/>
         <field name="module_depends">sale,utm</field>
         <field name="menu_name">Campaigns Dashboard</field>
-        <field name="menu_parent_xmlid">sale.sale_menu_root</field>
+        <field name="menu_parent_xmlid">sale.menu_sale_report</field>
         <field name="menu_sequence">70</field>
         <field name="primary_button_label">Sales Analysis</field>
         <field name="primary_action_xmlid">sale.action_order_report_all</field>
@@ -101,7 +101,7 @@
         <field name="host_model_id" ref="utm.model_utm_medium"/>
         <field name="module_depends">sale,utm</field>
         <field name="menu_name">Mediums Dashboard</field>
-        <field name="menu_parent_xmlid">sale.sale_menu_root</field>
+        <field name="menu_parent_xmlid">sale.menu_sale_report</field>
         <field name="menu_sequence">71</field>
         <field name="primary_button_label">Sales Analysis</field>
         <field name="primary_action_xmlid">sale.action_order_report_all</field>
@@ -195,7 +195,7 @@
         <field name="host_model_id" ref="utm.model_utm_source"/>
         <field name="module_depends">sale,utm</field>
         <field name="menu_name">Sources Dashboard</field>
-        <field name="menu_parent_xmlid">sale.sale_menu_root</field>
+        <field name="menu_parent_xmlid">sale.menu_sale_report</field>
         <field name="menu_sequence">72</field>
         <field name="primary_button_label">Sales Analysis</field>
         <field name="primary_action_xmlid">sale.action_order_report_all</field>

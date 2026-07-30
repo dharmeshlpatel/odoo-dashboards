@@ -10,7 +10,7 @@
         <field name="host_model_id" ref="base.model_res_users"/>
         <field name="module_depends">sale</field>
         <field name="menu_name">Salespersons Dashboard</field>
-        <field name="menu_parent_xmlid">sale.sale_menu_root</field>
+        <field name="menu_parent_xmlid">sale.menu_sale_report</field>
         <field name="menu_sequence">6</field>
         <field name="primary_button_label">Sales Analysis</field>
         <field name="primary_action_xmlid">sale.action_orders</field>

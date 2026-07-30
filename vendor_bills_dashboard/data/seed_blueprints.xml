@@ -6,7 +6,7 @@
         <field name="host_model_id" ref="base.model_res_partner"/>
         <field name="module_depends">account</field>
         <field name="menu_name">Vendors Dashboard</field>
-        <field name="menu_parent_xmlid">account.menu_finance_payables</field>
+        <field name="menu_parent_xmlid">account.menu_finance_reports</field>
         <field name="menu_sequence">5</field>
         <field name="primary_button_label">Bill Analysis</field>
         <field name="primary_action_xmlid">account.action_account_invoice_report_all</field>

@@ -174,7 +174,7 @@
         <field name="menu_parent_xmlid">sale.menu_sale_report</field>
         <field name="menu_sequence">15</field>
         <field name="primary_button_label">Sales Analysis</field>
-        <field name="primary_action_xmlid">sale.action_orders</field>
+        <field name="primary_action_xmlid">sale.action_order_report_all</field>
         <field name="graph_model">sale.order</field>
         <field name="graph_data_field">team_id</field>
         <field name="graph_measure">amount_total:sum</field>
@@ -297,5 +297,70 @@
         <field name="action_domain">[('team_id', '=', '{{id}}')]</field>
         <field name="action_context">{"search_default_team_id": [{{id}}], "default_team_id": {{id}}}</field>
         <field name="module_depends">sale,sales_team</field>
+    </record>
+
+    <!-- CRM team: Manage · New / Reports -->
+    <record id="slot_crm_team_menu_leads" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_crm_sales_team"/>
+        <field name="key">view_leads</field>
+        <field name="name">View Leads</field>
+        <field name="section">menu_views</field>
+        <field name="sequence">10</field>
+        <field name="label">Leads</field>
+        <field name="show_if_zero" eval="True"/>
+        <field name="groups_xmlids">crm.group_use_lead</field>
+        <field name="action_xmlid">crm.crm_lead_all_leads</field>
+        <field name="action_domain">[('team_id', '=', '{{id}}')]</field>
+        <field name="module_depends">crm</field>
+    </record>
+    <record id="slot_crm_team_menu_new_opportunity" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_crm_sales_team"/>
+        <field name="key">new_opportunity</field>
+        <field name="name">New Opportunity</field>
+        <field name="section">menu_new</field>
+        <field name="sequence">10</field>
+        <field name="label">Opportunity</field>
+        <field name="show_if_zero" eval="True"/>
+        <field name="action_xmlid">crm.crm_lead_action_pipeline</field>
+        <field name="action_context">{"default_team_id": {{id}}, "default_type": "opportunity"}</field>
+        <field name="module_depends">crm</field>
+    </record>
+    <record id="slot_crm_team_menu_report_pipeline" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_crm_sales_team"/>
+        <field name="key">report_opportunities</field>
+        <field name="name">Report Opportunities</field>
+        <field name="section">menu_reports</field>
+        <field name="sequence">10</field>
+        <field name="label">Opportunities</field>
+        <field name="show_if_zero" eval="True"/>
+        <field name="action_xmlid">crm.crm_opportunity_report_action</field>
+        <field name="action_context">{"search_default_team_id": [{{id}}]}</field>
+        <field name="module_depends">crm</field>
+    </record>
+
+    <!-- Sales team: Manage · New / Reports -->
+    <record id="slot_sale_team_menu_new_quotation" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_sales_team"/>
+        <field name="key">new_quotation</field>
+        <field name="name">New Quotation</field>
+        <field name="section">menu_new</field>
+        <field name="sequence">10</field>
+        <field name="label">Quotation</field>
+        <field name="show_if_zero" eval="True"/>
+        <field name="action_xmlid">sale.action_quotations_with_onboarding</field>
+        <field name="action_context">{"default_team_id": {{id}}}</field>
+        <field name="module_depends">sale</field>
+    </record>
+    <record id="slot_sale_team_menu_report_sales" model="dashboard.blueprint.slot">
+        <field name="blueprint_id" ref="blueprint_sales_team"/>
+        <field name="key">report_sales</field>
+        <field name="name">Report Sales</field>
+        <field name="section">menu_reports</field>
+        <field name="sequence">10</field>
+        <field name="label">Sales</field>
+        <field name="show_if_zero" eval="True"/>
+        <field name="action_xmlid">sale.action_order_report_all</field>
+        <field name="action_context">{"search_default_team_id": [{{id}}]}</field>
+        <field name="module_depends">sale</field>
     </record>
 </odoo>

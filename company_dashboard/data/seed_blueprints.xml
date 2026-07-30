@@ -6,7 +6,7 @@
         <field name="host_model_id" ref="base.model_res_company"/>
         <field name="module_depends">crm</field>
         <field name="menu_name">Companies CRM Dashboard</field>
-        <field name="menu_parent_xmlid">crm.crm_menu_root</field>
+        <field name="menu_parent_xmlid">crm.crm_menu_report</field>
         <field name="menu_sequence">80</field>
         <field name="primary_button_label">Pipeline Analysis</field>
         <field name="primary_action_xmlid">crm.crm_lead_action_pipeline</field>
@@ -87,7 +87,7 @@
         <field name="host_model_id" ref="base.model_res_company"/>
         <field name="module_depends">sale</field>
         <field name="menu_name">Companies Sales Dashboard</field>
-        <field name="menu_parent_xmlid">sale.sale_menu_root</field>
+        <field name="menu_parent_xmlid">sale.menu_sale_report</field>
         <field name="menu_sequence">80</field>
         <field name="primary_button_label">Sales Analysis</field>
         <field name="primary_action_xmlid">sale.action_order_report_all</field>
@@ -166,7 +166,7 @@
         <field name="host_model_id" ref="base.model_res_company"/>
         <field name="module_depends">account</field>
         <field name="menu_name">Companies Invoice Dashboard</field>
-        <field name="menu_parent_xmlid">account.menu_finance_receivables</field>
+        <field name="menu_parent_xmlid">account.menu_finance_reports</field>
         <field name="menu_sequence">80</field>
         <field name="primary_button_label">Invoice Analysis</field>
         <field name="primary_action_xmlid">account.action_account_invoice_report_all</field>

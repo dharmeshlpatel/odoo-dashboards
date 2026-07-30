@@ -11,7 +11,7 @@
         <field name="host_model_id" ref="stock.model_stock_warehouse"/>
         <field name="module_depends">stock</field>
         <field name="menu_name">Warehouses Dashboard</field>
-        <field name="menu_parent_xmlid">stock.menu_stock_root</field>
+        <field name="menu_parent_xmlid">stock.menu_warehouse_report</field>
         <field name="menu_sequence">5</field>
         <field name="primary_button_label">Transfers</field>
         <field name="primary_action_xmlid">stock.action_picking_tree_all</field>

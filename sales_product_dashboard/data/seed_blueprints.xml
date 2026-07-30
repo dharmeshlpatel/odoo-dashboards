@@ -7,7 +7,7 @@
         <field name="host_model_id" ref="product.model_product_product"/>
         <field name="module_depends">sale,product</field>
         <field name="menu_name">Products Dashboard</field>
-        <field name="menu_parent_xmlid">sale.sale_menu_root</field>
+        <field name="menu_parent_xmlid">sale.menu_sale_report</field>
         <field name="menu_sequence">50</field>
         <field name="primary_button_label">Sales Analysis</field>
         <field name="primary_action_xmlid">sale.action_order_report_all</field>

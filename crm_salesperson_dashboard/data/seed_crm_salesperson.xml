@@ -47,7 +47,7 @@
         <field name="host_model_id" ref="base.model_res_users"/>
         <field name="module_depends">crm</field>
         <field name="menu_name">Salespersons Dashboard</field>
-        <field name="menu_parent_xmlid">crm.crm_menu_root</field>
+        <field name="menu_parent_xmlid">crm.crm_menu_report</field>
         <field name="menu_sequence">6</field>
         <field name="primary_button_label">Pipeline Analysis</field>
         <field name="primary_action_xmlid">crm.crm_lead_action_pipeline</field>

@@ -7,7 +7,7 @@
         <field name="host_model_id" ref="utm.model_utm_campaign"/>
         <field name="module_depends">crm,utm</field>
         <field name="menu_name">Campaigns Dashboard</field>
-        <field name="menu_parent_xmlid">crm.crm_menu_root</field>
+        <field name="menu_parent_xmlid">crm.crm_menu_report</field>
         <field name="menu_sequence">60</field>
         <field name="primary_button_label">Pipeline Analysis</field>
         <field name="primary_action_xmlid">crm.crm_lead_action_pipeline</field>
@@ -121,7 +121,7 @@
         <field name="host_model_id" ref="utm.model_utm_medium"/>
         <field name="module_depends">crm,utm</field>
         <field name="menu_name">Mediums Dashboard</field>
-        <field name="menu_parent_xmlid">crm.crm_menu_root</field>
+        <field name="menu_parent_xmlid">crm.crm_menu_report</field>
         <field name="menu_sequence">61</field>
         <field name="primary_button_label">Pipeline Analysis</field>
         <field name="primary_action_xmlid">crm.crm_lead_action_pipeline</field>
@@ -235,7 +235,7 @@
         <field name="host_model_id" ref="utm.model_utm_source"/>
         <field name="module_depends">crm,utm</field>
         <field name="menu_name">Sources Dashboard</field>
-        <field name="menu_parent_xmlid">crm.crm_menu_root</field>
+        <field name="menu_parent_xmlid">crm.crm_menu_report</field>
         <field name="menu_sequence">62</field>
         <field name="primary_button_label">Pipeline Analysis</field>
         <field name="primary_action_xmlid">crm.crm_lead_action_pipeline</field>

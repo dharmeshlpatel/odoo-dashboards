@@ -2,7 +2,7 @@
 # Part of GritXi. See LICENSE file for full copyright and licensing details.
 {
     "name": "Sales Team Dashboards",
-    "version": "19.0.1.0.1",
+    "version": "19.0.1.0.2",
     "category": "Sales/CRM",
     "summary": "CRM and Sales Team daily kanban dashboards (crm.team host)",
     "description": """
