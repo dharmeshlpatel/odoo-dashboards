@@ -128,13 +128,27 @@ class BaseModelDashboardEngine(models.AbstractModel):
         )
 
     @api.model
-    @api.readonly
-    def search_fetch(
-        self, domain, field_names=None, offset=0, limit=None, order=None
+    def _search(
+        self,
+        domain,
+        offset=0,
+        limit=None,
+        order=None,
+        *,
+        active_test=True,
+        bypass_access=False,
     ):
+        # Rewrite here (not only search_fetch) so Group By / _read_group also
+        # resolve virtual lens flags. Ungrouped kanban uses search_fetch →
+        # _search; grouped kanban uses _read_group → _search.
         domain = self._dashboard_lens_rewrite_domain(domain)
-        return super().search_fetch(
-            domain, field_names, offset=offset, limit=limit, order=order
+        return super()._search(
+            domain,
+            offset=offset,
+            limit=limit,
+            order=order,
+            active_test=active_test,
+            bypass_access=bypass_access,
         )
 
     @api.model
@@ -150,6 +164,10 @@ class BaseModelDashboardEngine(models.AbstractModel):
 
         Gate: ``dashboard_blueprint_key`` present, not
         ``_dashboard_fetching_data``, and blueprint host matches ``self._name``.
+
+        Applied from ``_search`` so both flat search and Group By paths work.
+        Without this, Group By hits the ``search=`` stubs that return
+        ``[('id', '=', False)]`` and the kanban goes blank.
         """
         key = self.env.context.get("dashboard_blueprint_key")
         if not key or self.env.context.get("_dashboard_fetching_data"):
@@ -164,6 +182,7 @@ class BaseModelDashboardEngine(models.AbstractModel):
         if not bp or bp.host_model_name != self._name:
             return domain
         bp = bp.with_user(self.env.user)
+        # Domain objects and plain lists both iterate to leaf/operator tokens.
         domain = list(domain or [])
 
         def _is_flag(leaf, name):

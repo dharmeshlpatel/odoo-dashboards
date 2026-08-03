@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+    <t t-name="dashboard_engine.DashboardHubAction">
+        <div class="o_dashboard_hub d-flex h-100">
+            <aside class="o_dashboard_hub_sidebar border-end">
+                <t t-foreach="state.tree" t-as="group" t-key="group.id">
+                    <div class="o_dashboard_hub_group_label text-muted text-uppercase small px-3 pt-3 pb-1">
+                        <t t-esc="group.name"/>
+                    </div>
+                    <t t-foreach="group.dashboards" t-as="dashboard" t-key="dashboard.id">
+                        <button type="button"
+                                class="o_dashboard_hub_item btn btn-link text-start w-100 rounded-0"
+                                t-att-class="{ 'o_active': state.activeBlueprintId === dashboard.id }"
+                                t-on-click="() => this.selectDashboard(dashboard.id)">
+                            <t t-esc="dashboard.name"/>
+                        </button>
+                    </t>
+                </t>
+                <div t-if="!state.tree.length" class="text-muted p-3 small">
+                    No dashboards in the hub yet. Assign a Hub Group on a published blueprint.
+                </div>
+            </aside>
+            <main class="o_dashboard_hub_main flex-grow-1 overflow-auto">
+                <t t-if="state.viewProps">
+                    <View t-props="state.viewProps" t-key="viewKey"/>
+                </t>
+                <div t-elif="state.loadingView" class="text-muted p-4">
+                    Loading dashboard…
+                </div>
+                <div t-else="" class="text-muted p-4">
+                    Select a dashboard from the list.
+                </div>
+            </main>
+        </div>
+    </t>
+</templates>

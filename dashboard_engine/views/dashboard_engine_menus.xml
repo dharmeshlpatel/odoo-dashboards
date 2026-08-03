@@ -6,11 +6,34 @@
               sequence="25"
               groups="dashboard_engine.group_dashboard_engine_user"/>
 
+    <!-- Static hub menu retired: dashboard.blueprint.hub generates menus. -->
+    <menuitem id="menu_dashboard_engine_hub"
+              name="Dashboards"
+              parent="menu_dashboard_engine_root"
+              action="action_dashboard_hub"
+              sequence="1"
+              active="False"
+              groups="dashboard_engine.group_dashboard_engine_user"/>
+
     <menuitem id="menu_dashboard_engine_blueprints"
               name="Blueprints"
               parent="menu_dashboard_engine_root"
               action="action_dashboard_blueprint"
               sequence="5"
+              groups="dashboard_engine.group_dashboard_engine_manager"/>
+
+    <menuitem id="menu_dashboard_engine_hub_menus"
+              name="Hub Menus"
+              parent="menu_dashboard_engine_root"
+              action="action_dashboard_blueprint_hub"
+              sequence="7"
+              groups="dashboard_engine.group_dashboard_engine_manager"/>
+
+    <menuitem id="menu_dashboard_engine_groups"
+              name="Groups"
+              parent="menu_dashboard_engine_root"
+              action="action_dashboard_blueprint_group"
+              sequence="8"
               groups="dashboard_engine.group_dashboard_engine_manager"/>
 
     <menuitem id="menu_dashboard_engine_create"

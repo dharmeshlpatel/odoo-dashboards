@@ -280,12 +280,15 @@
                                             ('host_model_id', '=', host_model_id)]"/>
                         </group>
                         <group string="Menu">
-                            <field name="menu_name"/>
-                            <field name="menu_parent_id" options="{'no_create': True}"/>
+                            <field name="group_id" options="{'no_create_edit': False}"/>
                             <field name="menu_sequence"/>
-                            <field name="menu_group_ids" widget="many2many_tags" options="{'no_create': True}"/>
-                            <field name="menu_web_icon"/>
-                            <field name="menu_web_icon_data"/>
+                            <field name="menu_name" invisible="group_id"/>
+                            <field name="menu_parent_id" options="{'no_create': True}"
+                                      invisible="group_id"/>
+                            <field name="menu_group_ids" widget="many2many_tags" options="{'no_create': True}"
+                                      invisible="group_id"/>
+                            <field name="menu_web_icon" invisible="group_id"/>
+                            <field name="menu_web_icon_data" invisible="group_id"/>
                         </group>
                         <group string="Kanban lens">
                             <field name="lens_my_enabled"/>

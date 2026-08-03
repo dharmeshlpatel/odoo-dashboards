@@ -21,10 +21,22 @@ def _ensure_warehouse_blueprint(env):
 
 
 def post_init_hook(env):
-    """Sync published blueprints after engine install/upgrade."""
+    """Sync hub menus + published blueprints after engine install/upgrade."""
+    Hub = env["dashboard.blueprint.hub"].sudo()
+    default_hub = env.ref(
+        "dashboard_engine.dashboard_hub_default", raise_if_not_found=False
+    )
+    if default_hub:
+        env["dashboard.blueprint.group"].sudo().search(
+            [("hub_menu_id", "=", False)]
+        ).write({"hub_menu_id": default_hub.id})
+    for hub in Hub.search([]):
+        hub._sync_generated_artifacts()
     Blueprint = env["dashboard.blueprint"].sudo()
     for bp in Blueprint.search([("state", "=", "published")]):
         bp._sync_generated_artifacts()
+    for hub in Hub.search([]):
+        hub._sync_generated_artifacts()
 
 
 # Backwards-compatible alias used by legacy packs during migration window

@@ -157,6 +157,8 @@ const EMPTY_SETUP = () => ({
     menu_sequence: 50,
     menu_group_ids: [],
     menu_group_names: [],
+    group_id: false,
+    group_name: "",
     menu_web_icon: "",
     menu_web_icon_data: false,
     company_id: false,
@@ -206,6 +208,7 @@ export class DashboardStudioAction extends Component {
                 share: "",
                 company: "",
                 visibility: "",
+                hub_group: "",
             },
             setupResults: {
                 host: [],
@@ -214,6 +217,7 @@ export class DashboardStudioAction extends Component {
                 share: [],
                 company: [],
                 visibility: [],
+                hub_group: [],
             },
             contextGroupQuery: {},
             contextGroupHits: {},
@@ -775,6 +779,9 @@ export class DashboardStudioAction extends Component {
         if (this.state.studioMode === "setup") {
             return this.state.setupDirty;
         }
+        if (this.state.zone !== "header" && this.selectedSlot && !this.selectedSlotOwned) {
+            return false;
+        }
         return this.state.dirty;
     }
 
@@ -879,6 +886,8 @@ export class DashboardStudioAction extends Component {
             menu_sequence: payload.menu_sequence ?? 50,
             menu_group_ids: [...(payload.menu_group_ids || [])],
             menu_group_names: [...(payload.menu_group_names || [])],
+            group_id: payload.group_id || false,
+            group_name: payload.group_name || "",
             menu_web_icon: payload.menu_web_icon || "",
             menu_web_icon_data: payload.menu_web_icon_data || false,
             company_id: payload.company_id || false,
@@ -896,6 +905,7 @@ export class DashboardStudioAction extends Component {
             share: [],
             company: [],
             visibility: [],
+            hub_group: [],
         };
     }
 
@@ -1913,6 +1923,7 @@ export class DashboardStudioAction extends Component {
             share: [],
             company: [],
             visibility: [],
+            hub_group: [],
         };
     }
 
@@ -1950,6 +1961,7 @@ export class DashboardStudioAction extends Component {
             share: "studio_search_share_blueprints",
             company: "studio_search_companies",
             visibility: "studio_search_visibility_groups",
+            hub_group: "studio_search_hub_groups",
         };
         const method = methodMap[kind];
         if (!method) {
@@ -2042,6 +2054,22 @@ export class DashboardStudioAction extends Component {
     clearSetupMenuParent() {
         this.state.setup.menu_parent_id = false;
         this.state.setup.menu_parent_name = "";
+        this.markSetupDirty();
+    }
+
+    pickSetupHubGroup(ev) {
+        const id = parseInt(ev.currentTarget.dataset.id, 10);
+        const name = ev.currentTarget.dataset.name || "";
+        this.state.setup.group_id = id;
+        this.state.setup.group_name = name;
+        this.state.setupQuery.hub_group = "";
+        this.state.setupResults.hub_group = [];
+        this.markSetupDirty();
+    }
+
+    clearSetupHubGroup() {
+        this.state.setup.group_id = false;
+        this.state.setup.group_name = "";
         this.markSetupDirty();
     }
 
@@ -2138,6 +2166,7 @@ export class DashboardStudioAction extends Component {
                 menu_parent_id: setup.menu_parent_id || false,
                 menu_sequence: setup.menu_sequence,
                 menu_group_ids: setup.menu_group_ids || [],
+                group_id: setup.group_id || false,
                 menu_web_icon: setup.menu_web_icon || false,
                 menu_web_icon_data: setup.menu_web_icon_data || false,
                 company_id: setup.company_id || false,
@@ -2228,6 +2257,13 @@ export class DashboardStudioAction extends Component {
                     ]
                 );
             } else if (this.selectedSlot) {
+                if (!this.selectedSlotOwned) {
+                    this.notification.add(
+                        _t("Shared item — edit it on its source dashboard, or unlink the pack in Setup."),
+                        { type: "warning" }
+                    );
+                    return;
+                }
                 const vals = {
                     label: ed.label,
                     label_plural: ed.label_plural,
@@ -2315,6 +2351,12 @@ export class DashboardStudioAction extends Component {
     }
 
     onDragStart(slotId, ev) {
+        const slot = this.slotsForZone.find((s) => s.id === slotId);
+        if (slot && slot.owned === false) {
+            ev.preventDefault();
+            this._dragSlotId = null;
+            return;
+        }
         this._dragSlotId = slotId;
         if (ev.dataTransfer) {
             ev.dataTransfer.effectAllowed = "move";
@@ -2329,11 +2371,19 @@ export class DashboardStudioAction extends Component {
         if (!sourceId || sourceId === targetId) {
             return;
         }
-        const section = this.slotsForZone.find((s) => s.id === sourceId)?.section;
+        const owned = this.slotsForZone.filter((s) => s.owned !== false);
+        if (owned.length !== this.slotsForZone.length) {
+            this.notification.add(
+                _t("Shared items cannot be reordered here. Reorder them on their source dashboard."),
+                { type: "warning" }
+            );
+            return;
+        }
+        const section = owned.find((s) => s.id === sourceId)?.section;
         if (!section) {
             return;
         }
-        const ids = this.slotsForZone.map((s) => s.id);
+        const ids = owned.map((s) => s.id);
         const from = ids.indexOf(sourceId);
         const to = ids.indexOf(targetId);
         if (from < 0 || to < 0) {
@@ -2520,11 +2570,26 @@ export class DashboardStudioAction extends Component {
             await this.applyPayload(payload, false);
             return;
         }
+        if (!this.selectedSlotOwned) {
+            this.notification.add(
+                _t("Shared items cannot be reordered here. Reorder them on their source dashboard."),
+                { type: "warning" }
+            );
+            return;
+        }
         const section = this.selectedSlot?.section;
         if (!section) {
             return;
         }
-        const ids = this.slotsForZone.map((s) => s.id);
+        const owned = this.slotsForZone.filter((s) => s.owned !== false);
+        if (owned.length !== this.slotsForZone.length) {
+            this.notification.add(
+                _t("Shared items cannot be reordered here. Reorder them on their source dashboard."),
+                { type: "warning" }
+            );
+            return;
+        }
+        const ids = owned.map((s) => s.id);
         const idx = ids.indexOf(this.selectedSlot.id);
         const next = idx + delta;
         if (idx < 0 || next < 0 || next >= ids.length) {

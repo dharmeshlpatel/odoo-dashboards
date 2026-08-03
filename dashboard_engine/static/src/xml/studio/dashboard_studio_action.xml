@@ -223,11 +223,11 @@
                                                t-att-value="state.setup.menu_name"
                                                t-on-input="onSetupMenuNameInput"/>
                                     </div>
-                                    <div class="o_ds_setup_field">
+                                    <div class="o_ds_setup_field" t-if="!state.setup.group_id">
                                         <label class="form-label">Parent Menu</label>
                                         <div class="o_ds_setup_picker">
                                         <div class="d-flex gap-2 align-items-center mb-1">
-                                            <div class="form-control bg-light flex-grow-1 o_ds_setup_value" t-esc="state.setup.menu_parent_name or 'Dashboard Engine root'"/>
+                                            <div class="form-control bg-light flex-grow-1 o_ds_setup_value" t-esc="state.setup.menu_parent_name or 'None (no standalone menu)'"/>
                                             <button type="button" class="btn btn-sm btn-outline-secondary"
                                                     t-if="state.setup.menu_parent_id" t-on-click="clearSetupMenuParent">Clear</button>
                                         </div>
@@ -247,12 +247,45 @@
                                             </button>
                                         </div>
                                         </div>
+                                        <div class="form-text">Standalone menu only when no Hub Group is set.</div>
+                                    </div>
+                                    <div t-else="" class="o_ds_setup_field">
+                                        <label class="form-label">Parent Menu</label>
+                                        <div class="form-control bg-light o_ds_setup_value text-muted">
+                                            Not used — this dashboard appears only in its Hub Group menu.
+                                        </div>
                                     </div>
                                     <div class="o_ds_setup_field">
                                         <label class="form-label">Sequence</label>
                                         <input type="number" class="form-control" style="max-width: 8rem"
                                                t-att-value="state.setup.menu_sequence"
                                                t-on-input="onSetupMenuSequenceInput"/>
+                                    </div>
+                                    <div class="o_ds_setup_field">
+                                        <label class="form-label">Hub Group</label>
+                                        <div class="o_ds_setup_picker">
+                                        <div class="d-flex gap-2 align-items-center mb-1">
+                                            <div class="form-control bg-light flex-grow-1 o_ds_setup_value" t-esc="state.setup.group_name or 'None'"/>
+                                            <button type="button" class="btn btn-sm btn-outline-secondary"
+                                                    t-if="state.setup.group_id" t-on-click="clearSetupHubGroup">Clear</button>
+                                        </div>
+                                        <input type="text" class="form-control"
+                                               placeholder="Search hub groups…"
+                                               t-att-value="state.setupQuery.hub_group"
+                                               data-kind="hub_group"
+                                               t-on-input="onSetupSearchInput"
+                                               t-on-focus="onSetupSearchFocus"
+                                               t-on-blur="onSetupSearchBlur"/>
+                                        <div t-if="state.setupResults.hub_group.length" class="o_ds_setup_results list-group mt-1">
+                                            <button type="button" class="list-group-item list-group-item-action py-2"
+                                                    t-foreach="state.setupResults.hub_group" t-as="row" t-key="row.id"
+                                                    t-att-data-id="row.id" t-att-data-name="row.name"
+                                                    t-on-mousedown.prevent="pickSetupHubGroup">
+                                                <t t-esc="row.name"/>
+                                            </button>
+                                        </div>
+                                        </div>
+                                        <div class="form-text">Published dashboards with a group appear only in that group's hub menu (no standalone menu).</div>
                                     </div>
                                     <div class="o_ds_setup_field mb-0">
                                         <label class="form-label">Visibility</label>
@@ -645,10 +678,10 @@
                                     <i class="fa fa-plus"/>
                                     <span>Add</span>
                                 </button>
-                                <button type="button" class="btn btn-sm btn-outline-secondary" t-on-click="() => this.moveSelected(-1)" title="Move up">
+                                <button type="button" class="btn btn-sm btn-outline-secondary" t-on-click="() => this.moveSelected(-1)" title="Move up" t-att-disabled="state.saving or !selectedSlotOwned">
                                     <i class="fa fa-arrow-up"/>
                                 </button>
-                                <button type="button" class="btn btn-sm btn-outline-secondary" t-on-click="() => this.moveSelected(1)" title="Move down">
+                                <button type="button" class="btn btn-sm btn-outline-secondary" t-on-click="() => this.moveSelected(1)" title="Move down" t-att-disabled="state.saving or !selectedSlotOwned">
                                     <i class="fa fa-arrow-down"/>
                                 </button>
                                 <button type="button" class="btn btn-sm btn-outline-secondary" t-on-click="removeSelected" t-att-disabled="state.saving or !selectedSlotOwned" t-att-title="selectedSlotOwned ? 'Remove' : 'Shared item — remove on its source dashboard'">
@@ -678,13 +711,13 @@
                             <div class="o_ds_item_list mb-3" t-if="slotsForZone.length">
                                 <t t-foreach="slotsForZone" t-as="slot" t-key="slot.id">
                                     <button type="button" class="o_ds_item"
-                                            draggable="true"
+                                            t-att-draggable="slot.owned !== false ? 'true' : 'false'"
                                             t-att-class="selectedSlot and selectedSlot.id === slot.id ? 'active' : ''"
                                             t-on-click="() => this.selectSlot(slot.id)"
                                             t-on-dragstart="(ev) => this.onDragStart(slot.id, ev)"
                                             t-on-dragover="onDragOver"
                                             t-on-drop="(ev) => this.onDropSlot(slot.id, ev)">
-                                        <i class="fa fa-bars text-muted me-1" title="Drag to reorder"/>
+                                        <i t-if="slot.owned !== false" class="fa fa-bars text-muted me-1" title="Drag to reorder"/>
                                         <i t-att-class="'fa ' + (slot.icon or 'fa-circle-o')"/>
                                         <span class="flex-grow-1 text-start" t-esc="slot.label or slot.name"/>
                                         <span t-if="slot.owned === false" class="badge text-bg-secondary"
@@ -1239,11 +1272,17 @@
                         <!-- SLOT ZONES -->
                         <t t-else="">
                             <div class="o_ds_fieldset" t-if="selectedSlot">
+                                <div t-if="!selectedSlotOwned" class="alert alert-info py-2 px-3 mb-3 small">
+                                    Shared from
+                                    <strong t-esc="selectedSlot.source_blueprint_name or 'another dashboard'"/>.
+                                    Open that dashboard in Studio to edit this item.
+                                </div>
                                 <div class="row g-2">
                                     <div class="col-md-6">
                                         <label class="o_ds_field">
                                             <span>Name on the card</span>
                                             <input type="text" class="form-control" t-att-value="state.editor.label"
+                                                   t-att-readonly="!selectedSlotOwned"
                                                    t-on-input="(ev) => this.onEditorInput('label', ev)"/>
                                         </label>
                                     </div>

@@ -48,12 +48,6 @@
         <field name="domain">[('type', '=', 'lead')]</field>
         <field name="default_on" eval="False"/>
     </record>
-    <record id="scope_sp360_orders" model="dashboard.blueprint.scope">
-        <field name="blueprint_id" ref="blueprint_salesperson_360"/>
-        <field name="sequence">30</field>
-        <field name="name">Sales Orders</field>
-        <field name="mode">include</field>
-        <field name="domain">[('state', 'in', ('sale', 'done'))]</field>
-        <field name="default_on" eval="True"/>
-    </record>
+    <!-- Sales Orders is not a graph include scope: graph_model is crm.lead.
+         Sale KPIs come from the shared sales_salesperson_dashboard slots. -->
 </odoo>

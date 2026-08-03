@@ -38,12 +38,14 @@ class TestDashboardBlueprintEngine(TransactionCase):
         self.assertEqual(bp.key, "my_fancy_dashboard")
 
     def test_publish_partner_blueprint_generates_artifacts(self):
+        parent = self.env.ref("dashboard_engine.menu_dashboard_engine_root")
         bp = self.env["dashboard.blueprint"].create(
             {
                 "name": "Test Partners",
                 "key": "test_partners_engine",
                 "host_model_id": self._host_model().id,
                 "menu_name": "Test Partners Dashboard",
+                "menu_parent_id": parent.id,
                 "primary_button_label": "Open",
                 "graph_model": "res.partner",
                 "graph_data_field": "parent_id",
@@ -57,6 +59,7 @@ class TestDashboardBlueprintEngine(TransactionCase):
         self.assertEqual(bp.generated_view_id.model, "res.partner")
         self.assertTrue(bp.generated_action_id)
         self.assertTrue(bp.generated_menu_id)
+        self.assertTrue(bp.generated_menu_id.active)
 
         arch = bp.generated_view_id.arch_db
         # Card content rides along with the record, so no runtime RPC widgets.
@@ -911,6 +914,30 @@ class TestDashboardBlueprintEngine(TransactionCase):
         self.assertEqual(
             bp._effective_graph_settings()["domain"], [("is_company", "=", True)]
         )
+
+    def test_scope_domain_for_wrong_model_is_skipped(self):
+        """sale.order-style include must not poison a crm.lead / partner graph."""
+        bp = self._scoped_blueprint()
+        bp.write(
+            {
+                "scope_ids": [
+                    (
+                        0,
+                        0,
+                        {
+                            "name": "Sales Orders",
+                            "mode": "include",
+                            "domain": "[('state', 'in', ('sale', 'done'))]",
+                            "default_on": True,
+                        },
+                    ),
+                ],
+            }
+        )
+        # Companies (valid) stays; Sales Orders (invalid on res.partner) drops.
+        domain = bp._effective_graph_settings()["domain"]
+        self.assertEqual(domain, [("is_company", "=", True)])
+        self.env["res.partner"].search(domain)
 
     def test_ticking_a_second_scope_widens_the_graph(self):
         bp = self._scoped_blueprint()
@@ -2155,21 +2182,35 @@ class TestDashboardBlueprintEngine(TransactionCase):
         )
 
     def test_primary_action_skips_graph_ctx_when_model_mismatch(self):
-        """Line-model groupbys must not be pushed onto header-order search."""
-        bp = self.env.ref(
-            "pos_sales_product_dashboard.blueprint_pos_products",
-            raise_if_not_found=False,
-        )
-        if not bp or "product.product" not in self.env or "pos.order" not in self.env:
-            self.skipTest("POS products blueprint seed missing")
+        """Graph groupbys must not be pushed when action model != graph model."""
+        if (
+            "product.product" not in self.env
+            or "sale.report" not in self.env
+            or "sale.order" not in self.env
+        ):
+            self.skipTest("Sales models missing")
         product = self.env["product.product"].search([], limit=1)
         if not product:
             self.skipTest("No product.product available")
+        # Synthetic mismatch: mini-chart on sale.report, primary opens sale.order.
+        bp = self.env["dashboard.blueprint"].create(
+            {
+                "name": "Primary Mismatch",
+                "key": "primary_mismatch_%s" % self.env.uid,
+                "host_model_id": self.env.ref("product.model_product_product").id,
+                "graph_model": "sale.report",
+                "graph_data_field": "product_id",
+                "graph_measure": "price_subtotal",
+                "graph_groupby": "date:month",
+                "primary_action_xmlid": "sale.action_orders",
+                "state": "published",
+            }
+        )
         action = self.env["dashboard.blueprint"].execute_primary_action(
             bp.key, "product.product", product.id
         )
         self.assertTrue(action)
-        self.assertEqual(action.get("res_model"), "pos.order")
+        self.assertEqual(action.get("res_model"), "sale.order")
         ctx = action.get("context") or {}
         self.assertNotIn("graph_groupbys", ctx, ctx)
         self.assertNotIn("graph_measure", ctx, ctx)

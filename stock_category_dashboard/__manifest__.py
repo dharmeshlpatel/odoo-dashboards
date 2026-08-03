@@ -2,7 +2,7 @@
 # Part of GritXi. See LICENSE file for full copyright and licensing details.
 {
     "name": "Stock Categories Dashboard",
-    "version": "19.0.1.0.1",
+    "version": "19.0.1.0.2",
     "category": "Inventory/Inventory",
     "summary": "Stock by product category kanban dashboard",
     "description": """

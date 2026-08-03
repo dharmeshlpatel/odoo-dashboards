@@ -283,6 +283,10 @@ class TestDashboardKanbanLens(TransactionCase):
         self.assertIn(hot.id, ids)
         self.assertNotIn(cold.id, ids)
 
+        # Lens domain rewrite only runs for published / runtime-active
+        # blueprints (_get_blueprint gate).
+        bp.action_publish()
+
         Partner = self.env["res.partner"].with_context(
             dashboard_blueprint_key=bp.key,
             initializer=bp.key,
@@ -319,3 +323,43 @@ class TestDashboardKanbanLens(TransactionCase):
         arch = bp.generated_search_view_id.arch_db or bp.generated_search_view_id.arch
         self.assertIn("Needs attention", arch)
         self.assertIn("dashboard_needs_attention", arch)
+
+    def test_lens_filters_work_with_read_group(self):
+        """Group By uses _read_group → _search; lens flags must still rewrite."""
+        parent = self.env["res.partner"].create({"name": "Lens Group Parent"})
+        self.env["res.partner"].create(
+            {"name": "Lens Group Child", "parent_id": parent.id}
+        )
+        cold = self.env["res.partner"].create({"name": "Lens Group Cold"})
+        bp = self.env["dashboard.blueprint"].create(
+            {
+                "name": "Lens Group By",
+                "key": "lens_groupby_bp",
+                "host_model_id": self._partner_model().id,
+                "lens_kpis_enabled": True,
+                "lens_kpis_label": "With KPIs",
+                "graph_model": "res.partner",
+                "graph_data_field": "parent_id",
+                "state": "draft",
+            }
+        )
+        bp.action_publish()
+        Partner = self.env["res.partner"].with_context(
+            dashboard_blueprint_key=bp.key,
+            initializer=bp.key,
+            dashboard_rendering=True,
+        )
+        # Flat search still finds the KPI host.
+        found = Partner.search([("dashboard_with_kpis", "=", True)])
+        self.assertIn(parent.id, found.ids)
+        self.assertNotIn(cold.id, found.ids)
+        # Group By path must not blank out (virtual flag → id=False stub).
+        rows = Partner._read_group(
+            [("dashboard_with_kpis", "=", True)],
+            groupby=["parent_id"],
+            aggregates=["__count"],
+        )
+        # parent itself is a KPI host (has children); cold is not.
+        host_ids = {(row[0].id if row[0] else False) for row in rows}
+        self.assertTrue(rows)
+        self.assertNotIn(cold.id, host_ids)

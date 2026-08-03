@@ -18,7 +18,8 @@
         <field name="graph_caption">Moves / week</field>
         <field name="include_child_records" eval="True"/>
 
-        <field name="lens_my_enabled" eval="True"/>
+        <!-- product.category / stock.move have no user_id — My filter cannot resolve. -->
+        <field name="lens_my_enabled" eval="False"/>
         <field name="lens_my_default" eval="False"/>
         <field name="lens_my_label">My records</field>
         <field name="lens_kpis_enabled" eval="True"/>

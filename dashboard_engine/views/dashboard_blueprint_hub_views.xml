@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_dashboard_blueprint_hub_list" model="ir.ui.view">
+        <field name="name">dashboard.blueprint.hub.list</field>
+        <field name="model">dashboard.blueprint.hub</field>
+        <field name="arch" type="xml">
+            <list>
+                <field name="menu_sequence" widget="handle"/>
+                <field name="name"/>
+                <field name="menu_parent_id"/>
+                <field name="generated_menu_id" optional="hide"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_dashboard_blueprint_hub_form" model="ir.ui.view">
+        <field name="name">dashboard.blueprint.hub.form</field>
+        <field name="model">dashboard.blueprint.hub</field>
+        <field name="arch" type="xml">
+            <form string="Dashboard Hub Menu">
+                <sheet>
+                    <div class="oe_title">
+                        <label for="name"/>
+                        <h1>
+                            <field name="name" placeholder="e.g. 360 Dashboards"/>
+                        </h1>
+                    </div>
+                    <group>
+                        <group string="Menu">
+                            <field name="menu_parent_id" options="{'no_create': True}"/>
+                            <field name="menu_sequence"/>
+                            <field name="menu_group_ids" widget="many2many_tags" options="{'no_create': True}"/>
+                            <field name="menu_web_icon"/>
+                            <field name="menu_web_icon_data"/>
+                        </group>
+                        <group string="Generated">
+                            <field name="generated_menu_id" readonly="1"/>
+                            <field name="generated_action_id" readonly="1"/>
+                        </group>
+                    </group>
+                    <field name="group_ids">
+                        <list>
+                            <field name="sequence" widget="handle"/>
+                            <field name="name"/>
+                        </list>
+                    </field>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_dashboard_blueprint_hub" model="ir.actions.act_window">
+        <field name="name">Hub Menus</field>
+        <field name="res_model">dashboard.blueprint.hub</field>
+        <field name="view_mode">list,form</field>
+    </record>
+</odoo>

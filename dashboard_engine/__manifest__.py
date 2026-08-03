@@ -2,7 +2,7 @@
 # Part of Odoo. See LICENSE file for full copyright and licensing details.
 {
     "name": "Dynamic Dashboard Engine",
-    "version": "19.0.1.0.123",
+    "version": "19.0.1.0.141",
     "category": "Productivity",
     "summary": "Build kanban dashboards for any Odoo model via dynamic configuration",
     "description": """
@@ -24,13 +24,17 @@ Technical dependencies are intentionally limited to ``base`` and ``web``.
         "security/dashboard_engine_security.xml",
         "security/ir.model.access.csv",
         "data/dashboard_graph_periods_data.xml",
+        "views/dashboard_blueprint_hub_views.xml",
+        "views/dashboard_blueprint_group_views.xml",
         "views/dashboard_blueprint_views.xml",
         "views/dashboard_studio_views.xml",
+        "views/dashboard_hub_views.xml",
         "views/dashboard_blueprint_create_wizard_views.xml",
         "views/dashboard_relation_path_views.xml",
         "views/dashboard_condition_views.xml",
         "views/dashboard_blueprint_template_views.xml",
         "views/dashboard_engine_menus.xml",
+        "data/dashboard_hub_default_data.xml",
     ],
     "demo": [],
     "assets": {

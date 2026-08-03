@@ -178,7 +178,8 @@
         <field name="graph_caption">Invoices</field>
         <field name="header_title_field">name</field>
 
-        <field name="lens_my_enabled" eval="True"/>
+        <!-- res.company / account.invoice.report have no user_id — My filter cannot resolve. -->
+        <field name="lens_my_enabled" eval="False"/>
         <field name="lens_my_default" eval="False"/>
         <field name="lens_my_label">My records</field>
         <field name="lens_kpis_enabled" eval="True"/>

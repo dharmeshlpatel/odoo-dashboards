@@ -1,0 +1,29 @@
+.o_dashboard_hub {
+    min-height: 100%;
+    background: var(--o-view-background-color, #fff);
+}
+
+.o_dashboard_hub_sidebar {
+    width: 240px;
+    min-width: 200px;
+    flex-shrink: 0;
+    overflow: auto;
+}
+
+.o_dashboard_hub_item {
+    color: var(--body-color);
+    padding: 0.5rem 1rem;
+    text-decoration: none;
+    border-left: 3px solid transparent;
+
+    &.o_active {
+        border-left-color: var(--primary);
+        background: rgba(var(--primary-rgb, 113, 75, 103), 0.08);
+        color: var(--primary);
+        font-weight: 600;
+    }
+}
+
+.o_dashboard_hub_main {
+    min-width: 0;
+}

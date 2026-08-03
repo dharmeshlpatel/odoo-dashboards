@@ -1,6 +1,21 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <templates xml:space="preserve">
 
+    <t t-name="dashboard_engine.DashboardSlotStatContent">
+        <i t-if="item.icon"
+           t-att-class="'fa fa-fw o_button_icon ' + item.icon"
+           role="img"
+           t-att-aria-label="item.label"
+           t-att-title="item.label"/>
+        <div class="o_stat_info">
+            <span class="o_stat_text" t-esc="item.label"/>
+            <span class="o_stat_value">
+                <t t-if="item.amount !== undefined" t-esc="formatAmount(item)"/>
+                <t t-else="" t-esc="item.count"/>
+            </span>
+        </div>
+    </t>
+
     <t t-name="dashboard_engine.DashboardSlotsField">
         <!-- ⋮ menu links (View / New / Reporting columns).
              Markup mirrors Accounting/Project: each link in its own div.
@@ -14,47 +29,57 @@
                 </a>
             </div>
         </t>
-        <!-- Footer stat buttons -->
+        <!-- Footer shortcuts (purple bar) — overflow goes under More. -->
         <t t-elif="props.display === 'buttons'">
-            <button t-foreach="items" t-as="item" t-key="item.key"
+            <button t-foreach="visibleItems" t-as="item" t-key="item.key"
                     type="button"
                     class="btn btn-primary"
-                    t-att-class="item.style === 'danger' ? 'o_dashboard_stat_danger' : item.style === 'warning' ? 'o_dashboard_stat_warning' : ''"
+                    t-att-class="itemStyleClass(item)"
                     t-on-click.stop="() => this.onItemClick(item)">
-                <i t-if="item.icon"
-                   t-att-class="'fa fa-fw o_button_icon ' + item.icon"
-                   role="img"
-                   t-att-aria-label="item.label"
-                   t-att-title="item.label"/>
-                <div class="o_stat_info">
-                    <span class="o_stat_text" t-esc="item.label"/>
-                    <span class="o_stat_value">
-                        <t t-if="item.amount !== undefined" t-esc="formatAmount(item)"/>
-                        <t t-else="" t-esc="item.count"/>
-                    </span>
-                </div>
+                <t t-call="dashboard_engine.DashboardSlotStatContent"/>
             </button>
+            <div t-if="moreItems.length" class="o_dashboard_more_wrap btn btn-primary">
+                <Dropdown menuClass="'o_dashboard_more_menu p-0 border-0'" position="'bottom-end'">
+                    <button type="button"
+                            class="btn btn-primary o_dashboard_button_more o_button_more w-100 h-100"
+                            t-on-click.stop="() => {}">
+                        <span t-esc="moreLabel"/>
+                    </button>
+                    <t t-set-slot="content">
+                        <DropdownItem t-foreach="moreItems" t-as="item" t-key="item.key"
+                                      class="'o_dashboard_more_item d-flex align-items-center p-0'"
+                                      onSelected="() => this.onItemClick(item)">
+                            <t t-call="dashboard_engine.DashboardSlotStatContent"/>
+                        </DropdownItem>
+                    </t>
+                </Dropdown>
+            </div>
         </t>
-        <!-- Stat buttons in the card's button box -->
+        <!-- Footer totals (button box) — same More pattern as form ButtonBox. -->
         <t t-elif="props.display === 'button_box'">
-            <button t-foreach="items" t-as="item" t-key="item.key"
+            <button t-foreach="visibleItems" t-as="item" t-key="item.key"
                     type="button"
                     class="btn oe_stat_button"
-                    t-att-class="item.style === 'danger' ? 'o_dashboard_stat_danger' : item.style === 'warning' ? 'o_dashboard_stat_warning' : ''"
+                    t-att-class="itemStyleClass(item)"
                     t-on-click.stop="() => this.onItemClick(item)">
-                <i t-if="item.icon"
-                   t-att-class="'fa fa-fw o_button_icon ' + item.icon"
-                   role="img"
-                   t-att-aria-label="item.label"
-                   t-att-title="item.label"/>
-                <div class="o_stat_info">
-                    <span class="o_stat_text" t-esc="item.label"/>
-                    <span class="o_stat_value">
-                        <t t-if="item.amount !== undefined" t-esc="formatAmount(item)"/>
-                        <t t-else="" t-esc="item.count"/>
-                    </span>
-                </div>
+                <t t-call="dashboard_engine.DashboardSlotStatContent"/>
             </button>
+            <div t-if="moreItems.length" class="o_dashboard_more_wrap btn oe_stat_button p-0 border-0">
+                <Dropdown menuClass="'o_dashboard_more_menu o_dropdown_more p-0 border-0'" position="'bottom-end'">
+                    <button type="button"
+                            class="btn oe_stat_button o_dashboard_button_more o_button_more w-100 h-100 d-flex justify-content-center align-items-center"
+                            t-on-click.stop="() => {}">
+                        <span t-esc="moreLabel"/>
+                    </button>
+                    <t t-set-slot="content">
+                        <DropdownItem t-foreach="moreItems" t-as="item" t-key="item.key"
+                                      class="'o_dashboard_more_item d-flex align-items-center p-0'"
+                                      onSelected="() => this.onItemClick(item)">
+                            <t t-call="dashboard_engine.DashboardSlotStatContent"/>
+                        </DropdownItem>
+                    </t>
+                </Dropdown>
+            </div>
         </t>
         <!-- KPI rows (right column of the card) -->
         <t t-else="">

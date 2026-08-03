@@ -178,20 +178,10 @@
 
         >.btn.oe_stat_button,
         >.o_dropdown_more {
-            flex: 0 0 auto;
-            width: percentage(1/2); // Adapt the number of visible buttons for each screen width
-
-            @include media-breakpoint-up(md) {
-                width: percentage(1/2);
-            }
-
-            @include media-breakpoint-up(lg) {
-                width: percentage(1/2);
-            }
-
-            @include media-breakpoint-up(xl) {
-                width: percentage(1/2);
-            }
+            // Share the row evenly; never force 50% (that clips 3+ buttons).
+            flex: 1 1 0;
+            min-width: 0;
+            width: auto;
         }
 
         .btn.oe_stat_button {
@@ -458,11 +448,12 @@
 
         .btn.oe_stat_button {
             flex: 1 1 0;
+            min-width: 0;
             background: transparent !important;
             border: none !important;
             border-left: 1px solid #dee2e6 !important;
             opacity: 1 !important;
-            padding: 8px 15px !important;
+            padding: 8px 10px !important;
             height: auto !important;
             min-height: 44px;
 
@@ -474,15 +465,23 @@
                 color: #714B67 !important;
                 font-size: 18px !important;
                 margin-right: 8px;
+                flex: 0 0 auto;
             }
 
             .o_stat_info {
+                min-width: 0;
+                overflow: hidden;
+
                 .o_stat_text {
                     text-transform: uppercase;
                     font-size: 10px;
                     letter-spacing: 0.5px;
                     color: #6c757d;
                     font-weight: 600;
+                    overflow: hidden;
+                    text-overflow: ellipsis;
+                    white-space: nowrap;
+                    max-width: 100%;
                 }
 
                 .o_stat_value {
@@ -537,12 +536,16 @@
         overflow: hidden;
 
         .btn {
+            // min-width:0 lets equal flex columns shrink; otherwise long
+            // labels overflow and overflow:hidden clips left/right edges.
             flex: 1 1 0;
+            min-width: 0;
             display: flex !important;
             flex-direction: row !important;
             align-items: center;
             justify-content: center !important;
-            padding: 8px 5px !important;
+            gap: 6px;
+            padding: 8px 6px !important;
             background-color: transparent !important;
             border: none !important;
             border-left: 1px solid rgba(255, 255, 255, 0.15) !important;
@@ -561,10 +564,11 @@
             }
 
             .o_button_icon {
+                flex: 0 0 auto;
                 font-size: 18px;
-                width: 24px !important;
+                width: 20px !important;
                 text-align: center;
-                margin-right: 8px;
+                margin-right: 0;
                 color: white !important;
                 opacity: 0.9;
             }
@@ -576,6 +580,8 @@
                 justify-content: center;
                 text-align: left;
                 line-height: 1.2;
+                min-width: 0;
+                overflow: hidden;
 
                 .o_stat_text {
                     font-size: 13px;
@@ -583,6 +589,9 @@
                     color: rgba(255, 255, 255, 0.95) !important;
                     text-transform: capitalize;
                     white-space: nowrap;
+                    overflow: hidden;
+                    text-overflow: ellipsis;
+                    max-width: 100%;
                 }
 
                 .o_stat_value {
@@ -592,6 +601,116 @@
                     margin-top: -1px;
                 }
             }
+
+            // More toggle: same purple cell chrome as sibling shortcuts.
+            &.o_dashboard_more_wrap {
+                padding: 0 !important;
+
+                > .o-dropdown,
+                > .o_dashboard_button_more {
+                    width: 100%;
+                    height: 100%;
+                }
+
+                .o_dashboard_button_more {
+                    display: flex !important;
+                    align-items: center;
+                    justify-content: center;
+                    min-height: 48px;
+                    color: white !important;
+                    font-weight: 700;
+                    background: transparent !important;
+                    border: none !important;
+                    box-shadow: none !important;
+                }
+            }
+        }
+    }
+}
+
+// Overflow menu: same purple look as the card footer shortcuts bar.
+.o_dashboard_more_menu {
+    min-width: 200px;
+    padding: 0 !important;
+    background-color: #714B67 !important;
+    border: none !important;
+    border-radius: 0 !important;
+    overflow: hidden;
+
+    .o_dashboard_more_item {
+        display: flex !important;
+        flex-direction: row !important;
+        align-items: center !important;
+        gap: 10px;
+        padding: 10px 14px !important;
+        margin: 0 !important;
+        border-radius: 0 !important;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.15) !important;
+        background-color: transparent !important;
+        color: white !important;
+
+        &:last-child {
+            border-bottom: none !important;
+        }
+
+        &:hover,
+        &:focus {
+            background-color: rgba(255, 255, 255, 0.1) !important;
+            color: white !important;
+        }
+
+        .o_button_icon {
+            flex: 0 0 auto;
+            font-size: 18px;
+            width: 20px !important;
+            text-align: center;
+            margin: 0 !important;
+            color: white !important;
+            opacity: 0.9;
+        }
+
+        .o_stat_info {
+            display: flex !important;
+            flex-direction: column !important;
+            align-items: flex-start !important;
+            justify-content: center;
+            line-height: 1.2;
+            min-width: 0;
+
+            .o_stat_text,
+            .o_stat_value {
+                display: block !important;
+                color: white !important;
+                white-space: nowrap;
+                text-align: left !important;
+            }
+
+            .o_stat_text {
+                font-size: 13px;
+                font-weight: 600;
+                text-transform: capitalize;
+                color: rgba(255, 255, 255, 0.95) !important;
+            }
+
+            .o_stat_value {
+                font-size: 13px;
+                font-weight: 800;
+                margin-top: -1px;
+            }
+        }
+    }
+}
+
+.o_analytic_kanban_dashboard .o_kanban_renderer .oe_button_box {
+    .o_dashboard_more_wrap {
+        flex: 1 1 0;
+        min-width: 0;
+        display: flex !important;
+        align-items: stretch;
+
+        .o_dashboard_button_more {
+            flex: 1 1 auto;
+            font-weight: 600;
         }
     }
 }

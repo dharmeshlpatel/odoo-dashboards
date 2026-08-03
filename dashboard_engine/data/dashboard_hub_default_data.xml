@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Default shared hub under Dashboard Engine → Dashboards -->
+    <record id="dashboard_hub_default" model="dashboard.blueprint.hub">
+        <field name="name">Dashboards</field>
+        <field name="menu_parent_id" ref="menu_dashboard_engine_root"/>
+        <field name="menu_sequence">1</field>
+    </record>
+</odoo>

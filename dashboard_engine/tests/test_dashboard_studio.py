@@ -59,8 +59,8 @@ class TestDashboardStudio(TransactionCase):
         self.assertIn("condition_ids", kpi)
         self.assertTrue(kpi.get("owned"))
 
-    def test_get_studio_payload_excludes_shared_slots(self):
-        """Studio lists this dashboard's slots only (share pool is runtime)."""
+    def test_get_studio_payload_marks_shared_slots_readonly(self):
+        """Studio lists share-pool slots as owned=False (edit on source)."""
         host = self.env["ir.model"]._get("res.partner")
         hub = self.env["dashboard.blueprint"].create(
             {
@@ -93,10 +93,12 @@ class TestDashboardStudio(TransactionCase):
         hub.share_link_ids = [(4, pack.id)]
         self.assertIn(shared, hub._effective_slots())
         payload = hub.get_studio_payload()
-        self.assertNotIn(shared.id, [s["id"] for s in payload["slots"]])
+        row = next(s for s in payload["slots"] if s["id"] == shared.id)
+        self.assertFalse(row["owned"])
+        self.assertEqual(row["source_blueprint_key"], pack.key)
         preview = hub.studio_preview_payload()
         kpi_keys = [s.get("key") for s in (preview.get("slots") or {}).get("kpis") or []]
-        self.assertNotIn("shared_open", kpi_keys)
+        self.assertIn("shared_open", kpi_keys)
 
     def test_studio_write_slot_updates_kpi_label(self):
         bp = self._studio_blueprint()
@@ -405,6 +407,39 @@ class TestDashboardStudio(TransactionCase):
         self.assertEqual(payload["menu_name"], "Studio Menu")
         self.assertEqual(payload["setup_cleanup_count"], 0)
 
+    def test_studio_payload_includes_hub_group(self):
+        bp = self._studio_blueprint()
+        group = self.env["dashboard.blueprint.group"].create(
+            {
+                "name": "Sales Hub",
+                "sequence": 10,
+                "hub_menu_id": self.env.ref("dashboard_engine.dashboard_hub_default").id,
+            }
+        )
+        bp.write({"group_id": group.id})
+        payload = bp.get_studio_payload()
+        self.assertEqual(payload["group_id"], group.id)
+        self.assertEqual(payload["group_name"], "Sales Hub")
+
+    def test_studio_write_hub_group(self):
+        bp = self._studio_blueprint()
+        group = self.env["dashboard.blueprint.group"].create(
+            {
+                "name": "CRM Hub",
+                "sequence": 20,
+                "hub_menu_id": self.env.ref("dashboard_engine.dashboard_hub_default").id,
+            }
+        )
+        payload = bp.studio_write_blueprint({"group_id": group.id})
+        self.assertEqual(bp.group_id, group)
+        self.assertEqual(payload["group_id"], group.id)
+        self.assertEqual(payload["group_name"], "CRM Hub")
+
+        payload = bp.studio_write_blueprint({"group_id": False})
+        self.assertFalse(bp.group_id)
+        self.assertFalse(payload["group_id"])
+        self.assertEqual(payload.get("group_name") or "", "")
+
     def test_studio_host_change_blocked_when_published(self):
         bp = self._studio_blueprint()
         bp.write(
@@ -439,6 +474,13 @@ class TestDashboardStudio(TransactionCase):
         self.assertTrue(isinstance(menus, list))
         modules = bp.studio_search_modules("base", limit=10)
         self.assertTrue(any(m.get("technical") == "base" for m in modules))
+        self.env["dashboard.blueprint.group"].create({
+            "name": "Search Sales",
+            "sequence": 1,
+            "hub_menu_id": self.env.ref("dashboard_engine.dashboard_hub_default").id,
+        })
+        hub_groups = bp.studio_search_hub_groups("Sales", limit=10)
+        self.assertTrue(any(g["name"] == "Search Sales" for g in hub_groups))
 
     def _partner_create_date_field(self):
         return self.env["ir.model.fields"].search(
