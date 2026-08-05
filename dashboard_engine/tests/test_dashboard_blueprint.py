@@ -2488,10 +2488,11 @@ class TestDashboardBlueprintEngine(TransactionCase):
         action = slot._prepare_action(partner)
         self.assertIn(("user_id", "=", self.env.uid), action["domain"])
 
-    def test_only_mine_scope_skips_bottom_and_menu_slots(self):
-        """My Pipeline must not narrow bottoms or Manage menu actions.
+    def test_only_mine_scope_narrows_commercial_bottoms_and_views(self):
+        """Product B′: My narrows same-model commercial bottoms / views / reports.
 
-        Spec: 2026-07-28-restrict-scope-surface-matrix-design.md
+        New menus stay defaults-only (no My domain). Spec superseded for
+        commercial surfaces by 2026-08-03-panel-filters-linked-my design.
         """
         bp, mine, partner = self._crm_only_mine_fixture()
         bottom = self.env.ref(
@@ -2512,26 +2513,40 @@ class TestDashboardBlueprintEngine(TransactionCase):
         pref = bp._get_or_create_pref()
         pref.scope_ids = [(4, mine.id)]
 
-        bottom_count = bottom._compute_values_batch(partner).get(
-            partner.id, (0, None)
-        )[0]
-        self.assertEqual(bottom_count, 2)
-        bottom_action = bottom._prepare_action(partner)
-        self.assertNotIn(
+        bottom_count = bottom.with_context(
+            dashboard_blueprint_key=bp.key
+        )._compute_values_batch(partner).get(partner.id, (0, None))[0]
+        self.assertEqual(bottom_count, 1)
+        bottom_action = bottom.with_context(
+            dashboard_blueprint_key=bp.key
+        )._prepare_action(partner)
+        self.assertIn(
             ("user_id", "=", self.env.uid), bottom_action.get("domain") or []
         )
 
-        for slot in (report, views):
-            if not slot:
-                continue
-            action = slot._prepare_action(partner)
-            if not action:
-                continue
-            self.assertNotIn(
-                ("user_id", "=", self.env.uid),
-                action.get("domain") or [],
-                "slot %s must not inherit restrict scope" % slot.key,
-            )
+        # Views (list/action) inherit My when they target the graph model.
+        if views:
+            action = views.with_context(
+                dashboard_blueprint_key=bp.key
+            )._prepare_action(partner)
+            if action and (views.compute_model or views.action_model) == bp.graph_model:
+                self.assertIn(
+                    ("user_id", "=", self.env.uid),
+                    action.get("domain") or [],
+                    "slot %s should inherit My on commercial surfaces" % views.key,
+                )
+        # Report slots may open a report action without a domain — only assert
+        # when the prepared action carries a domain list.
+        if report:
+            action = report.with_context(
+                dashboard_blueprint_key=bp.key
+            )._prepare_action(partner)
+            if action and action.get("domain"):
+                self.assertIn(
+                    ("user_id", "=", self.env.uid),
+                    action.get("domain") or [],
+                    "slot %s should inherit My on commercial surfaces" % report.key,
+                )
 
     def test_dashboard_fields_are_inert_without_a_blueprint(self):
         """Models that are not hosting a dashboard must pay nothing."""

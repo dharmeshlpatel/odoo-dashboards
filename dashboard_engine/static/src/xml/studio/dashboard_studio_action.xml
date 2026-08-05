@@ -31,7 +31,8 @@
                     <button type="button" class="btn btn-light btn-sm" t-on-click="openAdvanced" title="Open Advanced form">
                         <i class="fa fa-flask me-1"/>Advanced
                     </button>
-                    <button type="button" class="btn btn-secondary btn-sm" t-on-click="discard" t-att-disabled="state.loading or (!state.dirty and !state.layoutDirty and !state.setupDirty)">
+                    <button type="button" class="btn btn-secondary btn-sm" t-on-click="discard"
+                            t-att-disabled="state.loading or !canDiscard">
                         Discard
                     </button>
                     <button type="button" class="btn btn-primary btn-sm" t-on-click="saveLayout"
@@ -62,11 +63,11 @@
 
             <nav class="o_ds_modes">
                 <button type="button" t-att-class="state.studioMode === 'setup' ? 'active' : ''"
-                        t-on-click="() => this.setStudioMode('setup')">Setup</button>
-                <button type="button" t-att-class="state.studioMode === 'content' ? 'active' : ''"
-                        t-on-click="() => this.setStudioMode('content')">Content</button>
+                        t-on-click="() => this.setStudioMode('setup')">Dashboard</button>
                 <button type="button" t-att-class="state.studioMode === 'layout' ? 'active' : ''"
                         t-on-click="() => this.setStudioMode('layout')">Layout</button>
+                <button type="button" t-att-class="state.studioMode === 'content' ? 'active' : ''"
+                        t-on-click="() => this.setStudioMode('content')">Content</button>
             </nav>
 
             <nav class="o_ds_zones d-none" t-if="state.studioMode === 'content'" aria-hidden="true">
@@ -97,9 +98,9 @@
                         <section class="o_ds_setup_card">
                             <h2 class="h5 mb-3">Dashboard</h2>
                             <div class="row g-3">
-                                <div class="col-md-6">
+                                <div class="col-12">
                                     <div class="o_ds_setup_field">
-                                        <label class="form-label">Host model</label>
+                                        <label class="form-label">Host Model</label>
                                         <div t-if="state.payload.host_editable" class="o_ds_setup_picker">
                                             <div class="form-control bg-light mb-1 o_ds_setup_value" t-esc="state.setup.host_model_label or '—'"/>
                                             <input type="text" class="form-control"
@@ -129,7 +130,7 @@
                                         </t>
                                     </div>
                                     <div class="o_ds_setup_field">
-                                        <label class="form-label">Required apps</label>
+                                        <label class="form-label">Required Apps</label>
                                         <div class="o_ds_setup_picker">
                                         <div class="o_ds_setup_chips mb-1">
                                             <span t-foreach="moduleChips" t-as="chip" t-key="chip.id" class="badge text-bg-light border">
@@ -182,9 +183,9 @@
                                         </div>
                                     </div>
                                 </div>
-                                <div class="col-md-6">
+                                <div class="col-12">
                                     <div class="o_ds_setup_field mb-0">
-                                        <label class="form-label">Share links</label>
+                                        <label class="form-label">Share Links</label>
                                         <div class="o_ds_setup_picker">
                                         <div class="o_ds_setup_chips mb-1">
                                             <span t-foreach="shareChips" t-as="chip" t-key="chip.id" class="badge text-bg-light border">
@@ -216,7 +217,7 @@
                         <section class="o_ds_setup_card">
                             <h2 class="h5 mb-3">Menu</h2>
                             <div class="row g-3">
-                                <div class="col-md-6">
+                                <div class="col-12">
                                     <div class="o_ds_setup_field">
                                         <label class="form-label">Menu</label>
                                         <input type="text" class="form-control"
@@ -316,7 +317,7 @@
                                         <div class="form-text">Empty = use action access rights (same as ir.ui.menu).</div>
                                     </div>
                                 </div>
-                                <div class="col-md-6">
+                                <div class="col-12">
                                     <div class="o_ds_setup_field">
                                         <label class="form-label">Full Path</label>
                                         <div class="form-control bg-light o_ds_setup_value" t-esc="menuFullPathPreview or '—'"/>
@@ -569,8 +570,8 @@
                             </div>
                         </div>
                         <div class="o_ds_card_mid">
-                            <div t-att-class="'o_ds_card_zone o_ds_primary_zone' + (state.zone === 'primary' or state.zone === 'config' ? ' is-active' : '')"
-                                 t-on-click="() => this.selectZone('primary')" role="button">
+                            <div t-att-class="'o_ds_card_zone o_ds_primary_zone' + (state.zone === 'primary' ? ' is-active' : '')"
+                                 t-on-click="() => this.selectZone(hasGraphVariants ? 'config' : 'primary')" role="button">
                                 <div class="small text-muted mb-1" t-esc="previewGraphCaption"/>
                                 <div class="o_ds_chart_wrap" t-if="state.preview and state.preview.graph_json and !previewGraphNeedsSave">
                                     <canvas t-ref="previewChart"/>
@@ -624,7 +625,7 @@
                         </div>
                         <div t-att-class="'o_ds_card_zone' + (state.zone === 'manage' ? ' is-active' : '')"
                              t-on-click="() => this.selectZone('manage')" role="button">
-                            <div class="o_ds_zone_caption">Manage menu (⋮ on live card)</div>
+                            <div class="o_ds_zone_caption">Manage Menu</div>
                             <div class="o_ds_manage_preview small">
                                 <div>
                                     <span class="fw-semibold">Views:</span>
@@ -672,89 +673,188 @@
                             <h2 class="o_ds_editor_title mb-0" t-esc="zoneMeta.label"/>
                             <p class="text-muted small mb-0" t-esc="zoneSubtitle"/>
                         </div>
-                        <div class="d-flex flex-column align-items-end gap-2">
-                            <div class="o_ds_struct_actions d-flex align-items-center" role="group" t-if="canStructureEdit">
-                                <button type="button" class="btn btn-sm btn-primary" t-on-click="addItem" t-att-disabled="state.saving" title="Add item">
-                                    <i class="fa fa-plus"/>
-                                    <span>Add</span>
-                                </button>
-                                <button type="button" class="btn btn-sm btn-outline-secondary" t-on-click="() => this.moveSelected(-1)" title="Move up" t-att-disabled="state.saving or !selectedSlotOwned">
-                                    <i class="fa fa-arrow-up"/>
-                                </button>
-                                <button type="button" class="btn btn-sm btn-outline-secondary" t-on-click="() => this.moveSelected(1)" title="Move down" t-att-disabled="state.saving or !selectedSlotOwned">
-                                    <i class="fa fa-arrow-down"/>
-                                </button>
-                                <button type="button" class="btn btn-sm btn-outline-secondary" t-on-click="removeSelected" t-att-disabled="state.saving or !selectedSlotOwned" t-att-title="selectedSlotOwned ? 'Remove' : 'Shared item — remove on its source dashboard'">
-                                    <i class="fa fa-trash-o"/>
-                                </button>
-                            </div>
-                        </div>
                     </div>
 
                     <div class="o_ds_editor_scroll">
-                        <!-- Item list -->
+                        <!-- Item list (KPIs / Totals / Shortcuts / Manage) -->
                         <t t-if="canStructureEdit and state.zone !== 'header'">
-                            <div class="mb-2" t-if="state.zone === 'manage'">
-                                <label class="form-label small fw-semibold">Add to section</label>
-                                <select class="form-select form-select-sm"
-                                        t-on-change="(ev) => this.state.manageSection = ev.target.value">
+                            <div class="o_ds_studio_stack mb-3">
+                                <!-- Manage: one card per Views / New / Reports -->
+                                <t t-if="state.zone === 'manage'">
                                     <t t-foreach="MANAGE_SECTIONS" t-as="ms" t-key="ms.id">
-                                        <option t-att-value="ms.id"
-                                                t-att-selected="state.manageSection === ms.id"
-                                                t-esc="ms.label"/>
+                                        <section class="o_ds_studio_section">
+                                            <header class="o_ds_studio_section_head">
+                                                <div class="o_ds_studio_section_head_main">
+                                                    <div>
+                                                        <h3 class="o_ds_studio_section_title" t-esc="ms.label"/>
+                                                        <p class="o_ds_studio_section_help" t-esc="ms.help"/>
+                                                    </div>
+                                                </div>
+                                                <button type="button" class="btn btn-sm btn-primary flex-shrink-0"
+                                                        t-on-click="() => this.addManageItem(ms.id)"
+                                                        t-att-disabled="state.saving"
+                                                        t-att-title="'Add to ' + ms.label">
+                                                    <i class="fa fa-plus"/>
+                                                    <span>Add</span>
+                                                </button>
+                                            </header>
+                                            <div class="o_ds_studio_section_body">
+                                                <div class="o_ds_item_list" t-if="slotsForManageSection(ms.id).length">
+                                                    <t t-foreach="slotsForManageSection(ms.id)" t-as="slot" t-key="slot.id">
+                                                        <div t-att-class="'o_ds_item' + (selectedSlot and selectedSlot.id === slot.id ? ' active' : '') + (slotOwned(slot) ? '' : ' o_ds_item_shared')"
+                                                             t-on-dragover="onDragOver"
+                                                             t-on-drop="(ev) => this.onDropSlot(slot.id, ev)">
+                                                            <div class="o_ds_item_row">
+                                                                <div t-if="slotOwned(slot)" class="o_ds_scope_handle_col o_ds_item_handle">
+                                                                    <i class="fa fa-bars text-muted o_ds_item_grip"
+                                                                       draggable="true"
+                                                                       t-on-dragstart="(ev) => this.onDragStart(slot.id, ev)"
+                                                                       title="Drag to reorder"/>
+                                                                    <button type="button" class="btn btn-link btn-sm p-0 text-muted"
+                                                                            t-on-click="() => this.moveSlot(slot.id, -1)"
+                                                                            title="Move up">
+                                                                        <i class="fa fa-chevron-up"/>
+                                                                    </button>
+                                                                    <button type="button" class="btn btn-link btn-sm p-0 text-muted"
+                                                                            t-on-click="() => this.moveSlot(slot.id, 1)"
+                                                                            title="Move down">
+                                                                        <i class="fa fa-chevron-down"/>
+                                                                    </button>
+                                                                </div>
+                                                                <button type="button" class="o_ds_item_main"
+                                                                        t-on-click="() => this.selectSlot(slot.id)">
+                                                                    <i t-att-class="'fa ' + (slot.icon or 'fa-circle-o')"/>
+                                                                    <span class="text-truncate" t-esc="slot.label or slot.name"/>
+                                                                    <span t-if="!slotOwned(slot)" class="badge text-bg-secondary ms-1"
+                                                                          t-esc="slot.source_blueprint_name or 'Shared'"/>
+                                                                </button>
+                                                                <button t-if="slotOwned(slot)" type="button"
+                                                                        class="btn btn-sm btn-outline-secondary o_ds_item_remove"
+                                                                        t-on-click="() => this.removeSlot(slot.id)"
+                                                                        title="Remove">
+                                                                    <i class="fa fa-trash-o"/>
+                                                                </button>
+                                                            </div>
+                                                            <p t-if="!slotOwned(slot)" class="o_ds_item_shared_help mb-0">
+                                                                From
+                                                                <a href="#" class="o_form_uri o_ds_source_bp_link"
+                                                                   t-on-click.prevent="() => this.openSourceStudio(slot.source_blueprint_id)"
+                                                                   t-esc="slot.source_blueprint_name or 'another dashboard'"/>
+                                                                — edit, reorder, or delete there. Or unlink that pack in Setup.
+                                                            </p>
+                                                        </div>
+                                                    </t>
+                                                </div>
+                                                <div t-else="" class="text-muted small mb-0">
+                                                    No items yet. Click <strong>Add</strong> to create one.
+                                                </div>
+                                            </div>
+                                        </section>
                                     </t>
-                                </select>
-                            </div>
-                            <div class="mb-1" t-if="slotsForZone.length">
-                                <span class="small fw-semibold text-muted">Items in this block</span>
-                            </div>
-                            <div class="o_ds_item_list mb-3" t-if="slotsForZone.length">
-                                <t t-foreach="slotsForZone" t-as="slot" t-key="slot.id">
-                                    <button type="button" class="o_ds_item"
-                                            t-att-draggable="slot.owned !== false ? 'true' : 'false'"
-                                            t-att-class="selectedSlot and selectedSlot.id === slot.id ? 'active' : ''"
-                                            t-on-click="() => this.selectSlot(slot.id)"
-                                            t-on-dragstart="(ev) => this.onDragStart(slot.id, ev)"
-                                            t-on-dragover="onDragOver"
-                                            t-on-drop="(ev) => this.onDropSlot(slot.id, ev)">
-                                        <i t-if="slot.owned !== false" class="fa fa-bars text-muted me-1" title="Drag to reorder"/>
-                                        <i t-att-class="'fa ' + (slot.icon or 'fa-circle-o')"/>
-                                        <span class="flex-grow-1 text-start" t-esc="slot.label or slot.name"/>
-                                        <span t-if="slot.owned === false" class="badge text-bg-secondary"
-                                              t-att-title="slot.source_blueprint_name"
-                                              t-esc="slot.source_blueprint_name or 'Shared'"/>
-                                        <span t-if="state.zone === 'manage'" class="badge text-bg-light" t-esc="sectionBadge(slot.section)"/>
-                                    </button>
                                 </t>
-                            </div>
-                            <div t-elif="canStructureEdit" class="alert alert-light border mb-3">
-                                No items yet. Click <strong>Add</strong> to create one.
+                                <!-- KPIs / Totals / Shortcuts: one list -->
+                                <t t-else="">
+                                    <section class="o_ds_studio_section">
+                                        <header class="o_ds_studio_section_head">
+                                            <div class="o_ds_studio_section_head_main">
+                                                <div>
+                                                    <h3 class="o_ds_studio_section_title" t-esc="slotItemsSectionTitle"/>
+                                                    <p class="o_ds_studio_section_help" t-esc="slotItemsSectionHelp"/>
+                                                </div>
+                                            </div>
+                                            <button type="button" class="btn btn-sm btn-primary flex-shrink-0"
+                                                    t-on-click="addItem" t-att-disabled="state.saving" title="Add item">
+                                                <i class="fa fa-plus"/>
+                                                <span>Add</span>
+                                            </button>
+                                        </header>
+                                        <div class="o_ds_studio_section_body">
+                                            <div class="o_ds_item_list" t-if="slotsForZone.length">
+                                                <t t-foreach="slotsForZone" t-as="slot" t-key="slot.id">
+                                                    <div t-att-class="'o_ds_item' + (selectedSlot and selectedSlot.id === slot.id ? ' active' : '') + (slotOwned(slot) ? '' : ' o_ds_item_shared')"
+                                                         t-on-dragover="onDragOver"
+                                                         t-on-drop="(ev) => this.onDropSlot(slot.id, ev)">
+                                                        <div class="o_ds_item_row">
+                                                            <div t-if="slotOwned(slot)" class="o_ds_scope_handle_col o_ds_item_handle">
+                                                                <i class="fa fa-bars text-muted o_ds_item_grip"
+                                                                   draggable="true"
+                                                                   t-on-dragstart="(ev) => this.onDragStart(slot.id, ev)"
+                                                                   title="Drag to reorder"/>
+                                                                <button type="button" class="btn btn-link btn-sm p-0 text-muted"
+                                                                        t-on-click="() => this.moveSlot(slot.id, -1)"
+                                                                        title="Move up">
+                                                                    <i class="fa fa-chevron-up"/>
+                                                                </button>
+                                                                <button type="button" class="btn btn-link btn-sm p-0 text-muted"
+                                                                        t-on-click="() => this.moveSlot(slot.id, 1)"
+                                                                        title="Move down">
+                                                                    <i class="fa fa-chevron-down"/>
+                                                                </button>
+                                                            </div>
+                                                            <button type="button" class="o_ds_item_main"
+                                                                    t-on-click="() => this.selectSlot(slot.id)">
+                                                                <i t-att-class="'fa ' + (slot.icon or 'fa-circle-o')"/>
+                                                                <span class="text-truncate" t-esc="slot.label or slot.name"/>
+                                                                <span t-if="!slotOwned(slot)" class="badge text-bg-secondary ms-1"
+                                                                      t-esc="slot.source_blueprint_name or 'Shared'"/>
+                                                            </button>
+                                                            <button t-if="slotOwned(slot)" type="button"
+                                                                    class="btn btn-sm btn-outline-secondary o_ds_item_remove"
+                                                                    t-on-click="() => this.removeSlot(slot.id)"
+                                                                    title="Remove">
+                                                                <i class="fa fa-trash-o"/>
+                                                            </button>
+                                                        </div>
+                                                        <p t-if="!slotOwned(slot)" class="o_ds_item_shared_help mb-0">
+                                                            From
+                                                            <a href="#" class="o_form_uri o_ds_source_bp_link"
+                                                               t-on-click.prevent="() => this.openSourceStudio(slot.source_blueprint_id)"
+                                                               t-esc="slot.source_blueprint_name or 'another dashboard'"/>
+                                                            — edit, reorder, or delete there. Or unlink that pack in Setup.
+                                                        </p>
+                                                    </div>
+                                                </t>
+                                            </div>
+                                            <div t-else="" class="alert alert-light border mb-0">
+                                                No items yet. Click <strong>Add</strong> to create one.
+                                            </div>
+                                        </div>
+                                    </section>
+                                </t>
                             </div>
                         </t>
 
-                        <!-- CONFIG -->
+                        <!-- CONFIG — mirrors live gear: My Data → Graph Configuration → Filters -->
                         <t t-if="state.zone === 'config'">
-                            <div class="o_ds_fieldset">
-                                <div class="d-flex justify-content-between align-items-center gap-2 mb-2">
-                                    <h3 class="mb-0">General Settings</h3>
-                                    <button type="button" class="btn btn-sm btn-primary"
-                                            t-on-click="addScope" t-att-disabled="state.saving">
+                            <div class="o_ds_studio_stack">
+                            <section class="o_ds_studio_section">
+                                <header class="o_ds_studio_section_head">
+                                    <div class="o_ds_studio_section_head_main">
+                                        <div>
+                                            <h3 class="o_ds_studio_section_title">My Data</h3>
+                                            <p class="o_ds_studio_section_help">
+                                                Each line becomes a tick box under My Data in the live ⚙️ popup.
+                                                Use uid in the domain for the current user.
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <button type="button" class="btn btn-sm btn-primary flex-shrink-0"
+                                            t-on-click="() => this.addScope('restrict')" t-att-disabled="state.saving">
                                         <i class="fa fa-plus"/>
-                                        <span>Add scope</span>
+                                        <span>Add My Data scope</span>
                                     </button>
-                                </div>
-                                <p class="text-muted small">Each line becomes a tick box in the live ⚙️ popup. Use uid in a filter for the current user.</p>
-                                <div class="o_ds_scope_list" t-if="(state.payload.scopes or []).length">
-                                    <div class="o_ds_scope_row o_ds_scope_header small text-muted">
+                                </header>
+                                <div class="o_ds_studio_section_body">
+                                <div class="o_ds_scope_list" t-if="restrictScopes.length">
+                                    <div class="o_ds_scope_row o_ds_scope_header">
                                         <span/>
                                         <span>Name</span>
                                         <span>Description</span>
-                                        <span>Mode</span>
                                         <span>Domain</span>
                                         <span>Default</span>
                                         <span/>
                                     </div>
-                                    <t t-foreach="state.payload.scopes or []" t-as="scope" t-key="scope.id">
+                                    <t t-foreach="restrictScopes" t-as="scope" t-key="scope.id">
                                         <div class="o_ds_scope_row"
                                              draggable="true"
                                              t-on-dragstart="(ev) => this.onDragStartScope(scope.id, ev)"
@@ -780,11 +880,6 @@
                                                    t-att-title="scope.description or ''"
                                                    placeholder="Optional"
                                                    t-on-blur="(ev) => this.onScopeFieldBlur(scope.id, 'description', ev)"/>
-                                            <select class="form-select form-select-sm"
-                                                    t-on-change="(ev) => this.updateScope(scope.id, 'mode', ev.target.value)">
-                                                <option value="include" t-att-selected="scope.mode === 'include'">Include</option>
-                                                <option value="restrict" t-att-selected="scope.mode === 'restrict'">Restrict</option>
-                                            </select>
                                             <div class="input-group input-group-sm">
                                                 <input type="text" class="form-control font-monospace"
                                                        t-att-value="scope.domain or '[]'"
@@ -808,69 +903,210 @@
                                         </div>
                                     </t>
                                 </div>
-                                <div t-else="" class="text-muted small">No scopes yet. Click <strong>Add scope</strong>.</div>
-                                <label class="o_ds_field mt-3">
-                                    <span>Scope warning</span>
-                                    <input type="text" class="form-control"
-                                           t-att-value="state.payload.scope_warning or ''"
-                                           t-on-change="(ev) => this.updateConfigBlueprint('scope_warning', ev.target.value)"
-                                           placeholder="e.g. At least one of 'Pipeline' or 'Leads' must stay on."/>
-                                    <div class="form-text">
-                                        Shown in the live ⚙️ popup when all Include scopes are unticked.
-                                        Leave empty for no warning.
-                                    </div>
-                                </label>
-                            </div>
-                            <div class="o_ds_fieldset">
-                                <h3>Graph Configuration</h3>
-                                <label class="o_ds_field">
-                                    <span>Graph Model</span>
-                                    <div class="form-control bg-light" t-esc="state.payload.graph_model or state.payload.host_model or '—'"/>
-                                    <p class="form-text mb-0">Change host or graph model in Setup or Advanced.</p>
-                                </label>
-                                <div class="o_ds_field_row">
-                                    <label class="o_ds_field flex-grow-1 mb-0">
-                                        <span>Link to Host</span>
-                                        <div class="o_ds_link_path">
-                                            <t t-foreach="linkPathRows" t-as="hop" t-key="'hop' + hop.index">
-                                                <select class="form-select form-select-sm o_ds_link_hop"
-                                                        t-att-data-hop-index="hop.index"
-                                                        t-on-change="(ev) => this.onLinkPathHopChange(hop.index, ev)">
-                                                    <option value="">—</option>
-                                                    <t t-foreach="hop.options" t-as="opt" t-key="hop.index + opt.name">
-                                                        <option t-att-value="opt.name"
-                                                                t-att-selected="hop.value === opt.name"
-                                                                t-esc="opt.string + ' (' + opt.name + ')'"/>
-                                                    </t>
-                                                </select>
-                                                <span t-if="hop.showSep" class="o_ds_link_sep">.</span>
-                                            </t>
-                                        </div>
-                                        <div class="d-flex flex-wrap gap-2 mt-1">
-                                            <button type="button" class="btn btn-sm btn-outline-secondary"
-                                                    t-on-click="addLinkPathHop"
-                                                    t-att-disabled="!canAddLinkPathHop">
-                                                <i class="fa fa-plus me-1"/>Add hop
-                                            </button>
-                                            <button type="button" class="btn btn-sm btn-outline-secondary"
-                                                    t-on-click="removeLinkPathHop"
-                                                    t-att-disabled="!canRemoveLinkPathHop">
-                                                <i class="fa fa-minus me-1"/>Remove last hop
-                                            </button>
-                                        </div>
-                                        <p class="form-text mb-0">Many2one chain on the graph model to the host card.</p>
-                                    </label>
-                                    <label class="o_ds_check o_ds_check_inline mb-0">
-                                        <input type="checkbox" t-att-checked="state.editor.include_child_records"
-                                               t-on-change="(ev) => this.onEditorInput('include_child_records', ev)"/>
-                                        <span>Include child records</span>
-                                    </label>
+                                <div t-else="" class="text-muted small mb-0">No My Data scopes yet. Click <strong>Add My Data scope</strong>.</div>
                                 </div>
-                                <label class="o_ds_field">
-                                    <span>Graph Title</span>
-                                    <input type="text" class="form-control" t-att-value="state.editor.graph_caption"
-                                           t-on-input="(ev) => this.onEditorInput('graph_caption', ev)"/>
-                                </label>
+                            </section>
+
+                            <section class="o_ds_studio_section">
+                                <header class="o_ds_studio_section_head">
+                                    <div class="o_ds_studio_section_head_main">
+                                        <div>
+                                            <h3 class="o_ds_studio_section_title">Graph Configuration</h3>
+                                            <p class="o_ds_studio_section_help">
+                                                Build the chart. Chart Model Options, Group By, Measures, and Data to Include
+                                                change the chart only — not KPIs, bottom buttons, views, or reports.
+                                            </p>
+                                        </div>
+                                    </div>
+                                </header>
+                                <div class="o_ds_studio_section_body">
+
+                                <div class="o_ds_subsection">
+                                <div class="o_ds_graph_meta_row row g-2 align-items-end mb-3">
+                                    <div class="col">
+                                        <label class="o_ds_field mb-0">
+                                            <span>Graph Title</span>
+                                            <input type="text" class="form-control" t-att-value="state.editor.graph_caption"
+                                                   t-on-input="(ev) => this.onEditorInput('graph_caption', ev)"/>
+                                        </label>
+                                    </div>
+                                    <div class="col-auto pb-1">
+                                        <label class="o_ds_check mb-0">
+                                            <input type="checkbox" t-att-checked="state.editor.include_child_records"
+                                                   t-on-change="(ev) => this.onEditorInput('include_child_records', ev)"/>
+                                            <span>Include Child Records</span>
+                                        </label>
+                                    </div>
+                                </div>
+                                <div class="o_ds_studio_group">
+                                <div class="d-flex justify-content-between align-items-start gap-2 mb-2">
+                                    <div>
+                                        <h4 class="o_ds_studio_group_title mb-0">Chart Model Options</h4>
+                                        <p class="o_ds_studio_group_help mb-0">
+                                            Each row is one chart choice (model, link, and primary button).
+                                            Mark one Default for new users; live gear lets each user pick their own.
+                                        </p>
+                                    </div>
+                                    <button type="button" class="btn btn-sm btn-primary flex-shrink-0"
+                                            t-on-click="addGraphVariant" t-att-disabled="state.saving">
+                                        <i class="fa fa-plus"/>
+                                        <span>Add Option</span>
+                                    </button>
+                                </div>
+                                <div class="o_ds_variant_list" t-if="(state.payload.graph_variants or []).length">
+                                    <div class="o_ds_variant_row o_ds_variant_header">
+                                        <span class="o_ds_variant_col_handle" aria-hidden="true"/>
+                                        <span class="o_ds_variant_col_default">Default</span>
+                                        <span>Chart Model</span>
+                                        <span>Link to Host</span>
+                                        <span>Primary Button</span>
+                                        <span>Primary Action</span>
+                                        <span aria-hidden="true"/>
+                                    </div>
+                                    <t t-foreach="state.payload.graph_variants or []" t-as="variant" t-key="variant.id">
+                                        <div class="o_ds_variant_row"
+                                             draggable="true"
+                                             t-on-dragstart="(ev) => this.onDragStartGraphVariant(variant.id, ev)"
+                                             t-on-dragover="onDragOver"
+                                             t-on-drop="(ev) => this.onDropGraphVariant(variant.id, ev)">
+                                            <div class="o_ds_scope_handle_col o_ds_variant_col_handle">
+                                                <i class="fa fa-bars text-muted" title="Drag to reorder"/>
+                                                <button type="button" class="btn btn-link btn-sm p-0 text-muted"
+                                                        t-on-click="() => this.moveGraphVariant(variant.id, -1)" title="Move up">
+                                                    <i class="fa fa-chevron-up"/>
+                                                </button>
+                                                <button type="button" class="btn btn-link btn-sm p-0 text-muted"
+                                                        t-on-click="() => this.moveGraphVariant(variant.id, 1)" title="Move down">
+                                                    <i class="fa fa-chevron-down"/>
+                                                </button>
+                                            </div>
+                                            <label class="o_ds_check o_ds_variant_col_default" title="Blueprint default">
+                                                <input type="radio" name="o_ds_graph_variant_default"
+                                                       t-att-checked="variant.is_default"
+                                                       t-on-change="() => this.setDefaultGraphVariant(variant.id)"/>
+                                            </label>
+                                            <div class="o_ds_variant_picker"
+                                                 t-att-data-variant-id="variant.id"
+                                                 data-kind="model">
+                                                <div class="form-control form-control-sm bg-light o_ds_variant_picker_value"
+                                                     t-att-title="(variant.graph_model_label or '') + ' (' + (variant.graph_model or '') + ')'">
+                                                    <t t-esc="variant.graph_model_label or variant.graph_model or '—'"/>
+                                                </div>
+                                                <input type="text" class="form-control form-control-sm mt-1"
+                                                       placeholder="Search models…"
+                                                       t-att-value="variantPickerQuery(variant.id, 'model')"
+                                                       t-on-input="(ev) => this.onVariantModelSearch(variant.id, ev)"
+                                                       t-on-focus="(ev) => this.onVariantModelSearch(variant.id, ev)"
+                                                       t-on-blur="(ev) => this.onVariantPickerBlur(variant.id, 'model', ev)"/>
+                                                <div class="d-flex justify-content-between align-items-center mt-1"
+                                                     t-if="variantPickerQuery(variant.id, 'model') or variantPickerResults(variant.id, 'model').length">
+                                                    <small class="text-muted text-truncate"
+                                                           t-esc="variantModelScopeLabel(variant.id)"/>
+                                                    <button type="button" class="btn btn-link btn-sm p-0 flex-shrink-0"
+                                                            t-on-mousedown.prevent="() => this.toggleVariantModelsShowAll(variant.id)">
+                                                        <t t-if="variantModelShowAll(variant.id)">Host only</t>
+                                                        <t t-else="">All</t>
+                                                    </button>
+                                                </div>
+                                                <div t-if="variantPickerResults(variant.id, 'model').length"
+                                                     class="o_ds_variant_picker_results list-group shadow-sm">
+                                                    <button type="button"
+                                                            class="list-group-item list-group-item-action py-1 px-2"
+                                                            t-foreach="variantPickerResults(variant.id, 'model')"
+                                                            t-as="row" t-key="row.id"
+                                                            t-on-mousedown.prevent="() => this.pickVariantModel(variant.id, row)">
+                                                        <span t-esc="row.name"/>
+                                                        <span class="text-muted small ms-1" t-esc="row.model"/>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                            <div class="o_ds_variant_link">
+                                                <div class="o_ds_link_path">
+                                                    <t t-foreach="variantLinkPathRows(variant.id)" t-as="hop" t-key="'v' + variant.id + 'hop' + hop.index">
+                                                        <select class="form-select form-select-sm o_ds_link_hop"
+                                                                t-on-change="(ev) => this.onVariantLinkPathHopChange(variant.id, hop.index, ev)">
+                                                            <option value="">—</option>
+                                                            <t t-foreach="hop.options" t-as="opt" t-key="hop.index + opt.name">
+                                                                <option t-att-value="opt.name"
+                                                                        t-att-selected="hop.value === opt.name"
+                                                                        t-esc="opt.string + ' (' + opt.name + ')'"/>
+                                                            </t>
+                                                        </select>
+                                                        <span t-if="hop.showSep" class="o_ds_link_sep">.</span>
+                                                    </t>
+                                                </div>
+                                                <div class="o_ds_variant_link_actions d-flex flex-wrap align-items-center gap-2 mt-1">
+                                                    <div class="d-flex flex-wrap gap-1">
+                                                        <button type="button" class="btn btn-link btn-sm p-0"
+                                                                t-on-click="() => this.addVariantLinkPathHop(variant.id)"
+                                                                t-att-disabled="!canAddVariantLinkPathHop(variant.id)"
+                                                                title="Add hop">
+                                                            <i class="fa fa-plus"/>
+                                                        </button>
+                                                        <button type="button" class="btn btn-link btn-sm p-0"
+                                                                t-on-click="() => this.removeVariantLinkPathHop(variant.id)"
+                                                                t-att-disabled="!canRemoveVariantLinkPathHop(variant.id)"
+                                                                title="Remove last hop">
+                                                            <i class="fa fa-minus"/>
+                                                        </button>
+                                                    </div>
+                                                    <span t-att-class="'o_ds_variant_ok badge ' + (variant.is_available ? 'text-bg-success' : 'text-bg-secondary')"
+                                                          t-att-title="variant.is_available ? 'Shown in live Chart Model picker' : 'Not ready — check model, link, and action'"
+                                                          t-esc="variant.is_available ? 'OK' : 'No'"/>
+                                                </div>
+                                            </div>
+                                            <input type="text" class="form-control form-control-sm"
+                                                   t-att-value="variant.primary_button_label"
+                                                   t-att-title="variant.primary_button_label"
+                                                   placeholder="Pipeline Analysis"
+                                                   t-on-blur="(ev) => this.onGraphVariantFieldBlur(variant.id, 'primary_button_label', ev)"/>
+                                            <div class="o_ds_variant_picker"
+                                                 t-att-data-variant-id="variant.id"
+                                                 data-kind="action">
+                                                <div class="form-control form-control-sm bg-light o_ds_variant_picker_value"
+                                                     t-att-title="variant.primary_action_xmlid or ''">
+                                                    <t t-esc="variant.primary_action_name or variant.primary_action_xmlid or '—'"/>
+                                                </div>
+                                                <input type="text" class="form-control form-control-sm mt-1"
+                                                       placeholder="Search actions…"
+                                                       t-att-value="variantPickerQuery(variant.id, 'action')"
+                                                       t-on-input="(ev) => this.onVariantActionSearch(variant.id, variant.graph_model, ev)"
+                                                       t-on-focus="(ev) => this.onVariantActionSearch(variant.id, variant.graph_model, ev)"
+                                                       t-on-blur="(ev) => this.onVariantPickerBlur(variant.id, 'action', ev)"/>
+                                                <div class="d-flex justify-content-between align-items-center mt-1"
+                                                     t-if="variantPickerQuery(variant.id, 'action') or variantPickerResults(variant.id, 'action').length">
+                                                    <small class="text-muted text-truncate"
+                                                           t-esc="variantPickerScopeLabel(variant.id)"/>
+                                                    <button type="button" class="btn btn-link btn-sm p-0 flex-shrink-0"
+                                                            t-on-mousedown.prevent="() => this.toggleVariantActionsShowAll(variant.id, variant.graph_model)">
+                                                        <t t-if="variantPickerShowAll(variant.id)">Scoped</t>
+                                                        <t t-else="">All</t>
+                                                    </button>
+                                                </div>
+                                                <div t-if="variantPickerResults(variant.id, 'action').length"
+                                                     class="o_ds_variant_picker_results list-group shadow-sm">
+                                                    <button type="button"
+                                                            class="list-group-item list-group-item-action py-1 px-2"
+                                                            t-foreach="variantPickerResults(variant.id, 'action')"
+                                                            t-as="act" t-key="act.id"
+                                                            t-on-mousedown.prevent="() => this.pickVariantAction(variant.id, act)">
+                                                        <strong class="d-block text-truncate" t-esc="act.name"/>
+                                                        <span class="text-muted small text-truncate d-block" t-esc="act.xmlid"/>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                            <button type="button" class="btn btn-sm btn-outline-secondary"
+                                                    t-on-click="() => this.removeGraphVariant(variant.id)"
+                                                    title="Remove option">
+                                                <i class="fa fa-trash-o"/>
+                                            </button>
+                                        </div>
+                                    </t>
+                                </div>
+                                <div t-else="" class="text-muted small mb-0">
+                                    No options yet. Click <strong>Add Option</strong> — the first row becomes the Default chart model.
+                                </div>
+                                </div>
                                 <label class="o_ds_field">
                                     <span>Group By</span>
                                     <div class="o_ds_groupby_chips mb-2" t-if="graphGroupBySelectedChips.length">
@@ -921,7 +1157,7 @@
                                     </div>
                                     <div class="col-md-5" t-if="showMeasureAggregator">
                                         <label class="o_ds_field mb-0">
-                                            <span>Measured as</span>
+                                            <span>Measured As</span>
                                             <select class="form-select" t-on-change="onMeasureAggregatorChange">
                                                 <t t-foreach="MEASURE_AGGREGATORS" t-as="agg" t-key="agg.value">
                                                     <option t-att-value="agg.value"
@@ -932,10 +1168,110 @@
                                         </label>
                                     </div>
                                 </div>
-                            </div>
-                            <div class="o_ds_fieldset">
-                                <h3>Filters</h3>
-                                <p class="text-muted small">Default date fields for the live popup, plus an optional custom domain.</p>
+
+                                </div>
+
+                                <div class="o_ds_studio_group">
+                                    <div class="d-flex justify-content-between align-items-start gap-2 mb-2">
+                                        <div>
+                                            <h4 class="o_ds_studio_group_title mb-0">Data to Include</h4>
+                                            <p class="o_ds_studio_group_help mb-0">
+                                                Each line becomes a tick box under Data to Include in the live ⚙️ popup (chart only).
+                                            </p>
+                                        </div>
+                                        <button type="button" class="btn btn-sm btn-primary flex-shrink-0"
+                                                t-on-click="() => this.addScope('include')" t-att-disabled="state.saving">
+                                            <i class="fa fa-plus"/>
+                                            <span>Add</span>
+                                        </button>
+                                    </div>
+                                    <div class="o_ds_scope_list" t-if="includeScopes.length">
+                                        <div class="o_ds_scope_row o_ds_scope_header">
+                                            <span/>
+                                            <span>Name</span>
+                                            <span>Description</span>
+                                            <span>Domain</span>
+                                            <span>Default</span>
+                                            <span/>
+                                        </div>
+                                    <t t-foreach="includeScopes" t-as="scope" t-key="scope.id">
+                                        <div class="o_ds_scope_row"
+                                             draggable="true"
+                                             t-on-dragstart="(ev) => this.onDragStartScope(scope.id, ev)"
+                                             t-on-dragover="onDragOver"
+                                             t-on-drop="(ev) => this.onDropScope(scope.id, ev)">
+                                            <div class="o_ds_scope_handle_col">
+                                                <i class="fa fa-bars text-muted" title="Drag to reorder"/>
+                                                <button type="button" class="btn btn-link btn-sm p-0 text-muted"
+                                                        t-on-click="() => this.moveScope(scope.id, -1)" title="Move up">
+                                                    <i class="fa fa-chevron-up"/>
+                                                </button>
+                                                <button type="button" class="btn btn-link btn-sm p-0 text-muted"
+                                                        t-on-click="() => this.moveScope(scope.id, 1)" title="Move down">
+                                                    <i class="fa fa-chevron-down"/>
+                                                </button>
+                                            </div>
+                                            <input type="text" class="form-control form-control-sm"
+                                                   t-att-value="scope.name"
+                                                   t-att-title="scope.name"
+                                                   t-on-blur="(ev) => this.onScopeFieldBlur(scope.id, 'name', ev)"/>
+                                            <input type="text" class="form-control form-control-sm"
+                                                   t-att-value="scope.description or ''"
+                                                   t-att-title="scope.description or ''"
+                                                   placeholder="Optional"
+                                                   t-on-blur="(ev) => this.onScopeFieldBlur(scope.id, 'description', ev)"/>
+                                            <div class="input-group input-group-sm">
+                                                <input type="text" class="form-control font-monospace"
+                                                       t-att-value="scope.domain or '[]'"
+                                                       t-att-title="scope.domain or '[]'"
+                                                       t-on-blur="(ev) => this.onScopeFieldBlur(scope.id, 'domain', ev)"/>
+                                                <button type="button" class="btn btn-outline-secondary"
+                                                        t-on-click="() => this.openScopeDomainEditor(scope.id)"
+                                                        t-if="state.payload.graph_model or state.payload.host_model"
+                                                        title="Edit domain">
+                                                    <i class="fa fa-filter"/>
+                                                </button>
+                                            </div>
+                                            <label class="o_ds_check mb-0 justify-content-center">
+                                                <input type="checkbox" t-att-checked="scope.default_on"
+                                                       t-on-change="(ev) => this.updateScope(scope.id, 'default_on', ev.target.checked)"/>
+                                            </label>
+                                            <button type="button" class="btn btn-sm btn-outline-secondary"
+                                                    t-on-click="() => this.removeScope(scope.id)" title="Remove scope">
+                                                <i class="fa fa-trash-o"/>
+                                            </button>
+                                        </div>
+                                    </t>
+                                    </div>
+                                    <div t-else="" class="text-muted small mb-0">No items yet. Click <strong>Add</strong>.</div>
+                                    <label class="o_ds_field mt-3 mb-0">
+                                        <span>Scope Warning</span>
+                                        <input type="text" class="form-control"
+                                               t-att-value="state.payload.scope_warning or ''"
+                                               t-on-change="(ev) => this.updateConfigBlueprint('scope_warning', ev.target.value)"
+                                               placeholder="e.g. At least one of 'Pipeline' or 'Leads' must stay on."/>
+                                        <div class="form-text">
+                                            Shown in the live ⚙️ popup when all Include scopes are unticked.
+                                            Leave empty for no warning.
+                                        </div>
+                                    </label>
+                                </div>
+                                </div>
+                            </section>
+
+                            <section class="o_ds_studio_section">
+                                <header class="o_ds_studio_section_head">
+                                    <div class="o_ds_studio_section_head_main">
+                                        <div>
+                                            <h3 class="o_ds_studio_section_title">Filters</h3>
+                                            <p class="o_ds_studio_section_help">
+                                                Narrow data further. Date pickers and Custom Filter apply to the chart,
+                                                KPIs, bottom buttons, views, and reports.
+                                            </p>
+                                        </div>
+                                    </div>
+                                </header>
+                                <div class="o_ds_studio_section_body">
                                 <label class="o_ds_field">
                                     <span>Creation Date</span>
                                     <t t-if="state.catalogs.graphDateFields.length">
@@ -990,471 +1326,813 @@
                                     </div>
                                     <p class="form-text mb-0">Python domain list on the graph model (same as Advanced).</p>
                                 </label>
+                                </div>
+                            </section>
                             </div>
                         </t>
 
-                        <!-- PRIMARY -->
+                        <!-- PRIMARY button (chart models live under Configuration) -->
                         <t t-elif="state.zone === 'primary'">
-                            <div class="o_ds_fieldset">
-                                <label class="o_ds_field">
-                                    <span>Button label</span>
-                                    <input type="text" class="form-control" t-att-value="state.editor.primary_button_label"
-                                           t-on-input="(ev) => this.onEditorInput('primary_button_label', ev)"/>
-                                </label>
-                                <label class="o_ds_field">
-                                    <span>Graph Title</span>
-                                    <input type="text" class="form-control" t-att-value="state.editor.graph_caption"
-                                           t-on-input="(ev) => this.onEditorInput('graph_caption', ev)"/>
-                                </label>
-                                <label class="o_ds_field">
-                                    <span>When clicked, open…</span>
-                                    <input type="text" class="form-control" t-att-value="state.editor.primary_action_xmlid"
-                                           t-on-input="(ev) => this.onEditorInput('primary_action_xmlid', ev)"/>
-                                </label>
-                                <label class="o_ds_field">
-                                    <span>Search actions</span>
-                                    <input type="text" class="form-control" t-att-value="state.actionQuery"
-                                           t-on-input="onActionQueryInput" placeholder="Type to search…"/>
-                                    <div class="d-flex justify-content-between align-items-center mt-1">
-                                        <small class="text-muted" t-esc="state.actionScopeLabel"/>
-                                        <button type="button" class="btn btn-link btn-sm p-0"
-                                                t-on-click="toggleActionsShowAll">
-                                            <t t-if="state.actionsShowAll">Show scoped only</t>
-                                            <t t-else="">Show all models</t>
+                            <div class="o_ds_studio_stack" t-if="hasGraphVariants">
+                                <section class="o_ds_studio_section">
+                                    <header class="o_ds_studio_section_head">
+                                        <div class="o_ds_studio_section_head_main">
+                                            <span class="o_ds_studio_step">1</span>
+                                            <div>
+                                                <h3 class="o_ds_studio_section_title">Chart Button</h3>
+                                                <p class="o_ds_studio_section_help">
+                                                    Label, model, and action come from the Default chart model option in Configuration.
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </header>
+                                    <div class="o_ds_studio_section_body">
+                                        <t t-if="defaultGraphVariant">
+                                            <div class="small mb-3">
+                                                <div><span class="text-muted">Default model:</span> <code t-esc="defaultGraphVariant.graph_model"/></div>
+                                                <div><span class="text-muted">Link:</span> <code t-esc="defaultGraphVariant.graph_data_field or '—'"/></div>
+                                                <div><span class="text-muted">Button:</span> <t t-esc="defaultGraphVariant.primary_button_label"/></div>
+                                                <div><span class="text-muted">Action:</span> <code t-esc="defaultGraphVariant.primary_action_xmlid"/></div>
+                                            </div>
+                                        </t>
+                                        <button type="button" class="btn btn-primary btn-sm" t-on-click="openConfigZone">
+                                            Open Configuration
                                         </button>
+                                        <p class="text-muted small mt-2 mb-0">
+                                            Live users still change <em>their</em> Chart Model in the gear ⚙️ — not here.
+                                        </p>
                                     </div>
-                                </label>
-                                <div class="o_ds_action_hits">
-                                    <t t-foreach="state.catalogs.actions" t-as="act" t-key="act.id">
-                                        <button type="button" class="o_ds_action_hit" t-on-click="() => this.pickAction(act.xmlid)">
-                                            <strong t-esc="act.name"/>
-                                            <span class="text-muted" t-esc="act.xmlid"/>
-                                        </button>
-                                    </t>
-                                </div>
-                                <div class="o_ds_field mt-2 o_ds_action_defaults">
-                                    <span class="fw-bold d-block mb-1">Action defaults</span>
-                                    <p class="text-muted small mb-2">
-                                        Values passed when this action opens. No JSON — use fixed values,
-                                        this card’s id, or group rules (first matching group wins).
-                                    </p>
-                                    <t t-foreach="state.editor.contextRows" t-as="row" t-key="row_index">
-                                        <div class="o_ds_context_row border rounded p-2 mb-2">
-                                            <div class="d-flex gap-2 mb-1 align-items-start">
-                                                <input type="text" class="form-control form-control-sm"
-                                                       placeholder="Key (e.g. default_type)"
-                                                       t-att-value="row.key"
-                                                       t-on-change="(ev) => this.onContextKeyInput(row_index, ev)"/>
-                                                <select class="form-select form-select-sm"
-                                                        t-on-change="(ev) => this.onContextTypeChange(row_index, ev)">
-                                                    <t t-foreach="CONTEXT_VALUE_TYPES" t-as="vt" t-key="vt.value">
-                                                        <option t-att-value="vt.value"
-                                                                t-att-selected="row.valueType === vt.value"
-                                                                t-esc="vt.label"/>
-                                                    </t>
-                                                </select>
-                                                <button type="button" class="btn btn-link text-danger p-0"
-                                                        title="Remove"
-                                                        t-on-click="() => this.removeContextRow(row_index)">
-                                                    <i class="fa fa-trash-o"/>
+                                </section>
+                            </div>
+                            <div class="o_ds_studio_stack" t-else="">
+                                <section class="o_ds_studio_section">
+                                    <header class="o_ds_studio_section_head">
+                                        <div class="o_ds_studio_section_head_main">
+                                            <span class="o_ds_studio_step">1</span>
+                                            <div>
+                                                <h3 class="o_ds_studio_section_title">Label</h3>
+                                                <p class="o_ds_studio_section_help">
+                                                    Text on the left button. You can also add Chart Model Options in Configuration later.
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </header>
+                                    <div class="o_ds_studio_section_body">
+                                        <label class="o_ds_field mb-0">
+                                            <span>Button Label</span>
+                                            <input type="text" class="form-control" t-att-value="state.editor.primary_button_label"
+                                                   t-on-input="(ev) => this.onEditorInput('primary_button_label', ev)"/>
+                                        </label>
+                                    </div>
+                                </section>
+                                <section class="o_ds_studio_section">
+                                    <header class="o_ds_studio_section_head">
+                                        <div class="o_ds_studio_section_head_main">
+                                            <span class="o_ds_studio_step">2</span>
+                                            <div>
+                                                <h3 class="o_ds_studio_section_title">Action</h3>
+                                                <p class="o_ds_studio_section_help">
+                                                    What opens when the user clicks the left button.
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </header>
+                                    <div class="o_ds_studio_section_body">
+                                        <label class="o_ds_field">
+                                            <span>Action</span>
+                                            <input type="text" class="form-control" t-att-value="state.editor.primary_action_xmlid"
+                                                   t-on-input="(ev) => this.onEditorInput('primary_action_xmlid', ev)"/>
+                                        </label>
+                                        <label class="o_ds_field mb-0">
+                                            <span>Search Actions</span>
+                                            <input type="text" class="form-control" t-att-value="state.actionQuery"
+                                                   t-on-input="onActionQueryInput" placeholder="Type to search…"/>
+                                            <div class="d-flex justify-content-between align-items-center mt-1">
+                                                <small class="text-muted" t-esc="state.actionScopeLabel"/>
+                                                <button type="button" class="btn btn-link btn-sm p-0"
+                                                        t-on-click="toggleActionsShowAll">
+                                                    <t t-if="state.actionsShowAll">Show scoped only</t>
+                                                    <t t-else="">Show all models</t>
                                                 </button>
                                             </div>
-                                            <t t-if="row.valueType === 'fixed'">
-                                                <input type="text" class="form-control form-control-sm"
-                                                       placeholder="Value"
-                                                       t-att-value="row.fixedValue"
-                                                       t-on-change="(ev) => this.onContextFixedInput(row_index, ev)"/>
-                                            </t>
-                                            <t t-elif="row.valueType === 'record_id'">
-                                                <label class="form-check mb-0">
-                                                    <input type="checkbox" class="form-check-input"
-                                                           t-att-checked="row.asList"
-                                                           t-on-change="(ev) => this.onContextAsListChange(row_index, ev)"/>
-                                                    <span class="form-check-label">Pass as a list</span>
-                                                </label>
-                                            </t>
-                                            <t t-else="">
-                                                <p class="text-muted small mb-2">
-                                                    Rules run top to bottom. First matching group wins.
-                                                </p>
-                                                <t t-foreach="row.groupRules" t-as="rule" t-key="rule_index">
-                                                    <div class="o_ds_context_rule mb-2 p-2 rounded">
-                                                        <div class="d-flex justify-content-between align-items-center mb-1">
-                                                            <span class="small fw-bold">Group rule <t t-esc="rule_index + 1"/></span>
-                                                            <button type="button" class="btn btn-link btn-sm text-danger p-0"
-                                                                    t-on-click="() => this.removeContextGroupRule(row_index, rule_index)">
-                                                                Remove
-                                                            </button>
-                                                        </div>
-                                                        <input type="text" class="form-control form-control-sm mb-1"
-                                                               placeholder="Search user group…"
-                                                               t-att-value="rule.groupLabel or rule.groupXmlid"
-                                                               t-on-input="(ev) => this.onContextGroupSearchInput(row_index, rule_index, ev)"/>
-                                                        <div t-if="getContextGroupHits(row_index, rule_index).length"
-                                                             class="list-group mb-1 shadow-sm">
-                                                            <button type="button" class="list-group-item list-group-item-action py-1"
-                                                                    t-foreach="getContextGroupHits(row_index, rule_index)"
-                                                                    t-as="hit" t-key="hit.xmlid"
-                                                                    t-on-mousedown.prevent="() => this.pickContextGroup(row_index, rule_index, hit)">
-                                                                <t t-esc="hit.name"/>
-                                                            </button>
-                                                        </div>
-                                                        <input type="text" class="form-control form-control-sm"
-                                                               placeholder="Value when in that group"
-                                                               t-att-value="rule.value"
-                                                               t-on-change="(ev) => this.onContextRuleValueInput(row_index, rule_index, ev)"/>
-                                                    </div>
-                                                </t>
-                                                <button type="button" class="btn btn-link btn-sm px-0 mb-2"
-                                                        t-on-click="() => this.addContextGroupRule(row_index)">
-                                                    Add another group rule
+                                        </label>
+                                        <div class="o_ds_action_hits mt-1">
+                                            <t t-foreach="state.catalogs.actions" t-as="act" t-key="act.id">
+                                                <button type="button" class="o_ds_action_hit" t-on-click="() => this.pickAction(act.xmlid)">
+                                                    <strong t-esc="act.name"/>
+                                                    <span class="text-muted" t-esc="act.xmlid"/>
                                                 </button>
-                                                <input type="text" class="form-control form-control-sm"
-                                                       placeholder="Otherwise use"
-                                                       t-att-value="row.elseValue"
-                                                       t-on-change="(ev) => this.onContextElseValueInput(row_index, ev)"/>
                                             </t>
                                         </div>
-                                    </t>
-                                    <button type="button" class="btn btn-link btn-sm px-0"
-                                            t-on-click="() => this.addContextRow()">
-                                        Add context key
-                                    </button>
-                                </div>
+                                    </div>
+                                </section>
+                                <section class="o_ds_studio_section">
+                                    <header class="o_ds_studio_section_head">
+                                        <div class="o_ds_studio_section_head_main">
+                                            <span class="o_ds_studio_step">3</span>
+                                            <div>
+                                                <h3 class="o_ds_studio_section_title">Action Defaults</h3>
+                                                <p class="o_ds_studio_section_help">
+                                                    Values passed when this action opens. Use fixed values,
+                                                    this card’s id, or group rules (first matching group wins).
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </header>
+                                    <div class="o_ds_studio_section_body">
+                                        <t t-foreach="state.editor.contextRows" t-as="row" t-key="row_index">
+                                            <div class="o_ds_context_row border rounded p-2 mb-2">
+                                                <div class="d-flex gap-2 mb-1 align-items-start">
+                                                    <input type="text" class="form-control form-control-sm"
+                                                           placeholder="Key (e.g. default_type)"
+                                                           t-att-value="row.key"
+                                                           t-on-change="(ev) => this.onContextKeyInput(row_index, ev)"/>
+                                                    <select class="form-select form-select-sm"
+                                                            t-on-change="(ev) => this.onContextTypeChange(row_index, ev)">
+                                                        <t t-foreach="CONTEXT_VALUE_TYPES" t-as="vt" t-key="vt.value">
+                                                            <option t-att-value="vt.value"
+                                                                    t-att-selected="row.valueType === vt.value"
+                                                                    t-esc="vt.label"/>
+                                                        </t>
+                                                    </select>
+                                                    <button type="button" class="btn btn-link text-danger p-0"
+                                                            title="Remove"
+                                                            t-on-click="() => this.removeContextRow(row_index)">
+                                                        <i class="fa fa-trash-o"/>
+                                                    </button>
+                                                </div>
+                                                <t t-if="row.valueType === 'fixed'">
+                                                    <input type="text" class="form-control form-control-sm"
+                                                           placeholder="Value"
+                                                           t-att-value="row.fixedValue"
+                                                           t-on-change="(ev) => this.onContextFixedInput(row_index, ev)"/>
+                                                </t>
+                                                <t t-elif="row.valueType === 'record_id'">
+                                                    <label class="form-check mb-0">
+                                                        <input type="checkbox" class="form-check-input"
+                                                               t-att-checked="row.asList"
+                                                               t-on-change="(ev) => this.onContextAsListChange(row_index, ev)"/>
+                                                        <span class="form-check-label">Pass as a list</span>
+                                                    </label>
+                                                </t>
+                                                <t t-else="">
+                                                    <p class="text-muted small mb-2">
+                                                        Rules run top to bottom. First matching group wins.
+                                                    </p>
+                                                    <t t-foreach="row.groupRules" t-as="rule" t-key="rule_index">
+                                                        <div class="o_ds_context_rule mb-2 p-2 rounded">
+                                                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                                                <span class="small fw-bold">Group rule <t t-esc="rule_index + 1"/></span>
+                                                                <button type="button" class="btn btn-link btn-sm text-danger p-0"
+                                                                        t-on-click="() => this.removeContextGroupRule(row_index, rule_index)">
+                                                                    Remove
+                                                                </button>
+                                                            </div>
+                                                            <input type="text" class="form-control form-control-sm mb-1"
+                                                                   placeholder="Search user group…"
+                                                                   t-att-value="rule.groupLabel or rule.groupXmlid"
+                                                                   t-on-input="(ev) => this.onContextGroupSearchInput(row_index, rule_index, ev)"/>
+                                                            <div t-if="getContextGroupHits(row_index, rule_index).length"
+                                                                 class="list-group mb-1 shadow-sm">
+                                                                <button type="button" class="list-group-item list-group-item-action py-1"
+                                                                        t-foreach="getContextGroupHits(row_index, rule_index)"
+                                                                        t-as="hit" t-key="hit.xmlid"
+                                                                        t-on-mousedown.prevent="() => this.pickContextGroup(row_index, rule_index, hit)">
+                                                                    <t t-esc="hit.name"/>
+                                                                </button>
+                                                            </div>
+                                                            <input type="text" class="form-control form-control-sm"
+                                                                   placeholder="Value when in that group"
+                                                                   t-att-value="rule.value"
+                                                                   t-on-change="(ev) => this.onContextRuleValueInput(row_index, rule_index, ev)"/>
+                                                        </div>
+                                                    </t>
+                                                    <button type="button" class="btn btn-link btn-sm px-0 mb-2"
+                                                            t-on-click="() => this.addContextGroupRule(row_index)">
+                                                        Add another group rule
+                                                    </button>
+                                                    <input type="text" class="form-control form-control-sm"
+                                                           placeholder="Otherwise use"
+                                                           t-att-value="row.elseValue"
+                                                           t-on-change="(ev) => this.onContextElseValueInput(row_index, ev)"/>
+                                                </t>
+                                            </div>
+                                        </t>
+                                        <button type="button" class="btn btn-link btn-sm px-0"
+                                                t-on-click="() => this.addContextRow()">
+                                            Add context key
+                                        </button>
+                                    </div>
+                                </section>
                             </div>
                         </t>
 
                         <!-- HEADER -->
                         <t t-elif="state.zone === 'header'">
-                            <div class="o_ds_fieldset">
-                                <h3 class="mb-2">Title &amp; Image</h3>
-                                <p class="text-muted small">Same as Advanced → Card layout → Header.</p>
-                                <label class="o_ds_field">
-                                    <span>Title field</span>
-                                    <select class="form-select form-select-sm"
-                                            t-on-change="(ev) => this.updateHeaderBlueprint('header_title_field', ev.target.value)">
-                                        <option value="">—</option>
-                                        <t t-foreach="headerLineFieldCatalog" t-as="f" t-key="'title'+f.name">
-                                            <option t-att-value="f.name"
-                                                    t-att-selected="(state.payload.header_title_field or 'display_name') === f.name"
-                                                    t-esc="f.string + ' (' + f.name + ')'"/>
-                                        </t>
-                                    </select>
-                                </label>
-                                <label class="o_ds_field">
-                                    <span>Image field</span>
-                                    <select class="form-select form-select-sm"
-                                            t-on-change="(ev) => this.updateHeaderBlueprint('header_image_field', ev.target.value)">
-                                        <option value="">—</option>
-                                        <t t-foreach="headerImageFieldCatalog" t-as="f" t-key="'img'+f.name">
-                                            <option t-att-value="f.name"
-                                                    t-att-selected="state.payload.header_image_field === f.name"
-                                                    t-esc="f.string + ' (' + f.name + ')'"/>
-                                        </t>
-                                    </select>
-                                </label>
-                                <label class="o_ds_field" t-if="state.payload.header_image_field">
-                                    <span>Image style</span>
-                                    <select class="form-select form-select-sm"
-                                            t-on-change="(ev) => this.updateHeaderBlueprint('header_image_style', ev.target.value)">
-                                        <t t-foreach="HEADER_IMAGE_STYLES" t-as="st" t-key="st.value">
-                                            <option t-att-value="st.value"
-                                                    t-att-selected="(state.payload.header_image_style or 'avatar') === st.value"
-                                                    t-esc="st.label"/>
-                                        </t>
-                                    </select>
-                                </label>
-                            </div>
-                            <div class="o_ds_fieldset">
-                                <h3 class="mb-2">Header Lines</h3>
-                                <p class="text-muted small">Kind, alignment, fields, and join style. Use <strong>Add</strong> above for new lines.</p>
-                                <div class="o_ds_header_line_list" t-if="(state.payload.headers or []).length">
-                                    <t t-foreach="state.payload.headers or []" t-as="hline" t-key="hline.id">
-                                        <div class="o_ds_header_line_row"
-                                             t-att-class="isHeaderRowSelected(hline.id) ? 'is-selected' : ''"
-                                             draggable="true"
-                                             t-on-click="() => this.selectHeaderRow(hline.id)"
-                                             t-on-dragstart="(ev) => this.onDragStartHeader(hline.id, ev)"
-                                             t-on-dragover="onDragOver"
-                                             t-on-drop="(ev) => this.onDropHeader(hline.id, ev)">
-                                            <div class="o_ds_header_top_actions">
-                                                <span class="o_ds_header_line_title">Header line</span>
-                                                <button type="button" class="btn btn-sm btn-outline-secondary"
-                                                        t-on-click.stop="() => this.removeHeaderLine(hline.id)" title="Remove line">
-                                                    <i class="fa fa-trash-o"/>
-                                                </button>
-                                            </div>
-                                            <div class="o_ds_scope_handle_col o_ds_header_drag_col">
-                                                <i class="fa fa-bars text-muted" title="Drag to reorder"/>
-                                                <button type="button" class="btn btn-link btn-sm p-0 text-muted"
-                                                        t-on-click.stop="() => this.moveHeaderLine(hline.id, -1)" title="Move up">
-                                                    <i class="fa fa-chevron-up"/>
-                                                </button>
-                                                <button type="button" class="btn btn-link btn-sm p-0 text-muted"
-                                                        t-on-click.stop="() => this.moveHeaderLine(hline.id, 1)" title="Move down">
-                                                    <i class="fa fa-chevron-down"/>
-                                                </button>
-                                            </div>
-                                            <div class="o_ds_header_meta_grid" t-on-click.stop="">
-                                                <label class="o_ds_header_meta_field">
-                                                    <span>Kind</span>
-                                                    <select class="form-select form-select-sm"
-                                                            t-on-change="(ev) => this.updateHeaderItem(hline.id, 'kind', ev.target.value)">
-                                                        <option value="subtitle" t-att-selected="hline.kind === 'subtitle'">Subtitle</option>
-                                                        <option value="inline" t-att-selected="hline.kind === 'inline'">Inline</option>
-                                                    </select>
-                                                </label>
-                                                <label class="o_ds_header_meta_field">
-                                                    <span>Alignment</span>
-                                                    <select class="form-select form-select-sm"
-                                                            t-on-change="(ev) => this.updateHeaderItem(hline.id, 'alignment', ev.target.value)">
-                                                        <option value="left" t-att-selected="(hline.alignment or 'left') === 'left'">Left</option>
-                                                        <option value="center" t-att-selected="hline.alignment === 'center'">Center</option>
-                                                        <option value="right" t-att-selected="hline.alignment === 'right'">Right</option>
-                                                    </select>
-                                                </label>
-                                                <label class="o_ds_header_meta_field">
-                                                    <span>Icon</span>
-                                                    <select class="form-select form-select-sm"
-                                                            t-if="headerLineShowIcon(hline)"
-                                                            t-on-change="(ev) => this.updateHeaderItem(hline.id, 'icon', ev.target.value || false)">
-                                                        <option value="">—</option>
-                                                        <t t-foreach="state.catalogs.icons" t-as="ic" t-key="ic.value">
-                                                            <option t-att-value="ic.value"
-                                                                    t-att-selected="hline.icon === ic.value"
-                                                                    t-esc="ic.label"/>
-                                                        </t>
-                                                    </select>
-                                                    <span t-else="" class="form-control form-control-sm bg-light text-muted">—</span>
-                                                </label>
-                                                <label class="o_ds_header_meta_field o_ds_header_fields_col">
-                                                    <span>Fields</span>
-                                                    <div class="o_ds_groupby_chips mb-1" t-if="headerFieldChips(hline).length">
-                                                        <t t-foreach="headerFieldChips(hline)" t-as="chip" t-key="chip.name">
-                                                            <span class="badge text-bg-light border o_ds_groupby_chip">
-                                                                <t t-esc="chip.label"/>
-                                                                <button type="button" class="btn-close btn-close-sm ms-1"
-                                                                        t-on-click="() => this.removeHeaderFieldFromLine(hline.id, chip.name)"/>
-                                                            </span>
-                                                        </t>
-                                                    </div>
-                                                    <select class="form-select form-select-sm"
-                                                            t-on-change="(ev) => this.onHeaderFieldPick(hline.id, ev)">
-                                                        <option value="">+ Add field…</option>
-                                                        <t t-foreach="headerLineFieldCatalog" t-as="f" t-key="hline.id + f.name">
-                                                            <option t-att-value="f.name"
-                                                                    t-att-disabled="headerFieldIsSelected(hline, f.name)"
-                                                                    t-esc="f.string + ' (' + f.name + ')'"/>
-                                                        </t>
-                                                    </select>
-                                                </label>
-                                                <label class="o_ds_header_meta_field">
-                                                    <span>Shown as</span>
-                                                    <select class="form-select form-select-sm"
-                                                            t-if="headerLineShowSeparator(hline)"
-                                                            t-on-change="(ev) => this.updateHeaderItem(hline.id, 'separator', ev.target.value)">
-                                                        <t t-foreach="HEADER_SEPARATORS" t-as="sep" t-key="sep.value">
-                                                            <option t-att-value="sep.value"
-                                                                    t-att-selected="(hline.separator or ', ') === sep.value"
-                                                                    t-esc="sep.label"/>
-                                                        </t>
-                                                    </select>
-                                                    <span t-else="" class="form-control form-control-sm bg-light text-muted">—</span>
-                                                </label>
+                            <div class="o_ds_studio_stack">
+                                <section class="o_ds_studio_section">
+                                    <header class="o_ds_studio_section_head">
+                                        <div class="o_ds_studio_section_head_main">
+                                            <span class="o_ds_studio_step">1</span>
+                                            <div>
+                                                <h3 class="o_ds_studio_section_title">Title &amp; Image</h3>
+                                                <p class="o_ds_studio_section_help">
+                                                    Main title and optional image on the card (same as Advanced → Card layout → Header).
+                                                </p>
                                             </div>
                                         </div>
-                                    </t>
-                                </div>
-                                <div t-else="" class="text-muted small">No header lines yet. Click <strong>Add</strong>.</div>
+                                    </header>
+                                    <div class="o_ds_studio_section_body">
+                                        <label class="o_ds_field">
+                                            <span>Title Field</span>
+                                            <select class="form-select form-select-sm"
+                                                    t-on-change="(ev) => this.updateHeaderBlueprint('header_title_field', ev.target.value)">
+                                                <option value="">—</option>
+                                                <t t-foreach="headerLineFieldCatalog" t-as="f" t-key="'title'+f.name">
+                                                    <option t-att-value="f.name"
+                                                            t-att-selected="(state.payload.header_title_field or 'display_name') === f.name"
+                                                            t-esc="f.string + ' (' + f.name + ')'"/>
+                                                </t>
+                                            </select>
+                                        </label>
+                                        <label class="o_ds_field">
+                                            <span>Image Field</span>
+                                            <select class="form-select form-select-sm"
+                                                    t-on-change="(ev) => this.updateHeaderBlueprint('header_image_field', ev.target.value)">
+                                                <option value="">—</option>
+                                                <t t-foreach="headerImageFieldCatalog" t-as="f" t-key="'img'+f.name">
+                                                    <option t-att-value="f.name"
+                                                            t-att-selected="state.payload.header_image_field === f.name"
+                                                            t-esc="f.string + ' (' + f.name + ')'"/>
+                                                </t>
+                                            </select>
+                                        </label>
+                                        <label class="o_ds_field mb-0" t-if="state.payload.header_image_field">
+                                            <span>Image Style</span>
+                                            <select class="form-select form-select-sm"
+                                                    t-on-change="(ev) => this.updateHeaderBlueprint('header_image_style', ev.target.value)">
+                                                <t t-foreach="HEADER_IMAGE_STYLES" t-as="st" t-key="st.value">
+                                                    <option t-att-value="st.value"
+                                                            t-att-selected="(state.payload.header_image_style or 'avatar') === st.value"
+                                                            t-esc="st.label"/>
+                                                </t>
+                                            </select>
+                                        </label>
+                                    </div>
+                                </section>
+                                <section class="o_ds_studio_section">
+                                    <header class="o_ds_studio_section_head">
+                                        <div class="o_ds_studio_section_head_main">
+                                            <span class="o_ds_studio_step">2</span>
+                                            <div>
+                                                <h3 class="o_ds_studio_section_title">Header Lines</h3>
+                                                <p class="o_ds_studio_section_help">
+                                                    Kind, alignment, fields, and join style. Use arrows or trash on each line to reorder or remove.
+                                                </p>
+                                            </div>
+                                        </div>
+                                        <button type="button" class="btn btn-sm btn-primary flex-shrink-0"
+                                                t-on-click="addItem" t-att-disabled="state.saving" title="Add header line">
+                                            <i class="fa fa-plus"/>
+                                            <span>Add</span>
+                                        </button>
+                                    </header>
+                                    <div class="o_ds_studio_section_body">
+                                        <div class="o_ds_header_line_list" t-if="(state.payload.headers or []).length">
+                                            <t t-foreach="state.payload.headers or []" t-as="hline" t-key="hline.id">
+                                                <div class="o_ds_header_line_row"
+                                                     t-att-class="isHeaderRowSelected(hline.id) ? 'is-selected' : ''"
+                                                     draggable="true"
+                                                     t-on-click="() => this.selectHeaderRow(hline.id)"
+                                                     t-on-dragstart="(ev) => this.onDragStartHeader(hline.id, ev)"
+                                                     t-on-dragover="onDragOver"
+                                                     t-on-drop="(ev) => this.onDropHeader(hline.id, ev)">
+                                                    <div class="o_ds_header_top_actions">
+                                                        <span class="o_ds_header_line_title">Header line</span>
+                                                        <button type="button" class="btn btn-sm btn-outline-secondary"
+                                                                t-on-click.stop="() => this.removeHeaderLine(hline.id)"
+                                                                t-att-disabled="state.saving"
+                                                                title="Remove line">
+                                                            <i class="fa fa-trash-o"/>
+                                                        </button>
+                                                    </div>
+                                                    <div class="o_ds_scope_handle_col o_ds_header_drag_col">
+                                                        <i class="fa fa-bars text-muted" title="Drag to reorder"/>
+                                                        <button type="button" class="btn btn-link btn-sm p-0 text-muted"
+                                                                t-on-click.stop="() => this.moveHeaderLine(hline.id, -1)"
+                                                                t-att-disabled="state.saving"
+                                                                title="Move up">
+                                                            <i class="fa fa-chevron-up"/>
+                                                        </button>
+                                                        <button type="button" class="btn btn-link btn-sm p-0 text-muted"
+                                                                t-on-click.stop="() => this.moveHeaderLine(hline.id, 1)"
+                                                                t-att-disabled="state.saving"
+                                                                title="Move down">
+                                                            <i class="fa fa-chevron-down"/>
+                                                        </button>
+                                                    </div>
+                                                    <div class="o_ds_header_meta_grid" t-on-click.stop="">
+                                                        <label class="o_ds_header_meta_field">
+                                                            <span>Kind</span>
+                                                            <select class="form-select form-select-sm"
+                                                                    t-on-change="(ev) => this.updateHeaderItem(hline.id, 'kind', ev.target.value)">
+                                                                <option value="subtitle" t-att-selected="hline.kind === 'subtitle'">Subtitle</option>
+                                                                <option value="inline" t-att-selected="hline.kind === 'inline'">Inline</option>
+                                                            </select>
+                                                        </label>
+                                                        <label class="o_ds_header_meta_field">
+                                                            <span>Alignment</span>
+                                                            <select class="form-select form-select-sm"
+                                                                    t-on-change="(ev) => this.updateHeaderItem(hline.id, 'alignment', ev.target.value)">
+                                                                <option value="left" t-att-selected="(hline.alignment or 'left') === 'left'">Left</option>
+                                                                <option value="center" t-att-selected="hline.alignment === 'center'">Center</option>
+                                                                <option value="right" t-att-selected="hline.alignment === 'right'">Right</option>
+                                                            </select>
+                                                        </label>
+                                                        <label class="o_ds_header_meta_field">
+                                                            <span>Icon</span>
+                                                            <select class="form-select form-select-sm"
+                                                                    t-if="headerLineShowIcon(hline)"
+                                                                    t-on-change="(ev) => this.updateHeaderItem(hline.id, 'icon', ev.target.value || false)">
+                                                                <option value="">—</option>
+                                                                <t t-foreach="state.catalogs.icons" t-as="ic" t-key="ic.value">
+                                                                    <option t-att-value="ic.value"
+                                                                            t-att-selected="hline.icon === ic.value"
+                                                                            t-esc="ic.label"/>
+                                                                </t>
+                                                            </select>
+                                                            <span t-else="" class="form-control form-control-sm bg-light text-muted">—</span>
+                                                        </label>
+                                                        <label class="o_ds_header_meta_field o_ds_header_fields_col">
+                                                            <span>Fields</span>
+                                                            <div class="o_ds_groupby_chips mb-1" t-if="headerFieldChips(hline).length">
+                                                                <t t-foreach="headerFieldChips(hline)" t-as="chip" t-key="chip.name">
+                                                                    <span class="badge text-bg-light border o_ds_groupby_chip">
+                                                                        <t t-esc="chip.label"/>
+                                                                        <button type="button" class="btn-close btn-close-sm ms-1"
+                                                                                t-on-click="() => this.removeHeaderFieldFromLine(hline.id, chip.name)"/>
+                                                                    </span>
+                                                                </t>
+                                                            </div>
+                                                            <select class="form-select form-select-sm"
+                                                                    t-on-change="(ev) => this.onHeaderFieldPick(hline.id, ev)">
+                                                                <option value="">+ Add field…</option>
+                                                                <t t-foreach="headerLineFieldCatalog" t-as="f" t-key="hline.id + f.name">
+                                                                    <option t-att-value="f.name"
+                                                                            t-att-disabled="headerFieldIsSelected(hline, f.name)"
+                                                                            t-esc="f.string + ' (' + f.name + ')'"/>
+                                                                </t>
+                                                            </select>
+                                                        </label>
+                                                        <label class="o_ds_header_meta_field">
+                                                            <span>Shown As</span>
+                                                            <select class="form-select form-select-sm"
+                                                                    t-if="headerLineShowSeparator(hline)"
+                                                                    t-on-change="(ev) => this.updateHeaderItem(hline.id, 'separator', ev.target.value)">
+                                                                <t t-foreach="HEADER_SEPARATORS" t-as="sep" t-key="sep.value">
+                                                                    <option t-att-value="sep.value"
+                                                                            t-att-selected="(hline.separator or ', ') === sep.value"
+                                                                            t-esc="sep.label"/>
+                                                                </t>
+                                                            </select>
+                                                            <span t-else="" class="form-control form-control-sm bg-light text-muted">—</span>
+                                                        </label>
+                                                    </div>
+                                                </div>
+                                            </t>
+                                        </div>
+                                        <div t-else="" class="text-muted small mb-0">No header lines yet. Click <strong>Add</strong>.</div>
+                                    </div>
+                                </section>
                             </div>
                         </t>
 
                         <!-- SLOT ZONES -->
                         <t t-else="">
-                            <div class="o_ds_fieldset" t-if="selectedSlot">
+                            <div class="o_ds_slot_editor" t-if="selectedSlot">
                                 <div t-if="!selectedSlotOwned" class="alert alert-info py-2 px-3 mb-3 small">
                                     Shared from
-                                    <strong t-esc="selectedSlot.source_blueprint_name or 'another dashboard'"/>.
+                                    <a href="#" class="o_form_uri o_ds_source_bp_link"
+                                       t-on-click.prevent="() => this.openSourceStudio(selectedSlot.source_blueprint_id)"
+                                       t-esc="selectedSlot.source_blueprint_name or 'another dashboard'"/>.
                                     Open that dashboard in Studio to edit this item.
                                 </div>
-                                <div class="row g-2">
-                                    <div class="col-md-6">
-                                        <label class="o_ds_field">
-                                            <span>Name on the card</span>
-                                            <input type="text" class="form-control" t-att-value="state.editor.label"
-                                                   t-att-readonly="!selectedSlotOwned"
-                                                   t-on-input="(ev) => this.onEditorInput('label', ev)"/>
-                                        </label>
-                                    </div>
-                                    <div class="col-md-6" t-if="state.zone === 'kpis' or state.zone === 'shortcuts'">
-                                        <label class="o_ds_field">
-                                            <span>Plural name</span>
-                                            <input type="text" class="form-control" t-att-value="state.editor.label_plural"
-                                                   t-on-input="(ev) => this.onEditorInput('label_plural', ev)"/>
-                                        </label>
-                                    </div>
-                                </div>
-                                <div class="row g-2">
-                                    <div class="col-md-3">
-                                        <label class="o_ds_field">
-                                            <span>Icon (FA)</span>
-                                            <input type="text" class="form-control" t-att-value="state.editor.icon"
-                                                   t-on-input="(ev) => this.onEditorInput('icon', ev)" placeholder="fa-star"/>
-                                        </label>
-                                    </div>
-                                    <div class="col-md-3">
-                                        <label class="o_ds_field">
-                                            <span>Style</span>
-                                            <select class="form-select" t-on-change="(ev) => this.onEditorInput('style', ev)">
-                                                <option value="default" t-att-selected="state.editor.style === 'default'">Default</option>
-                                                <option value="warning" t-att-selected="state.editor.style === 'warning'">Warning</option>
-                                                <option value="danger" t-att-selected="state.editor.style === 'danger'">Danger</option>
-                                            </select>
-                                        </label>
-                                    </div>
-                                    <div class="col-md-3">
-                                        <label class="o_ds_field">
-                                            <span>Style mode</span>
-                                            <select class="form-select" t-on-change="(ev) => this.onEditorInput('style_mode', ev)">
-                                                <option value="static" t-att-selected="state.editor.style_mode === 'static'">Always</option>
-                                                <option value="when_positive" t-att-selected="state.editor.style_mode === 'when_positive'">When value &gt; 0</option>
-                                            </select>
-                                        </label>
-                                    </div>
-                                    <div class="col-md-3 d-flex align-items-end">
-                                        <label class="o_ds_check mb-3">
-                                            <input type="checkbox" t-att-checked="state.editor.show_if_zero"
-                                                   t-on-change="(ev) => this.onEditorInput('show_if_zero', ev)"/>
-                                            <span>Show when zero</span>
-                                        </label>
-                                    </div>
-                                </div>
 
-                                <t t-if="state.zone === 'kpis' or state.zone === 'shortcuts'">
-                                    <h3 class="mt-3">What to count</h3>
-                                    <label class="o_ds_field">
-                                        <span>What number?</span>
-                                        <select class="form-select" t-on-change="(ev) => this.onEditorInput('value_mode', ev)">
-                                            <option value="count" t-att-selected="state.editor.value_mode === 'count'">Count</option>
-                                            <option value="amount" t-att-selected="state.editor.value_mode === 'amount'">Amount</option>
-                                            <option value="count_amount" t-att-selected="state.editor.value_mode === 'count_amount'">Count + Amount</option>
-                                        </select>
-                                    </label>
-                                    <div class="row g-2">
-                                        <div class="col-md-6">
-                                            <label class="o_ds_field">
-                                                <span>Count which records?</span>
-                                                <input type="text" class="form-control" t-att-value="state.editor.compute_model"
-                                                       t-on-input="(ev) => this.onEditorInput('compute_model', ev)" placeholder="crm.lead"/>
-                                            </label>
+                                <!-- 1. Appearance -->
+                                <section class="o_ds_slot_section">
+                                    <header class="o_ds_slot_section_head">
+                                        <span class="o_ds_slot_step">1</span>
+                                        <div>
+                                            <h3 class="o_ds_slot_section_title">Appearance</h3>
+                                            <p class="o_ds_slot_section_help" t-esc="slotAppearanceHelp"/>
                                         </div>
-                                        <div class="col-md-6">
-                                            <label class="o_ds_field">
-                                                <span>How linked to this card?</span>
-                                                <input type="text" class="form-control" t-att-value="state.editor.relate_field"
-                                                       t-on-input="(ev) => this.onEditorInput('relate_field', ev)" placeholder="partner_id"/>
-                                            </label>
+                                    </header>
+                                    <div class="o_ds_slot_section_body">
+                                        <div class="row g-2">
+                                            <div class="col-md-6">
+                                                <label class="o_ds_field">
+                                                    <span>Label</span>
+                                                    <input type="text" class="form-control" t-att-value="state.editor.label"
+                                                           t-att-readonly="!selectedSlotOwned"
+                                                           t-on-input="(ev) => this.onEditorInput('label', ev)"/>
+                                                </label>
+                                            </div>
+                                            <div class="col-md-6" t-if="state.zone === 'kpis' or state.zone === 'shortcuts'">
+                                                <label class="o_ds_field">
+                                                    <span>Plural Label</span>
+                                                    <input type="text" class="form-control" t-att-value="state.editor.label_plural"
+                                                           t-att-readonly="!selectedSlotOwned"
+                                                           t-on-input="(ev) => this.onEditorInput('label_plural', ev)"/>
+                                                </label>
+                                            </div>
+                                            <div class="col-md-6" t-if="state.zone === 'manage'">
+                                                <label class="o_ds_field">
+                                                    <span>Menu Section</span>
+                                                    <select class="form-select" t-att-disabled="!selectedSlotOwned"
+                                                            t-on-change="(ev) => this.onEditorInput('section', ev)">
+                                                        <t t-foreach="MANAGE_SECTIONS" t-as="ms" t-key="'ed'+ms.id">
+                                                            <option t-att-value="ms.id"
+                                                                    t-att-selected="state.editor.section === ms.id"
+                                                                    t-esc="ms.label"/>
+                                                        </t>
+                                                    </select>
+                                                </label>
+                                            </div>
                                         </div>
-                                    </div>
-                                    <label class="o_ds_field">
-                                        <span>Domain filter</span>
-                                        <div class="input-group">
-                                            <input type="text" class="form-control font-monospace" t-att-value="state.editor.compute_domain"
-                                                   t-on-input="(ev) => this.onEditorInput('compute_domain', ev)"/>
-                                            <button type="button" class="btn btn-outline-secondary" t-on-click="openDomainEditor">
-                                                <i class="fa fa-filter"/> Edit
-                                            </button>
-                                        </div>
-                                    </label>
-                                    <div class="o_ds_field o_ds_conditions">
-                                        <span class="fw-bold d-block mb-1">
-                                            Linked conditions
-                                        </span>
-                                        <p class="text-muted small mb-2">
-                                            Shared filter conditions (unlink to remove from this KPI only).
-                                        </p>
-                                        <t t-if="!selectedConditions.length">
-                                            <p class="text-muted small mb-2">No conditions on this KPI yet.</p>
-                                        </t>
-                                        <div class="o_ds_condition_list mb-2">
-                                            <t t-foreach="selectedConditions" t-as="cond" t-key="cond.id">
-                                                <div class="o_ds_condition_row d-flex align-items-center gap-2 border rounded px-2 py-1 mb-1">
-                                                    <span class="flex-grow-1 text-truncate" t-esc="cond.name"/>
-                                                    <button type="button" class="btn btn-link btn-sm px-1"
-                                                            t-on-click="() => this.editCondition(cond.id)">
-                                                        Edit
-                                                    </button>
-                                                    <button type="button" class="btn btn-link btn-sm text-danger px-1"
-                                                            title="Remove from this KPI"
-                                                            t-on-click="() => this.removeCondition(cond.id)">
-                                                        <i class="fa fa-times"/>
-                                                    </button>
+                                        <div class="row g-2">
+                                            <div t-att-class="state.zone === 'manage' ? 'col-md-6' : 'col-md-3'">
+                                                <label class="o_ds_field">
+                                                    <span>Icon</span>
+                                                    <input type="text" class="form-control" t-att-value="state.editor.icon"
+                                                           t-att-readonly="!selectedSlotOwned"
+                                                           t-on-input="(ev) => this.onEditorInput('icon', ev)" placeholder="fa-star"/>
+                                                </label>
+                                            </div>
+                                            <t t-if="state.zone !== 'manage'">
+                                                <div class="col-md-3">
+                                                    <label class="o_ds_field">
+                                                        <span>Style</span>
+                                                        <select class="form-select" t-att-disabled="!selectedSlotOwned"
+                                                                t-on-change="(ev) => this.onEditorInput('style', ev)">
+                                                            <option value="default" t-att-selected="state.editor.style === 'default'">Default</option>
+                                                            <option value="warning" t-att-selected="state.editor.style === 'warning'">Warning</option>
+                                                            <option value="danger" t-att-selected="state.editor.style === 'danger'">Danger</option>
+                                                        </select>
+                                                    </label>
+                                                </div>
+                                                <div class="col-md-3">
+                                                    <label class="o_ds_field">
+                                                        <span>Style Mode</span>
+                                                        <select class="form-select" t-att-disabled="!selectedSlotOwned"
+                                                                t-on-change="(ev) => this.onEditorInput('style_mode', ev)">
+                                                            <option value="static" t-att-selected="state.editor.style_mode === 'static'">Always</option>
+                                                            <option value="when_positive" t-att-selected="state.editor.style_mode === 'when_positive'">When value &gt; 0</option>
+                                                        </select>
+                                                    </label>
+                                                </div>
+                                                <div class="col-md-3 d-flex align-items-end">
+                                                    <label class="o_ds_check mb-3">
+                                                        <input type="checkbox" t-att-checked="state.editor.show_if_zero"
+                                                               t-att-disabled="!selectedSlotOwned"
+                                                               t-on-change="(ev) => this.onEditorInput('show_if_zero', ev)"/>
+                                                        <span>Show If Zero</span>
+                                                    </label>
                                                 </div>
                                             </t>
                                         </div>
-                                        <div class="d-flex flex-wrap gap-2">
-                                            <button type="button" class="btn btn-secondary btn-sm"
-                                                    t-on-click="() => this.linkExistingConditions()">
-                                                Link existing
-                                            </button>
-                                            <button type="button" class="btn btn-primary btn-sm"
-                                                    t-on-click="() => this.openNewCondition()">
-                                                New condition
-                                            </button>
-                                        </div>
                                     </div>
+                                </section>
+
+                                <!-- 2. Figure (KPIs / Shortcuts) -->
+                                <t t-if="state.zone === 'kpis' or state.zone === 'shortcuts'">
+                                    <section class="o_ds_slot_section">
+                                        <header class="o_ds_slot_section_head">
+                                            <span class="o_ds_slot_step">2</span>
+                                            <div>
+                                                <h3 class="o_ds_slot_section_title">Figure</h3>
+                                                <p class="o_ds_slot_section_help" t-esc="slotFigureHelp"/>
+                                            </div>
+                                        </header>
+                                        <div class="o_ds_slot_section_body">
+                                            <label class="o_ds_field">
+                                                <span>Shows</span>
+                                                <select class="form-select"
+                                                        t-att-disabled="!selectedSlotOwned"
+                                                        t-on-change="(ev) => this.onEditorInput('value_mode', ev)">
+                                                    <option value="count" t-att-selected="state.editor.value_mode === 'count'">
+                                                        Count of records
+                                                    </option>
+                                                    <option value="amount" t-att-selected="state.editor.value_mode === 'amount'">
+                                                        Amount total
+                                                    </option>
+                                                    <option value="count_amount" t-att-selected="state.editor.value_mode === 'count_amount'">
+                                                        Count and amount
+                                                    </option>
+                                                </select>
+                                                <div class="form-text" t-esc="slotValueModeHelp"/>
+                                            </label>
+
+                                            <div class="o_ds_slot_group">
+                                                <h4 class="o_ds_slot_group_title">Source records</h4>
+                                                <p class="o_ds_slot_group_help">
+                                                    Related model that is counted or totaled, and its link back to this card.
+                                                </p>
+                                                <div class="row g-2">
+                                                    <div class="col-md-6">
+                                                        <label class="o_ds_field">
+                                                            <span>Count Model</span>
+                                                            <div t-att-class="'o_ds_variant_picker' + (selectedSlotOwned ? '' : ' pe-none opacity-75')">
+                                                                <div class="d-flex gap-2 align-items-center mb-1">
+                                                                    <div class="form-control form-control-sm bg-light flex-grow-1 o_ds_variant_picker_value"
+                                                                         t-att-title="(state.editor.compute_model_label or '') + ' (' + (state.editor.compute_model or '') + ')'">
+                                                                        <t t-esc="state.editor.compute_model_label or state.editor.compute_model or '—'"/>
+                                                                    </div>
+                                                                    <button t-if="selectedSlotOwned and state.editor.compute_model"
+                                                                            type="button" class="btn btn-sm btn-outline-secondary"
+                                                                            t-on-click="clearSlotComputeModel">Clear</button>
+                                                                </div>
+                                                                <t t-if="selectedSlotOwned">
+                                                                    <input type="text" class="form-control form-control-sm"
+                                                                           placeholder="Search models…"
+                                                                           t-att-value="state.slotModelQuery"
+                                                                           t-on-input="onSlotComputeModelSearch"
+                                                                           t-on-focus="onSlotComputeModelSearch"/>
+                                                                    <div class="d-flex justify-content-between align-items-center mt-1"
+                                                                         t-if="state.slotModelQuery or state.slotModelResults.length">
+                                                                        <small class="text-muted text-truncate"
+                                                                               t-esc="state.slotModelScopeLabel"/>
+                                                                        <button type="button" class="btn btn-link btn-sm p-0 flex-shrink-0"
+                                                                                t-on-mousedown.prevent="toggleSlotModelsShowAll">
+                                                                            <t t-if="state.slotModelShowAll">Host only</t>
+                                                                            <t t-else="">All</t>
+                                                                        </button>
+                                                                    </div>
+                                                                    <div t-if="state.slotModelResults.length"
+                                                                         class="o_ds_variant_picker_results list-group shadow-sm">
+                                                                        <button type="button"
+                                                                                class="list-group-item list-group-item-action py-1 px-2"
+                                                                                t-foreach="state.slotModelResults" t-as="row" t-key="row.id"
+                                                                                t-on-mousedown.prevent="() => this.pickSlotComputeModel(row)">
+                                                                            <span t-esc="row.name"/>
+                                                                            <span class="text-muted small ms-1" t-esc="row.model"/>
+                                                                        </button>
+                                                                    </div>
+                                                                </t>
+                                                            </div>
+                                                        </label>
+                                                    </div>
+                                                    <div class="col-md-6">
+                                                        <label class="o_ds_field">
+                                                            <span>Link to Host</span>
+                                                            <div t-att-class="'o_ds_variant_link' + (selectedSlotOwned ? '' : ' pe-none opacity-75')">
+                                                                <div class="o_ds_link_path">
+                                                                    <t t-foreach="slotRelatePathRows" t-as="hop" t-key="'slotHop' + hop.index">
+                                                                        <select class="form-select form-select-sm o_ds_link_hop"
+                                                                                t-att-disabled="!selectedSlotOwned or !state.editor.compute_model"
+                                                                                t-on-change="(ev) => this.onSlotRelatePathHopChange(hop.index, ev)">
+                                                                            <option value="">—</option>
+                                                                            <t t-foreach="hop.options" t-as="opt" t-key="hop.index + opt.name">
+                                                                                <option t-att-value="opt.name"
+                                                                                        t-att-selected="hop.value === opt.name"
+                                                                                        t-esc="opt.string + ' (' + opt.name + ')'"/>
+                                                                            </t>
+                                                                        </select>
+                                                                        <span t-if="hop.showSep" class="o_ds_link_sep">.</span>
+                                                                    </t>
+                                                                </div>
+                                                                <div t-if="selectedSlotOwned" class="d-flex flex-wrap gap-1 mt-1">
+                                                                    <button type="button" class="btn btn-link btn-sm p-0"
+                                                                            t-on-click="addSlotRelatePathHop"
+                                                                            t-att-disabled="!canAddSlotRelatePathHop"
+                                                                            title="Add hop">
+                                                                        <i class="fa fa-plus"/>
+                                                                    </button>
+                                                                    <button type="button" class="btn btn-link btn-sm p-0"
+                                                                            t-on-click="removeSlotRelatePathHop"
+                                                                            t-att-disabled="!canRemoveSlotRelatePathHop"
+                                                                            title="Remove last hop">
+                                                                        <i class="fa fa-minus"/>
+                                                                    </button>
+                                                                </div>
+                                                                <div class="form-text">
+                                                                    Path on the record model back to this card. Empty = use chart link.
+                                                                </div>
+                                                            </div>
+                                                        </label>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div t-if="slotShowsAmount" class="o_ds_slot_group">
+                                                <h4 class="o_ds_slot_group_title">Amount</h4>
+                                                <p class="o_ds_slot_group_help">
+                                                    Only for Amount total / Count and amount. Field on the record model above.
+                                                </p>
+                                                <div class="row g-2">
+                                                    <div class="col-md-7">
+                                                        <label class="o_ds_field">
+                                                            <span>Amount Shown</span>
+                                                            <select class="form-select"
+                                                                    t-att-disabled="!selectedSlotOwned or !state.editor.compute_model"
+                                                                    t-on-change="(ev) => this.onEditorInput('amount_measure_field', ev)">
+                                                                <option value="">—</option>
+                                                                <t t-foreach="state.catalogs.slotMeasureFields" t-as="f" t-key="'am'+f.name">
+                                                                    <option t-att-value="f.name"
+                                                                            t-att-selected="state.editor.amount_measure_field === f.name"
+                                                                            t-esc="f.string + ' (' + f.name + ')'"/>
+                                                                </t>
+                                                            </select>
+                                                        </label>
+                                                    </div>
+                                                    <div class="col-md-5">
+                                                        <label class="o_ds_field">
+                                                            <span>Amount As</span>
+                                                            <select class="form-select"
+                                                                    t-att-disabled="!selectedSlotOwned or !state.editor.amount_measure_field"
+                                                                    t-on-change="(ev) => this.onEditorInput('amount_aggregator_type', ev)">
+                                                                <t t-foreach="MEASURE_AGGREGATORS" t-as="agg" t-key="agg.value">
+                                                                    <option t-att-value="agg.value"
+                                                                            t-att-selected="state.editor.amount_aggregator_type === agg.value"
+                                                                            t-esc="agg.label"/>
+                                                                </t>
+                                                            </select>
+                                                        </label>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div class="o_ds_slot_group">
+                                                <h4 class="o_ds_slot_group_title">Filters</h4>
+                                                <p class="o_ds_slot_group_help">
+                                                    Narrow the source records for
+                                                    <t t-if="slotShowsCount and slotShowsAmount">count and amount</t>
+                                                    <t t-elif="slotShowsAmount">the amount</t>
+                                                    <t t-else="">the count</t>.
+                                                </p>
+                                                <label class="o_ds_field">
+                                                    <span>Domain</span>
+                                                    <div class="input-group">
+                                                        <input type="text" class="form-control font-monospace"
+                                                               t-att-value="state.editor.compute_domain"
+                                                               t-att-readonly="!selectedSlotOwned"
+                                                               t-on-input="(ev) => this.onEditorInput('compute_domain', ev)"/>
+                                                        <button type="button" class="btn btn-outline-secondary"
+                                                                t-att-disabled="!selectedSlotOwned"
+                                                                t-on-click="openDomainEditor">
+                                                            <i class="fa fa-filter"/> Edit
+                                                        </button>
+                                                    </div>
+                                                </label>
+                                                <div class="o_ds_field o_ds_conditions">
+                                                    <span>Conditions</span>
+                                                    <p class="form-text mb-2">
+                                                        Reusable filters. Unlink to remove from this item only.
+                                                    </p>
+                                                    <t t-if="!selectedConditions.length">
+                                                        <p class="text-muted small mb-2">No conditions on this item yet.</p>
+                                                    </t>
+                                                    <div class="o_ds_condition_list mb-2">
+                                                        <t t-foreach="selectedConditions" t-as="cond" t-key="cond.id">
+                                                            <div class="o_ds_condition_row d-flex align-items-center gap-2 border rounded px-2 py-1 mb-1">
+                                                                <span class="flex-grow-1 text-truncate" t-esc="cond.name"/>
+                                                                <button type="button" class="btn btn-link btn-sm px-1"
+                                                                        t-on-click="() => this.editCondition(cond.id)">
+                                                                    Edit
+                                                                </button>
+                                                                <button t-if="selectedSlotOwned" type="button"
+                                                                        class="btn btn-link btn-sm text-danger px-1"
+                                                                        title="Remove from this item"
+                                                                        t-on-click="() => this.removeCondition(cond.id)">
+                                                                    <i class="fa fa-times"/>
+                                                                </button>
+                                                            </div>
+                                                        </t>
+                                                    </div>
+                                                    <div t-if="selectedSlotOwned" class="d-flex flex-wrap gap-2">
+                                                        <button type="button" class="btn btn-secondary btn-sm"
+                                                                t-on-click="() => this.linkExistingConditions()">
+                                                            Link existing
+                                                        </button>
+                                                        <button type="button" class="btn btn-primary btn-sm"
+                                                                t-on-click="() => this.openNewCondition()">
+                                                            New condition
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </section>
                                 </t>
 
+                                <!-- 2. Host fields (Totals) -->
                                 <t t-if="state.zone === 'totals'">
-                                    <div class="row g-2">
-                                        <div class="col-md-6">
-                                            <label class="o_ds_field">
-                                                <span>Amount field</span>
-                                                <select class="form-select" t-on-change="(ev) => this.onEditorInput('amount_field', ev)">
-                                                    <option value="">—</option>
-                                                    <t t-foreach="state.catalogs.hostFields.filter(f => ['monetary','float','integer'].includes(f.ttype))" t-as="f" t-key="'a'+f.name">
-                                                        <option t-att-value="f.name" t-att-selected="state.editor.amount_field === f.name"
-                                                                t-esc="f.string"/>
-                                                    </t>
-                                                </select>
-                                            </label>
+                                    <section class="o_ds_slot_section">
+                                        <header class="o_ds_slot_section_head">
+                                            <span class="o_ds_slot_step">2</span>
+                                            <div>
+                                                <h3 class="o_ds_slot_section_title">Host Fields</h3>
+                                                <p class="o_ds_slot_section_help" t-esc="slotHostFieldsHelp"/>
+                                            </div>
+                                        </header>
+                                        <div class="o_ds_slot_section_body">
+                                            <div class="row g-2">
+                                                <div class="col-md-6">
+                                                    <label class="o_ds_field">
+                                                        <span>Amount Field</span>
+                                                        <select class="form-select" t-att-disabled="!selectedSlotOwned"
+                                                                t-on-change="(ev) => this.onEditorInput('amount_field', ev)">
+                                                            <option value="">—</option>
+                                                            <t t-foreach="state.catalogs.hostFields.filter(f => ['monetary','float','integer'].includes(f.ttype))" t-as="f" t-key="'a'+f.name">
+                                                                <option t-att-value="f.name" t-att-selected="state.editor.amount_field === f.name"
+                                                                        t-esc="f.string"/>
+                                                            </t>
+                                                        </select>
+                                                    </label>
+                                                </div>
+                                                <div class="col-md-6">
+                                                    <label class="o_ds_field">
+                                                        <span>Count Field</span>
+                                                        <select class="form-select" t-att-disabled="!selectedSlotOwned"
+                                                                t-on-change="(ev) => this.onEditorInput('count_field', ev)">
+                                                            <option value="">—</option>
+                                                            <t t-foreach="state.catalogs.hostFields.filter(f => ['integer','float','monetary'].includes(f.ttype) or f.name === 'id')" t-as="f" t-key="'c'+f.name">
+                                                                <option t-att-value="f.name" t-att-selected="state.editor.count_field === f.name"
+                                                                        t-esc="f.string"/>
+                                                            </t>
+                                                        </select>
+                                                    </label>
+                                                </div>
+                                            </div>
                                         </div>
-                                        <div class="col-md-6">
-                                            <label class="o_ds_field">
-                                                <span>Count field</span>
-                                                <select class="form-select" t-on-change="(ev) => this.onEditorInput('count_field', ev)">
-                                                    <option value="">—</option>
-                                                    <t t-foreach="state.catalogs.hostFields.filter(f => ['integer','float','monetary'].includes(f.ttype) or f.name === 'id')" t-as="f" t-key="'c'+f.name">
-                                                        <option t-att-value="f.name" t-att-selected="state.editor.count_field === f.name"
-                                                                t-esc="f.string"/>
-                                                    </t>
-                                                </select>
-                                            </label>
-                                        </div>
-                                    </div>
+                                    </section>
                                 </t>
 
-                                <h3 class="mt-3">Action</h3>
-                                <label class="o_ds_field">
-                                    <span>When clicked, open…</span>
-                                    <input type="text" class="form-control" t-att-value="state.editor.action_xmlid"
-                                           t-on-input="(ev) => this.onEditorInput('action_xmlid', ev)"/>
-                                </label>
+                                <!-- Click action -->
+                                <section class="o_ds_slot_section">
+                                    <header class="o_ds_slot_section_head">
+                                        <span class="o_ds_slot_step" t-esc="slotEditorActionStep"/>
+                                        <div>
+                                            <h3 class="o_ds_slot_section_title">Click Action</h3>
+                                            <p class="o_ds_slot_section_help" t-esc="slotClickActionHelp"/>
+                                        </div>
+                                    </header>
+                                    <div class="o_ds_slot_section_body">
+                                <div class="o_ds_field o_ds_slot_action_picker">
+                                    <span>Action</span>
+                                    <div class="form-control form-control-sm bg-light o_ds_slot_action_value"
+                                         t-att-title="state.editor.action_xmlid or ''">
+                                        <t t-if="state.editor.action_xmlid">
+                                            <strong class="d-block text-truncate" t-esc="selectedActionLabel"/>
+                                            <span class="text-muted small text-truncate d-block" t-esc="state.editor.action_xmlid"/>
+                                        </t>
+                                        <t t-else="">
+                                            <span class="text-muted">No action selected</span>
+                                        </t>
+                                    </div>
+                                    <input type="text" class="form-control mt-1" t-att-value="state.actionQuery"
+                                           t-on-input="onActionQueryInput"
+                                           t-on-focus="onActionQueryInput"
+                                           placeholder="Search actions…"/>
+                                    <div class="d-flex justify-content-between align-items-center mt-1">
+                                        <small class="text-muted text-truncate" t-esc="state.actionScopeLabel"/>
+                                        <button type="button" class="btn btn-link btn-sm p-0 flex-shrink-0"
+                                                t-on-click="toggleActionsShowAll">
+                                            <t t-if="state.actionsShowAll">Show scoped only</t>
+                                            <t t-else="">Show all models</t>
+                                        </button>
+                                    </div>
+                                    <div class="o_ds_action_hits mt-1" t-if="state.catalogs.actions.length">
+                                        <t t-foreach="state.catalogs.actions" t-as="act" t-key="act.id">
+                                            <button type="button" class="o_ds_action_hit"
+                                                    t-on-click="() => this.pickAction(act.xmlid)">
+                                                <strong t-esc="act.name"/>
+                                                <span class="text-muted" t-esc="act.xmlid"/>
+                                            </button>
+                                        </t>
+                                    </div>
+                                </div>
                                 <details class="o_ds_dev_options mb-2">
-                                    <summary class="small text-muted">Developer options</summary>
+                                    <summary class="small text-muted">Developer Options</summary>
                                     <label class="o_ds_field mt-2 mb-0">
-                                        <span>Or host method</span>
+                                        <span>Host Method</span>
                                         <input type="text" class="form-control" t-att-value="state.editor.action_method"
                                                t-on-input="(ev) => this.onEditorInput('action_method', ev)" placeholder="open_follow_up_report"/>
                                         <div class="form-text">
-                                            Python method name on the host model — leave blank if using action above.
+                                            Optional method on the host model. Leave empty when using Action above.
                                         </div>
                                     </label>
+                                    <label class="o_ds_field mt-2 mb-0">
+                                        <span>Action XML ID</span>
+                                        <input type="text" class="form-control font-monospace"
+                                               t-att-value="state.editor.action_xmlid"
+                                               t-on-input="(ev) => this.onEditorInput('action_xmlid', ev)"
+                                               placeholder="module.action_xmlid"/>
+                                    </label>
                                 </details>
-                                <div class="o_ds_field mt-2 o_ds_action_defaults">
-                                    <span class="fw-bold d-block mb-1">Action defaults</span>
-                                    <p class="text-muted small mb-2">
-                                        Values passed when this action opens. No JSON — use fixed values,
+                                <div class="o_ds_slot_group o_ds_action_defaults">
+                                    <h4 class="o_ds_slot_group_title">Action Defaults</h4>
+                                    <p class="o_ds_slot_group_help">
+                                        Values passed when this action opens. Use fixed values,
                                         this card’s id, or group rules (first matching group wins).
                                     </p>
                                     <t t-foreach="state.editor.contextRows" t-as="row" t-key="row_index">
@@ -1540,35 +2218,58 @@
                                         Add context key
                                     </button>
                                 </div>
-                                <label class="o_ds_field">
-                                    <span>Search actions</span>
-                                    <input type="text" class="form-control" t-att-value="state.actionQuery"
-                                           t-on-input="onActionQueryInput" placeholder="Type to search…"/>
-                                    <div class="d-flex justify-content-between align-items-center mt-1">
-                                        <small class="text-muted" t-esc="state.actionScopeLabel"/>
-                                        <button type="button" class="btn btn-link btn-sm p-0"
-                                                t-on-click="toggleActionsShowAll">
-                                            <t t-if="state.actionsShowAll">Show scoped only</t>
-                                            <t t-else="">Show all models</t>
-                                        </button>
                                     </div>
-                                </label>
-                                <div class="o_ds_action_hits">
-                                    <t t-foreach="state.catalogs.actions" t-as="act" t-key="act.id">
-                                        <button type="button" class="o_ds_action_hit" t-on-click="() => this.pickAction(act.xmlid)">
-                                            <strong t-esc="act.name"/>
-                                            <span class="text-muted" t-esc="act.xmlid"/>
-                                        </button>
-                                    </t>
-                                </div>
-                                <label class="o_ds_field mt-2">
-                                    <span>Soft module depends</span>
-                                    <input type="text" class="form-control" t-att-value="state.editor.module_depends"
-                                           t-on-input="(ev) => this.onEditorInput('module_depends', ev)" placeholder="sale_stock"/>
-                                    <div class="form-text">
-                                        This item hides if the listed module(s) are not installed.
+                                </section>
+
+                                <!-- Availability -->
+                                <section class="o_ds_slot_section">
+                                    <header class="o_ds_slot_section_head">
+                                        <span class="o_ds_slot_step" t-esc="slotEditorAvailabilityStep"/>
+                                        <div>
+                                            <h3 class="o_ds_slot_section_title">Availability</h3>
+                                            <p class="o_ds_slot_section_help">
+                                                Hide this item unless the listed apps are installed.
+                                            </p>
+                                        </div>
+                                    </header>
+                                    <div class="o_ds_slot_section_body">
+                                        <label class="o_ds_field mb-0">
+                                            <span>Required Apps</span>
+                                            <div t-att-class="'o_ds_setup_picker' + (selectedSlotOwned ? '' : ' pe-none opacity-75')">
+                                                <div class="o_ds_setup_chips mb-1">
+                                                    <span t-foreach="slotModuleChips" t-as="chip" t-key="chip.id"
+                                                          class="badge text-bg-light border">
+                                                        <t t-esc="chip.name"/>
+                                                        <button t-if="selectedSlotOwned" type="button"
+                                                                class="btn-close btn-close-sm ms-1"
+                                                                t-on-click="() => this.removeSlotModule(chip.id)"/>
+                                                    </span>
+                                                </div>
+                                                <t t-if="selectedSlotOwned">
+                                                    <input type="text" class="form-control"
+                                                           placeholder="Search apps…"
+                                                           t-att-value="state.slotModuleQuery"
+                                                           t-on-input="onSlotModuleSearch"
+                                                           t-on-focus="onSlotModuleSearch"
+                                                           t-on-blur="onSlotModuleSearchBlur"/>
+                                                    <div t-if="state.slotModuleResults.length"
+                                                         class="o_ds_setup_results list-group mt-1">
+                                                        <button type="button"
+                                                                class="list-group-item list-group-item-action py-2"
+                                                                t-foreach="state.slotModuleResults" t-as="row" t-key="row.id"
+                                                                t-on-mousedown.prevent="() => this.pickSlotModule(row)">
+                                                            <t t-esc="row.name"/>
+                                                            <span class="text-muted small ms-1" t-esc="row.technical"/>
+                                                        </button>
+                                                    </div>
+                                                </t>
+                                            </div>
+                                            <div class="form-text">
+                                                Leave empty to always show. Otherwise every listed app must be installed.
+                                            </div>
+                                        </label>
                                     </div>
-                                </label>
+                                </section>
                             </div>
                         </t>
                     </div>

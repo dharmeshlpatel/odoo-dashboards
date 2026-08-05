@@ -1277,13 +1277,10 @@
 /* Gear popup: settings-style chrome closer to the hand-written v1 form. */
 .o_dashboard_engine_settings {
     .o_setting_container {
-        margin-bottom: 1.25rem;
-        padding-bottom: 0.5rem;
-        border-bottom: 1px solid var(--border-color, #dee2e6);
-
-        &:last-child {
-            border-bottom: 0;
-        }
+        // Spacing only — no border/separator between My Data / Graph / Filters.
+        margin-bottom: 1.5rem;
+        padding-bottom: 0;
+        border-bottom: 0;
 
         h4 {
             margin-bottom: 0.35rem;
@@ -1300,6 +1297,25 @@
         margin-bottom: 0.5rem;
     }
 
+    // Nested blocks under Graph Configuration / Filters so sub-titles
+    // (Data to Include, Custom Filter, …) read as children, not peers of h4.
+    .o_dashboard_engine_subsections {
+        margin-top: 0.75rem;
+        padding: 0.75rem 0 0.25rem 1rem;
+        border-left: 3px solid var(--border-color, #dee2e6);
+    }
+
+    .o_dashboard_engine_subsection {
+        margin-top: 1rem;
+    }
+
+    .o_dashboard_engine_subsection_title {
+        font-weight: 700;
+        font-size: 0.95rem;
+        margin-bottom: 0.25rem;
+        line-height: 1.3;
+    }
+
     .o_field_many2many_checkboxes {
         .form-check {
             margin-bottom: 0.35rem;
@@ -1310,15 +1326,63 @@
     // setting.scss — the single separator is already `border-left` on
     // `.o_setting_right_pane`). Do NOT add a second border on the left
     // pane or you get the double grey rule.
+    // Pipeline | Leads: same grid width as Group By | Measures so Leads
+    // lines up under Measures (field widgets otherwise shrink the row).
+    .o_dashboard_engine_include_scopes {
+        margin-top: 0.25rem;
+        width: 100%;
+
+        > .col-12 {
+            padding-left: calc(var(--bs-gutter-x, 1.5rem) * 0.5);
+            padding-right: calc(var(--bs-gutter-x, 1.5rem) * 0.5);
+        }
+
+        .o_field_widget,
+        .o_dashboard_scope_checkboxes {
+            display: block;
+            width: 100% !important;
+            max-width: 100% !important;
+        }
+
+        .o_dashboard_scope_checkboxes > .o_settings_container:first-child {
+            margin-top: 0.5rem !important;
+            // Match sibling Group By | Measures row gutters.
+            --bs-gutter-x: 1.5rem;
+        }
+    }
+
     .o_dashboard_scope_checkboxes {
+        // First tick row: less top gap under the section help / parent title.
+        > .o_settings_container:first-child {
+            margin-top: 0.35rem !important;
+        }
+
         .o_setting_box {
+            // Float clear so long help text under the label does not wrap
+            // under the checkbox / look "broken".
+            &::after {
+                content: "";
+                display: table;
+                clear: both;
+            }
+
             .o_setting_right_pane {
                 cursor: pointer;
+                overflow: hidden; // contain float + keep help in the right pane
 
                 .o_form_label {
+                    display: block;
                     font-weight: 700;
-                    margin-bottom: 0;
+                    margin-bottom: 0.15rem;
                     cursor: pointer;
+                    line-height: 1.3;
+                }
+
+                .o_dashboard_scope_item_help {
+                    display: block;
+                    font-size: 0.875rem;
+                    line-height: 1.4;
+                    max-width: 40rem;
                 }
             }
         }

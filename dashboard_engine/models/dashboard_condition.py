@@ -125,7 +125,7 @@ class DashboardCondition(models.Model):
     )
     module_ids = fields.Many2many(
         "ir.module.module",
-        string="Only when apps installed",
+        string="Required Apps",
         help="Leave empty to always apply. Otherwise the condition is ignored "
         "until every listed app is installed.",
     )

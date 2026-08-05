@@ -43,9 +43,10 @@ def domain_leaf(path, host_ids, operator=None):
     return (path, operator, value)
 
 
-def validate_path(env, source_model, path, target_model):
-    """Ensure ``path`` is many2one-only and ends on ``target_model``.
+def validate_path_chain(env, source_model, path):
+    """Ensure ``path`` is a many2one-only chain. Return the landed model name.
 
+    Used while building hop-by-hop in Studio (intermediate hops are allowed).
     Raises :class:`~odoo.exceptions.ValidationError` on failure.
     """
     parts = split_path(path)
@@ -53,8 +54,6 @@ def validate_path(env, source_model, path, target_model):
         raise ValidationError("Relation path is empty.")
     if not source_model or source_model not in env:
         raise ValidationError("Unknown source model for relation path.")
-    if not target_model:
-        raise ValidationError("Card model is missing for relation path.")
 
     current = source_model
     for name in parts:
@@ -76,6 +75,17 @@ def validate_path(env, source_model, path, target_model):
                 "%(field)s on %(model)s has no related model."
                 % {"field": name, "model": Model._name}
             )
+    return current
+
+
+def validate_path(env, source_model, path, target_model):
+    """Ensure ``path`` is many2one-only and ends on ``target_model``.
+
+    Raises :class:`~odoo.exceptions.ValidationError` on failure.
+    """
+    if not target_model:
+        raise ValidationError("Card model is missing for relation path.")
+    current = validate_path_chain(env, source_model, path)
     if current != target_model:
         raise ValidationError(
             "Path ends on %(landed)s, not on the card's model %(target)s."

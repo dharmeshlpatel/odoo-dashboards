@@ -20,9 +20,21 @@ import {
 } from "../fields/context_kv_utils";
 
 const MANAGE_SECTIONS = [
-    { id: "menu_views", label: "Views" },
-    { id: "menu_new", label: "New" },
-    { id: "menu_reports", label: "Reports" },
+    {
+        id: "menu_views",
+        label: "Views",
+        help: _t("Browse / list screens in the card ⋮ menu."),
+    },
+    {
+        id: "menu_new",
+        label: "New",
+        help: _t("Create / form actions in the card ⋮ menu."),
+    },
+    {
+        id: "menu_reports",
+        label: "Reports",
+        help: _t("Report actions in the card ⋮ menu."),
+    },
 ];
 
 const MEASURE_AGGREGATORS = [
@@ -55,10 +67,10 @@ const ZONES = [
     },
     {
         id: "primary",
-        label: "Chart & Primary",
-        icon: "fa-area-chart",
+        label: "Primary Button",
+        icon: "fa-external-link-square",
         section: null,
-        subtitle: "Graph data source, measure, and primary action button",
+        subtitle: "Left button label, action, and defaults (chart models live in Configuration)",
     },
     {
         id: "kpis",
@@ -83,7 +95,7 @@ const ZONES = [
     },
     {
         id: "manage",
-        label: "Manage menu",
+        label: "Manage Menu",
         icon: "fa-bars",
         section: "menu",
         subtitle: "Actions in the ⋮ menu on the live card",
@@ -93,7 +105,7 @@ const ZONES = [
         label: "Configuration",
         icon: "fa-cog",
         section: null,
-        subtitle: "Scopes, graph model, and date filters",
+        subtitle: "My Data, Graph Configuration (Chart Model Options, Group By, Measures, Data to Include), and Filters",
     },
 ];
 
@@ -101,6 +113,7 @@ const EMPTY_EDITOR = () => ({
     label: "",
     label_plural: "",
     icon: "",
+    section: "",
     style: "default",
     style_mode: "static",
     show_if_zero: true,
@@ -110,10 +123,15 @@ const EMPTY_EDITOR = () => ({
     amount_field: "",
     count_field: "",
     compute_model: "",
+    compute_model_label: "",
     relate_field: "",
     compute_domain: "[]",
     value_mode: "count",
+    amount_measure_field: "",
+    amount_aggregator_type: "sum",
     module_depends: "",
+    module_ids: [],
+    module_names: [],
     condition_ids: [],
     kind: "subtitle",
     alignment: "left",
@@ -228,6 +246,7 @@ export class DashboardStudioAction extends Component {
                 graphFieldRecords: [],
                 graphMeasureFields: [],
                 graphDateFields: [],
+                slotMeasureFields: [],
                 conditions: [],
                 icons: [],
                 actions: [],
@@ -237,6 +256,14 @@ export class DashboardStudioAction extends Component {
             actionsShowAll: false,
             actionScopeLabel: "",
             actionScoped: true,
+            variantPickerQuery: {},
+            variantPickerResults: {},
+            variantPickerScopeLabel: {},
+            variantPickerShowAll: {},
+            variantModelScopeLabel: {},
+            variantModelShowAll: {},
+            variantLinkPathHopFields: {},
+            variantLinkPathExtraHop: {},
             sampleQuery: "",
             sampleId: null,
             preview: null,
@@ -248,6 +275,14 @@ export class DashboardStudioAction extends Component {
             saving: false,
             linkPathHopFields: [],
             linkPathExtraHop: false,
+            slotModelQuery: "",
+            slotModelResults: [],
+            slotModelShowAll: false,
+            slotModelScopeLabel: "",
+            slotModuleQuery: "",
+            slotModuleResults: [],
+            slotRelatePathHopFields: [],
+            slotRelatePathExtraHop: false,
         });
         onWillStart(async () => {
             await this.loadPayload();
@@ -289,6 +324,11 @@ export class DashboardStudioAction extends Component {
             return [];
         }
         return slots.filter((s) => s.section === section);
+    }
+
+    /** Manage menu only — items for one of Views / New / Reports. */
+    slotsForManageSection(sectionId) {
+        return this.slotsForZone.filter((s) => s.section === sectionId);
     }
 
     get selectedSlot() {
@@ -779,10 +819,65 @@ export class DashboardStudioAction extends Component {
         if (this.state.studioMode === "setup") {
             return this.state.setupDirty;
         }
-        if (this.state.zone !== "header" && this.selectedSlot && !this.selectedSlotOwned) {
-            return false;
+        if (this.state.studioMode === "layout") {
+            return this.state.layoutDirty;
         }
-        return this.state.dirty;
+        // Shared-slot writes are blocked in saveCurrent (toast), not here —
+        // otherwise Configuration / Primary edits never enable Save when a
+        // shared KPI happens to be selected in another zone.
+        return Boolean(this.state.dirty);
+    }
+
+    get canDiscard() {
+        void this.state.dirtyToken;
+        return Boolean(
+            this.state.dirty || this.state.layoutDirty || this.state.setupDirty
+        );
+    }
+
+    get hasGraphVariants() {
+        return Boolean((this.state.payload?.graph_variants || []).length);
+    }
+
+    get defaultGraphVariant() {
+        const rows = this.state.payload?.graph_variants || [];
+        return rows.find((v) => v.is_default) || rows[0] || null;
+    }
+
+    get restrictScopes() {
+        return (this.state.payload?.scopes || []).filter((s) => s.mode === "restrict");
+    }
+
+    get includeScopes() {
+        return (this.state.payload?.scopes || []).filter((s) => s.mode === "include");
+    }
+
+    _scopesByMode(mode) {
+        return (this.state.payload?.scopes || []).filter((s) => s.mode === mode);
+    }
+
+    /**
+     * Rebuild full scope id order after reordering only one mode's visible rows.
+     * Other-mode scopes keep their relative slots in the global list.
+     */
+    _mergeScopeModeOrder(mode, orderedModeIds) {
+        const all = this.state.payload?.scopes || [];
+        let i = 0;
+        return all.map((s) => {
+            if (s.mode === mode) {
+                return orderedModeIds[i++];
+            }
+            return s.id;
+        });
+    }
+
+    _scopeModeOf(scopeId) {
+        const scope = (this.state.payload?.scopes || []).find((s) => s.id === scopeId);
+        return scope?.mode || null;
+    }
+
+    openConfigZone() {
+        this.selectZone("config");
     }
 
     get selectedSlotOwned() {
@@ -791,6 +886,43 @@ export class DashboardStudioAction extends Component {
             return true;
         }
         return slot.owned !== false;
+    }
+
+    get selectedActionLabel() {
+        const xmlid = this.state.editor?.action_xmlid || "";
+        if (!xmlid) {
+            return "";
+        }
+        const hit = (this.state.catalogs?.actions || []).find((a) => a.xmlid === xmlid);
+        return hit?.name || xmlid;
+    }
+
+    slotOwned(slot) {
+        return Boolean(slot) && slot.owned !== false;
+    }
+
+    /** Open Studio for a shared item's source blueprint. */
+    async openSourceStudio(blueprintId) {
+        const id = Number(blueprintId);
+        if (!id || id === this.blueprintId) {
+            return;
+        }
+        if (!this._confirmDiscardIfDirty()) {
+            return;
+        }
+        try {
+            const action = await this.orm.call(
+                "dashboard.blueprint",
+                "action_open_studio",
+                [[id]]
+            );
+            await this.action.doAction(action);
+        } catch (error) {
+            this.notification.add(
+                error?.data?.message || error.message || _t("Could not open source Studio"),
+                { type: "danger" }
+            );
+        }
     }
 
     get headerChipHost() {
@@ -870,6 +1002,7 @@ export class DashboardStudioAction extends Component {
 
     markSetupDirty() {
         this.state.setupDirty = true;
+        this.state.dirtyToken = (this.state.dirtyToken || 0) + 1;
     }
 
     _syncSetupFromPayload(payload) {
@@ -983,6 +1116,7 @@ export class DashboardStudioAction extends Component {
 
     markLayoutDirty() {
         this.state.layoutDirty = true;
+        this.state.dirtyToken = (this.state.dirtyToken || 0) + 1;
     }
 
     _newId(prefix) {
@@ -1425,6 +1559,7 @@ export class DashboardStudioAction extends Component {
         if (zoneId === "config") {
             this.state.linkPathExtraHop = false;
             this.refreshLinkPathCatalogs();
+            this.refreshAllVariantLinkPathCatalogs();
         }
     }
 
@@ -1504,6 +1639,7 @@ export class DashboardStudioAction extends Component {
             ed.label = slot.label || "";
             ed.label_plural = slot.label_plural || "";
             ed.icon = slot.icon || "";
+            ed.section = slot.section || "";
             ed.style = slot.style || "default";
             ed.style_mode = slot.style_mode || "static";
             ed.show_if_zero = Boolean(slot.show_if_zero);
@@ -1513,18 +1649,31 @@ export class DashboardStudioAction extends Component {
             ed.amount_field = slot.amount_field || "";
             ed.count_field = slot.count_field || "";
             ed.compute_model = slot.compute_model || "";
+            ed.compute_model_label = slot.compute_model_label || "";
             ed.relate_field = slot.relate_field || "";
             ed.compute_domain = slot.compute_domain || "[]";
             ed.value_mode = slot.value_mode || "count";
+            const [amtField, amtAgg] = (slot.amount_aggregator || "").split(":");
+            ed.amount_measure_field = amtField || "";
+            ed.amount_aggregator_type = amtAgg || "sum";
             ed.module_depends = slot.module_depends || "";
+            ed.module_ids = [...(slot.module_ids || [])];
+            ed.module_names = [...(slot.module_names || [])];
             ed.condition_ids = [...(slot.condition_ids || [])];
             ed.contextRows = rowsFromContextRaw(slot.action_context || "{}");
         }
         this.state.editor = ed;
         this.state.contextGroupHits = {};
         this.state.contextGroupQuery = {};
+        this.state.slotModelQuery = "";
+        this.state.slotModelResults = [];
+        this.state.slotModuleQuery = "";
+        this.state.slotModuleResults = [];
+        this.state.slotRelatePathExtraHop = false;
         this._hydrateEditorGroupLabels();
         this.refreshConditionCatalog();
+        this.refreshSlotRelatePathCatalogs();
+        this.refreshSlotMeasureFields();
     }
 
     onEditorInput(field, ev) {
@@ -1540,7 +1689,391 @@ export class DashboardStudioAction extends Component {
         this.markDirty();
         if (field === "compute_model") {
             this.refreshConditionCatalog();
+            this.refreshSlotRelatePathCatalogs();
+            this.refreshSlotMeasureFields();
         }
+        if (field === "value_mode") {
+            this._onSlotValueModeChange(value);
+        }
+    }
+
+    get slotShowsCount() {
+        return ["count", "count_amount"].includes(
+            this.state.editor.value_mode || "count"
+        );
+    }
+
+    get slotShowsAmount() {
+        return ["amount", "count_amount"].includes(
+            this.state.editor.value_mode || "count"
+        );
+    }
+
+    /** Numbered steps in the slot editor (Appearance → … → Availability). */
+    get slotEditorHasFigureStep() {
+        return ["kpis", "shortcuts", "totals"].includes(this.state.zone);
+    }
+
+    get slotEditorActionStep() {
+        return this.slotEditorHasFigureStep ? "3" : "2";
+    }
+
+    get slotEditorAvailabilityStep() {
+        return this.slotEditorHasFigureStep ? "4" : "3";
+    }
+
+    get slotAppearanceHelp() {
+        const zone = this.state.zone;
+        if (zone === "totals") {
+            return _t("How this total box looks on the card.");
+        }
+        if (zone === "shortcuts") {
+            return _t("How this shortcut chip looks on the card.");
+        }
+        if (zone === "manage") {
+            return _t("How this manage-menu entry is labeled.");
+        }
+        return _t("How this KPI looks on the card.");
+    }
+
+    get slotFigureHelp() {
+        if (this.state.zone === "shortcuts") {
+            return _t(
+                "Optional count/amount for this shortcut, which records feed it, and filters."
+            );
+        }
+        return _t(
+            "What number is shown, which records feed it, and how they are filtered."
+        );
+    }
+
+    get slotHostFieldsHelp() {
+        return _t(
+            "Totals read fields from this card’s record (not a related model)."
+        );
+    }
+
+    get slotItemsSectionTitle() {
+        const zone = this.state.zone;
+        if (zone === "totals") {
+            return _t("Totals in this Block");
+        }
+        if (zone === "shortcuts") {
+            return _t("Shortcuts in this Block");
+        }
+        if (zone === "manage") {
+            return _t("Menu Items");
+        }
+        return _t("KPIs in this Block");
+    }
+
+    get slotItemsSectionHelp() {
+        const zone = this.state.zone;
+        if (zone === "manage") {
+            return _t(
+                "Items in Views / New / Reports. Pick a section above before Add."
+            );
+        }
+        if (zone === "totals") {
+            return _t("Amount/count boxes under the chart. Select one to edit below.");
+        }
+        if (zone === "shortcuts") {
+            return _t("Quick-action chips on the card. Select one to edit below.");
+        }
+        return _t("KPI badges on the card. Select one to edit below.");
+    }
+
+    get slotClickActionHelp() {
+        const zone = this.state.zone;
+        if (zone === "manage") {
+            return _t("What opens when the user picks this menu entry.");
+        }
+        if (zone === "shortcuts") {
+            return _t("What opens when the user clicks this shortcut.");
+        }
+        if (zone === "totals") {
+            return _t("What opens when the user clicks this total box.");
+        }
+        return _t("What opens when the user clicks this KPI.");
+    }
+
+    get slotValueModeHelp() {
+        const mode = this.state.editor.value_mode || "count";
+        if (mode === "amount") {
+            return _t(
+                "Shows a total from the amount field. Set the source records and the amount below."
+            );
+        }
+        if (mode === "count_amount") {
+            return _t(
+                "Shows how many records match, plus a total from the amount field."
+            );
+        }
+        return _t(
+            "Shows how many source records match the filters. No amount field is used."
+        );
+    }
+
+    _onSlotValueModeChange(mode) {
+        if (mode === "count") {
+            this.state.editor.amount_measure_field = "";
+            this.state.editor.amount_aggregator_type = "sum";
+        }
+    }
+
+    _slotAmountAggregatorValue() {
+        const field = (this.state.editor.amount_measure_field || "").trim();
+        if (!field || !this.slotShowsAmount) {
+            return false;
+        }
+        const agg = this.state.editor.amount_aggregator_type || "sum";
+        return `${field}:${agg}`;
+    }
+
+    async refreshSlotMeasureFields() {
+        const model = this.state.editor?.compute_model;
+        if (!model) {
+            this.state.catalogs.slotMeasureFields = [];
+            return;
+        }
+        try {
+            this.state.catalogs.slotMeasureFields = await this.orm.call(
+                "dashboard.blueprint",
+                "studio_model_fields",
+                [[this.blueprintId], model, ["integer", "float", "monetary"]]
+            );
+        } catch {
+            this.state.catalogs.slotMeasureFields = [];
+        }
+    }
+
+    get slotModuleChips() {
+        const ids = this.state.editor.module_ids || [];
+        const names = this.state.editor.module_names || [];
+        return ids.map((id, i) => ({ id, name: names[i] || `#${id}` }));
+    }
+
+    get slotRelatePathRows() {
+        const segments = (this.state.editor.relate_field || "")
+            .split(".")
+            .filter(Boolean);
+        const count = Math.max(
+            1,
+            segments.length + (this.state.slotRelatePathExtraHop ? 1 : 0)
+        );
+        const rows = [];
+        for (let i = 0; i < count; i++) {
+            rows.push({
+                index: i,
+                value: segments[i] || "",
+                options: this.state.slotRelatePathHopFields[i] || [],
+                showSep: i < count - 1,
+            });
+        }
+        return rows;
+    }
+
+    get canAddSlotRelatePathHop() {
+        if (this.state.slotRelatePathExtraHop) {
+            return false;
+        }
+        const segments = (this.state.editor.relate_field || "")
+            .split(".")
+            .filter(Boolean);
+        if (!segments.length) {
+            return false;
+        }
+        const lastIdx = segments.length - 1;
+        const opts = this.state.slotRelatePathHopFields[lastIdx] || [];
+        const sel = opts.find((f) => f.name === segments[lastIdx]);
+        return Boolean(sel?.relation);
+    }
+
+    get canRemoveSlotRelatePathHop() {
+        return Boolean(
+            (this.state.editor.relate_field || "").split(".").filter(Boolean).length
+        );
+    }
+
+    async onSlotComputeModelSearch(ev) {
+        const term = ev?.target?.value ?? this.state.slotModelQuery;
+        this.state.slotModelQuery = term;
+        const res = await this.orm.call(
+            "dashboard.blueprint",
+            "studio_search_chart_models",
+            [
+                [this.blueprintId],
+                term || "",
+                20,
+                Boolean(this.state.slotModelShowAll),
+            ]
+        );
+        this.state.slotModelResults = res.models || [];
+        this.state.slotModelScopeLabel = res.scope_label || "";
+    }
+
+    toggleSlotModelsShowAll() {
+        this.state.slotModelShowAll = !this.state.slotModelShowAll;
+        this.onSlotComputeModelSearch();
+    }
+
+    pickSlotComputeModel(row) {
+        const model = (row?.model || "").trim();
+        if (!model) {
+            return;
+        }
+        this.state.editor.compute_model = model;
+        this.state.editor.compute_model_label = row.name || model;
+        this.state.slotModelQuery = "";
+        this.state.slotModelResults = [];
+        this.state.editor.relate_field = "";
+        this.state.editor.amount_measure_field = "";
+        this.state.slotRelatePathExtraHop = false;
+        this.markDirty();
+        this.refreshConditionCatalog();
+        this.refreshSlotRelatePathCatalogs();
+        this.refreshSlotMeasureFields();
+    }
+
+    clearSlotComputeModel() {
+        this.state.editor.compute_model = "";
+        this.state.editor.compute_model_label = "";
+        this.state.editor.relate_field = "";
+        this.state.editor.amount_measure_field = "";
+        this.state.slotRelatePathExtraHop = false;
+        this.state.slotRelatePathHopFields = [];
+        this.state.catalogs.slotMeasureFields = [];
+        this.markDirty();
+        this.refreshConditionCatalog();
+    }
+
+    async onSlotModuleSearch(ev) {
+        const term = ev?.target?.value ?? this.state.slotModuleQuery;
+        this.state.slotModuleQuery = term;
+        const rows = await this.orm.call(
+            "dashboard.blueprint",
+            "studio_search_modules",
+            [[this.blueprintId], term || "", 20]
+        );
+        this.state.slotModuleResults = rows || [];
+    }
+
+    onSlotModuleSearchBlur() {
+        clearTimeout(this._slotModuleBlurTimer);
+        this._slotModuleBlurTimer = setTimeout(() => {
+            this.state.slotModuleResults = [];
+        }, 180);
+    }
+
+    pickSlotModule(row) {
+        const id = Number(row?.id);
+        if (!id || (this.state.editor.module_ids || []).includes(id)) {
+            this.state.slotModuleQuery = "";
+            this.state.slotModuleResults = [];
+            return;
+        }
+        this.state.editor.module_ids = [...(this.state.editor.module_ids || []), id];
+        this.state.editor.module_names = [
+            ...(this.state.editor.module_names || []),
+            row.name || row.technical || `#${id}`,
+        ];
+        this.state.slotModuleQuery = "";
+        this.state.slotModuleResults = [];
+        this.markDirty();
+    }
+
+    removeSlotModule(moduleId) {
+        const id = Number(moduleId);
+        const idx = (this.state.editor.module_ids || []).indexOf(id);
+        if (idx < 0) {
+            return;
+        }
+        this.state.editor.module_ids = this.state.editor.module_ids.filter(
+            (x) => x !== id
+        );
+        this.state.editor.module_names = this.state.editor.module_names.filter(
+            (_n, i) => i !== idx
+        );
+        this.markDirty();
+    }
+
+    async refreshSlotRelatePathCatalogs() {
+        const computeModel = this.state.editor?.compute_model;
+        if (!computeModel) {
+            this.state.slotRelatePathHopFields = [];
+            return;
+        }
+        const segments = (this.state.editor.relate_field || "")
+            .split(".")
+            .filter(Boolean);
+        const hopCount = Math.max(
+            1,
+            segments.length + (this.state.slotRelatePathExtraHop ? 1 : 0)
+        );
+        const catalogs = [];
+        let model = computeModel;
+        for (let i = 0; i < hopCount; i++) {
+            if (!model) {
+                catalogs.push([]);
+                continue;
+            }
+            const fields = await this.orm.call(
+                "dashboard.blueprint",
+                "studio_model_fields",
+                [[this.blueprintId], model, ["many2one"]]
+            );
+            catalogs.push(fields);
+            const seg = segments[i];
+            if (seg) {
+                const sel = fields.find((f) => f.name === seg);
+                model = sel?.relation || false;
+            } else {
+                model = false;
+            }
+        }
+        this.state.slotRelatePathHopFields = catalogs;
+    }
+
+    async onSlotRelatePathHopChange(hopIndex, ev) {
+        const name = ev.target.value;
+        let segments = (this.state.editor.relate_field || "")
+            .split(".")
+            .filter(Boolean);
+        while (segments.length <= hopIndex) {
+            segments.push("");
+        }
+        if (name) {
+            segments[hopIndex] = name;
+            segments = segments.slice(0, hopIndex + 1);
+        } else {
+            segments = segments.slice(0, hopIndex);
+        }
+        this.state.editor.relate_field = segments.filter(Boolean).join(".");
+        this.state.slotRelatePathExtraHop = false;
+        this.markDirty();
+        await this.refreshSlotRelatePathCatalogs();
+    }
+
+    async addSlotRelatePathHop() {
+        if (!this.canAddSlotRelatePathHop) {
+            return;
+        }
+        this.state.slotRelatePathExtraHop = true;
+        await this.refreshSlotRelatePathCatalogs();
+    }
+
+    async removeSlotRelatePathHop() {
+        const segments = (this.state.editor.relate_field || "")
+            .split(".")
+            .filter(Boolean);
+        if (!segments.length) {
+            return;
+        }
+        segments.pop();
+        this.state.editor.relate_field = segments.join(".");
+        this.state.slotRelatePathExtraHop = false;
+        this.markDirty();
+        await this.refreshSlotRelatePathCatalogs();
     }
 
     _touchContextRows() {
@@ -1675,7 +2208,7 @@ export class DashboardStudioAction extends Component {
                 "studio_write_blueprint",
                 [[this.blueprintId], { [field]: value || false }]
             );
-            await this.applyPayload(payload, false);
+            await this.applyStudioMutation(payload);
         } catch (error) {
             this.notification.add(
                 error?.data?.message || error.message || _t("Config update failed"),
@@ -1836,7 +2369,7 @@ export class DashboardStudioAction extends Component {
                 "studio_write_blueprint",
                 [[this.blueprintId], { [field]: clean }]
             );
-            await this.applyPayload(payload, false);
+            await this.applyStudioMutation(payload);
         } catch (error) {
             this.notification.add(
                 error?.data?.message || error.message || _t("Header settings update failed"),
@@ -1853,7 +2386,7 @@ export class DashboardStudioAction extends Component {
                 "studio_write_header_item",
                 [[this.blueprintId], headerId, { [field]: value }]
             );
-            await this.applyPayload(payload, false);
+            await this.applyStudioMutation(payload);
         } catch (error) {
             this.notification.add(
                 error?.data?.message || error.message || _t("Header line update failed"),
@@ -1880,7 +2413,14 @@ export class DashboardStudioAction extends Component {
         this.markDirty();
     }
 
-    async applyPayload(payload, selectCreated = true) {
+    async applyPayload(payload, selectCreated = true, options = {}) {
+        // Immediate RPC helpers (scopes, variants, header rows) also land here.
+        // If the admin already has Content edits pending, do not wipe the editor
+        // or clear dirty — that left Save/Discard permanently disabled.
+        const resetEditor =
+            options.resetEditor !== undefined
+                ? Boolean(options.resetEditor)
+                : !this.state.dirty;
         this.state.payload = payload;
         if (selectCreated && payload.created_slot_id) {
             this.state.selectedSlotId = payload.created_slot_id;
@@ -1888,13 +2428,33 @@ export class DashboardStudioAction extends Component {
         if (selectCreated && payload.created_header_id) {
             this.state.selectedHeaderId = payload.created_header_id;
         }
-        if (payload.layout) {
+        if (selectCreated && payload.created_graph_variant_id) {
+            // no selection UI yet; payload refresh is enough
+        }
+        if (payload.layout && (!this.state.layoutDirty || options.resetEditor)) {
             this.state.layoutDraft = JSON.parse(JSON.stringify(payload.layout));
         }
-        this._syncSetupFromPayload(payload);
-        this._syncEditorFromSelection();
-        this.state.dirty = false;
+        if (!this.state.setupDirty || options.resetEditor) {
+            this._syncSetupFromPayload(payload);
+        }
+        if (resetEditor) {
+            this._syncEditorFromSelection();
+            this.state.dirty = false;
+        }
+        this.state.dirtyToken = (this.state.dirtyToken || 0) + 1;
+        if (this.state.zone === "config") {
+            await this.refreshAllVariantLinkPathCatalogs();
+        }
         await this.loadPreview();
+    }
+
+    /**
+     * Payload from an immediate studio_* create / write / unlink / reorder RPC.
+     * Those already hit the DB; keep Save/Discard active so any change lights the toolbar.
+     */
+    async applyStudioMutation(payload, selectCreated = false) {
+        await this.applyPayload(payload, selectCreated);
+        this.markDirty();
     }
 
     onSetupMenuNameInput(ev) {
@@ -2182,13 +2742,14 @@ export class DashboardStudioAction extends Component {
                 [[this.blueprintId], vals]
             );
             const cleanup = payload.setup_cleanup_count || 0;
-            await this.applyPayload(payload, false);
+            this.state.setupDirty = false;
+            await this.applyPayload(payload, false, { resetEditor: true });
             await this.loadCatalogs();
             await this.loadSamples("");
             if (cleanup > 0) {
                 this.state.setupBanner = { count: cleanup };
             }
-            this.notification.add(_t("Setup saved"), { type: "success" });
+            this.notification.add(_t("Dashboard settings saved"), { type: "success" });
         } catch (error) {
             this.notification.add(
                 error?.data?.message || error.message || _t("Save failed"),
@@ -2272,6 +2833,9 @@ export class DashboardStudioAction extends Component {
                     style_mode: ed.style_mode || "static",
                     show_if_zero: ed.show_if_zero,
                     action_xmlid: ed.action_xmlid || false,
+                    ...(this.state.zone === "manage" && ed.section
+                        ? { section: ed.section }
+                        : {}),
                     action_method: ed.action_method || false,
                     action_model: ed.action_model || false,
                     amount_field: ed.amount_field || false,
@@ -2280,7 +2844,8 @@ export class DashboardStudioAction extends Component {
                     relate_field: ed.relate_field || false,
                     compute_domain: ed.compute_domain || "[]",
                     value_mode: ed.value_mode || "count",
-                    module_depends: ed.module_depends || false,
+                    amount_aggregator: this._slotAmountAggregatorValue(),
+                    module_ids: ed.module_ids || [],
                     condition_ids: ed.condition_ids || [],
                     action_context: serializeContextRows(ed.contextRows || []),
                     name: ed.label || this.selectedSlot.name,
@@ -2292,7 +2857,12 @@ export class DashboardStudioAction extends Component {
                 );
             }
             if (payload) {
-                await this.applyPayload(payload, false);
+                await this.applyPayload(payload, false, { resetEditor: true });
+                this.notification.add(_t("Saved"), { type: "success" });
+            } else if (this.state.dirty) {
+                // Structure-only changes already persisted via studio_* RPCs.
+                this.state.dirty = false;
+                this.state.dirtyToken = (this.state.dirtyToken || 0) + 1;
                 this.notification.add(_t("Saved"), { type: "success" });
             }
         } catch (error) {
@@ -2364,6 +2934,13 @@ export class DashboardStudioAction extends Component {
         }
     }
 
+    /** Owned slots in a section (shared pack rows are not on this blueprint). */
+    _ownedSectionSlots(section) {
+        return this.slotsForZone.filter(
+            (s) => s.section === section && s.owned !== false
+        );
+    }
+
     async onDropSlot(targetId, ev) {
         ev.preventDefault();
         const sourceId = this._dragSlotId || Number(ev.dataTransfer?.getData("text/plain"));
@@ -2371,19 +2948,20 @@ export class DashboardStudioAction extends Component {
         if (!sourceId || sourceId === targetId) {
             return;
         }
-        const owned = this.slotsForZone.filter((s) => s.owned !== false);
-        if (owned.length !== this.slotsForZone.length) {
+        const source = this.slotsForZone.find((s) => s.id === sourceId);
+        const target = this.slotsForZone.find((s) => s.id === targetId);
+        if (!source || !target || source.owned === false || target.owned === false) {
             this.notification.add(
                 _t("Shared items cannot be reordered here. Reorder them on their source dashboard."),
                 { type: "warning" }
             );
             return;
         }
-        const section = owned.find((s) => s.id === sourceId)?.section;
-        if (!section) {
+        if (source.section !== target.section) {
             return;
         }
-        const ids = owned.map((s) => s.id);
+        const section = source.section;
+        const ids = this._ownedSectionSlots(section).map((s) => s.id);
         const from = ids.indexOf(sourceId);
         const to = ids.indexOf(targetId);
         if (from < 0 || to < 0) {
@@ -2391,12 +2969,19 @@ export class DashboardStudioAction extends Component {
         }
         ids.splice(from, 1);
         ids.splice(to, 0, sourceId);
-        const payload = await this.orm.call(
-            "dashboard.blueprint",
-            "studio_reorder_slots",
-            [[this.blueprintId], section, ids]
-        );
-        await this.applyPayload(payload, false);
+        try {
+            const payload = await this.orm.call(
+                "dashboard.blueprint",
+                "studio_reorder_slots",
+                [[this.blueprintId], section, ids]
+            );
+            await this.applyStudioMutation(payload);
+        } catch (error) {
+            this.notification.add(
+                error?.data?.message || error.message || _t("Reorder failed"),
+                { type: "danger" }
+            );
+        }
     }
 
     onDragOver(ev) {
@@ -2468,7 +3053,12 @@ export class DashboardStudioAction extends Component {
         });
     }
 
-    async addItem() {
+    async addManageItem(sectionId) {
+        this.state.manageSection = sectionId;
+        return this.addItem(sectionId);
+    }
+
+    async addItem(sectionOverride = null) {
         this.state.saving = true;
         try {
             if (this.state.zone === "header") {
@@ -2477,12 +3067,11 @@ export class DashboardStudioAction extends Component {
                     "studio_create_header_item",
                     [[this.blueprintId], { kind: "subtitle", field_names: "" }]
                 );
-                await this.applyPayload(payload);
-                this.markDirty();
+                await this.applyStudioMutation(payload, true);
                 this.notification.add(_t("Header line added"), { type: "success" });
                 return;
             }
-            const section = this._defaultSectionForZone();
+            const section = sectionOverride || this._defaultSectionForZone();
             if (!section) {
                 return;
             }
@@ -2493,16 +3082,19 @@ export class DashboardStudioAction extends Component {
                       ? _t("New total")
                       : this.state.zone === "shortcuts"
                         ? _t("New shortcut")
-                        : _t("New menu item");
+                        : section === "menu_views"
+                          ? _t("New view")
+                          : section === "menu_new"
+                            ? _t("New create action")
+                            : section === "menu_reports"
+                              ? _t("New report")
+                              : _t("New menu item");
             const payload = await this.orm.call(
                 "dashboard.blueprint",
                 "studio_create_slot",
                 [[this.blueprintId], section, { label, label_plural: label }]
             );
-            await this.applyPayload(payload);
-            // Create already wrote to the DB; keep Save active so the user
-            // can refine the new item and persist editor changes.
-            this.markDirty();
+            await this.applyStudioMutation(payload, true);
             this.notification.add(_t("Item added"), { type: "success" });
         } catch (error) {
             this.notification.add(error?.data?.message || error.message || _t("Add failed"), {
@@ -2524,7 +3116,7 @@ export class DashboardStudioAction extends Component {
                 [[this.blueprintId], this.selectedHeader.id]
             );
             this.state.selectedHeaderId = null;
-            await this.applyPayload(payload);
+            await this.applyStudioMutation(payload, true);
             return;
         }
         if (!this.selectedSlot) {
@@ -2546,7 +3138,7 @@ export class DashboardStudioAction extends Component {
             [[this.blueprintId], this.selectedSlot.id]
         );
         this.state.selectedSlotId = null;
-        await this.applyPayload(payload);
+        await this.applyStudioMutation(payload, true);
         this.notification.add(_t("Item removed"), { type: "info" });
     }
 
@@ -2567,41 +3159,124 @@ export class DashboardStudioAction extends Component {
                 "studio_reorder_headers",
                 [[this.blueprintId], ids]
             );
-            await this.applyPayload(payload, false);
+            await this.applyStudioMutation(payload);
             return;
         }
-        if (!this.selectedSlotOwned) {
+        if (!this.selectedSlotOwned || !this.selectedSlot) {
             this.notification.add(
                 _t("Shared items cannot be reordered here. Reorder them on their source dashboard."),
                 { type: "warning" }
             );
             return;
         }
-        const section = this.selectedSlot?.section;
+        await this.moveSlot(this.selectedSlot.id, delta);
+    }
+
+    /**
+     * Delegated clicks for Items in this block (avoids nested drag/select
+     * handlers swallowing up/down/delete).
+     */
+    onItemListClick(ev) {
+        const listEl = ev.currentTarget;
+        const actionEl = ev.target.closest?.("[data-slot-action]");
+        if (!actionEl || !listEl?.contains(actionEl)) {
+            return;
+        }
+        ev.preventDefault();
+        ev.stopPropagation();
+        const slotId = Number(actionEl.getAttribute("data-slot-id"));
+        const action = actionEl.getAttribute("data-slot-action");
+        if (!slotId || !action) {
+            return;
+        }
+        if (action === "select") {
+            this.selectSlot(slotId);
+            return;
+        }
+        if (action === "up") {
+            this.moveSlot(slotId, -1);
+            return;
+        }
+        if (action === "down") {
+            this.moveSlot(slotId, 1);
+            return;
+        }
+        if (action === "remove") {
+            this.removeSlot(slotId);
+        }
+    }
+
+    async moveSlot(slotId, delta) {
+        const slot = this.slotsForZone.find((s) => s.id === slotId);
+        if (!slot) {
+            return;
+        }
+        if (slot.owned === false) {
+            this.notification.add(
+                _t("Shared items cannot be reordered here. Reorder them on their source dashboard."),
+                { type: "warning" }
+            );
+            return;
+        }
+        const section = slot.section;
         if (!section) {
             return;
         }
-        const owned = this.slotsForZone.filter((s) => s.owned !== false);
-        if (owned.length !== this.slotsForZone.length) {
-            this.notification.add(
-                _t("Shared items cannot be reordered here. Reorder them on their source dashboard."),
-                { type: "warning" }
-            );
-            return;
-        }
-        const ids = owned.map((s) => s.id);
-        const idx = ids.indexOf(this.selectedSlot.id);
+        const ids = this._ownedSectionSlots(section).map((s) => s.id);
+        const idx = ids.indexOf(slotId);
         const next = idx + delta;
         if (idx < 0 || next < 0 || next >= ids.length) {
             return;
         }
         [ids[idx], ids[next]] = [ids[next], ids[idx]];
-        const payload = await this.orm.call(
-            "dashboard.blueprint",
-            "studio_reorder_slots",
-            [[this.blueprintId], section, ids]
-        );
-        await this.applyPayload(payload, false);
+        this.state.selectedSlotId = slotId;
+        try {
+            const payload = await this.orm.call(
+                "dashboard.blueprint",
+                "studio_reorder_slots",
+                [[this.blueprintId], section, ids]
+            );
+            await this.applyStudioMutation(payload);
+        } catch (error) {
+            this.notification.add(
+                error?.data?.message || error.message || _t("Reorder failed"),
+                { type: "danger" }
+            );
+        }
+    }
+
+    async removeSlot(slotId) {
+        const slot = this.slotsForZone.find((s) => s.id === slotId);
+        if (!slot) {
+            return;
+        }
+        if (slot.owned === false) {
+            this.notification.add(
+                _t("Shared item — remove it on its source dashboard, or unlink the pack in Setup."),
+                { type: "warning" }
+            );
+            return;
+        }
+        if (!confirm(_t("Remove this item from the card?"))) {
+            return;
+        }
+        try {
+            const payload = await this.orm.call(
+                "dashboard.blueprint",
+                "studio_unlink_slot",
+                [[this.blueprintId], slotId]
+            );
+            if (this.state.selectedSlotId === slotId) {
+                this.state.selectedSlotId = null;
+            }
+            await this.applyStudioMutation(payload);
+            this.notification.add(_t("Item removed"), { type: "info" });
+        } catch (error) {
+            this.notification.add(
+                error?.data?.message || error.message || _t("Remove failed"),
+                { type: "danger" }
+            );
+        }
     }
 
     _scopeResModel() {
@@ -2612,7 +3287,10 @@ export class DashboardStudioAction extends Component {
         );
     }
 
-    async addScope() {
+    async addScope(mode = "include") {
+        const cleanMode = mode === "restrict" ? "restrict" : "include";
+        const name =
+            cleanMode === "restrict" ? _t("My Data") : _t("Data to Include");
         this.state.saving = true;
         try {
             const payload = await this.orm.call(
@@ -2621,21 +3299,439 @@ export class DashboardStudioAction extends Component {
                 [
                     [this.blueprintId],
                     {
-                        name: _t("New scope"),
-                        mode: "include",
+                        name,
+                        mode: cleanMode,
                         domain: "[]",
                         default_on: false,
                     },
                 ]
             );
-            await this.applyPayload(payload);
-            this.notification.add(_t("Scope added"), { type: "success" });
+            await this.applyStudioMutation(payload, true);
+            this.notification.add(
+                cleanMode === "restrict"
+                    ? _t("My Data scope added")
+                    : _t("Data to Include scope added"),
+                { type: "success" }
+            );
         } catch (error) {
             this.notification.add(error?.data?.message || error.message || _t("Add scope failed"), {
                 type: "danger",
             });
         } finally {
             this.state.saving = false;
+        }
+    }
+
+    async addGraphVariant() {
+        this.state.saving = true;
+        try {
+            const payload = await this.orm.call(
+                "dashboard.blueprint",
+                "studio_create_graph_variant",
+                [[this.blueprintId], {}]
+            );
+            await this.applyStudioMutation(payload, true);
+            this.notification.add(_t("Chart Model Option added"), { type: "success" });
+        } catch (error) {
+            this.notification.add(
+                error?.data?.message || error.message || _t("Add chart model option failed"),
+                { type: "danger" }
+            );
+        } finally {
+            this.state.saving = false;
+        }
+    }
+
+    async setDefaultGraphVariant(variantId) {
+        this.state.saving = true;
+        try {
+            const payload = await this.orm.call(
+                "dashboard.blueprint",
+                "studio_set_default_graph_variant",
+                [[this.blueprintId], variantId]
+            );
+            await this.applyStudioMutation(payload);
+            this.notification.add(_t("Default chart model updated"), { type: "success" });
+        } catch (error) {
+            this.notification.add(
+                error?.data?.message || error.message || _t("Set default failed"),
+                { type: "danger" }
+            );
+            await this.loadPayload();
+        } finally {
+            this.state.saving = false;
+        }
+    }
+
+    async updateGraphVariant(variantId, field, value) {
+        try {
+            const payload = await this.orm.call(
+                "dashboard.blueprint",
+                "studio_write_graph_variant",
+                [[this.blueprintId], variantId, { [field]: value }]
+            );
+            await this.applyStudioMutation(payload);
+        } catch (error) {
+            this.notification.add(
+                error?.data?.message || error.message || _t("Chart Model Option update failed"),
+                { type: "danger" }
+            );
+            await this.loadPayload();
+        }
+    }
+
+    _variantPickerKey(variantId, kind) {
+        return `${variantId}:${kind}`;
+    }
+
+    variantPickerQuery(variantId, kind) {
+        return this.state.variantPickerQuery[this._variantPickerKey(variantId, kind)] || "";
+    }
+
+    variantPickerResults(variantId, kind) {
+        return this.state.variantPickerResults[this._variantPickerKey(variantId, kind)] || [];
+    }
+
+    variantPickerScopeLabel(variantId) {
+        return this.state.variantPickerScopeLabel[variantId] || "";
+    }
+
+    variantPickerShowAll(variantId) {
+        return Boolean(this.state.variantPickerShowAll[variantId]);
+    }
+
+    clearVariantPicker(variantId, kind) {
+        const key = this._variantPickerKey(variantId, kind);
+        this.state.variantPickerQuery[key] = "";
+        this.state.variantPickerResults[key] = [];
+        if (kind === "action") {
+            this.state.variantPickerScopeLabel[variantId] = "";
+        }
+    }
+
+    onVariantPickerBlur(variantId, kind, ev) {
+        const picker = ev.currentTarget.closest(".o_ds_variant_picker");
+        this._variantPickerBlurTimers = this._variantPickerBlurTimers || {};
+        const key = this._variantPickerKey(variantId, kind);
+        clearTimeout(this._variantPickerBlurTimers[key]);
+        this._variantPickerBlurTimers[key] = setTimeout(() => {
+            const active = document.activeElement;
+            if (picker && active && picker.contains(active)) {
+                return;
+            }
+            this.clearVariantPicker(variantId, kind);
+        }, 180);
+    }
+
+    variantModelScopeLabel(variantId) {
+        return this.state.variantModelScopeLabel[variantId] || "";
+    }
+
+    variantModelShowAll(variantId) {
+        return Boolean(this.state.variantModelShowAll[variantId]);
+    }
+
+    async onVariantModelSearch(variantId, ev) {
+        const term = ev?.target?.value ?? this.variantPickerQuery(variantId, "model");
+        const key = this._variantPickerKey(variantId, "model");
+        this.state.variantPickerQuery[key] = term;
+        const res = await this.orm.call(
+            "dashboard.blueprint",
+            "studio_search_chart_models",
+            [
+                [this.blueprintId],
+                term || "",
+                20,
+                Boolean(this.state.variantModelShowAll[variantId]),
+            ]
+        );
+        this.state.variantPickerResults[key] = res.models || [];
+        this.state.variantModelScopeLabel[variantId] = res.scope_label || "";
+    }
+
+    toggleVariantModelsShowAll(variantId) {
+        this.state.variantModelShowAll[variantId] = !this.state.variantModelShowAll[variantId];
+        this.onVariantModelSearch(variantId);
+    }
+
+    async pickVariantModel(variantId, row) {
+        const model = (row?.model || "").trim();
+        if (!model) {
+            return;
+        }
+        const variant = (this.state.payload.graph_variants || []).find((v) => v.id === variantId);
+        this.clearVariantPicker(variantId, "model");
+        if (variant && variant.graph_model === model) {
+            return;
+        }
+        await this.updateGraphVariant(variantId, "graph_model", model);
+        await this.refreshVariantLinkPathCatalogs(variantId);
+    }
+
+    variantLinkPathRows(variantId) {
+        const variant = (this.state.payload?.graph_variants || []).find((v) => v.id === variantId);
+        const segments = (variant?.graph_data_field || "").split(".").filter(Boolean);
+        const extra = Boolean(this.state.variantLinkPathExtraHop[variantId]);
+        const count = Math.max(1, segments.length + (extra ? 1 : 0));
+        const catalogs = this.state.variantLinkPathHopFields[variantId] || [];
+        const rows = [];
+        for (let i = 0; i < count; i++) {
+            rows.push({
+                index: i,
+                value: segments[i] || "",
+                options: catalogs[i] || [],
+                showSep: i < count - 1,
+            });
+        }
+        return rows;
+    }
+
+    canAddVariantLinkPathHop(variantId) {
+        if (this.state.variantLinkPathExtraHop[variantId]) {
+            return false;
+        }
+        const variant = (this.state.payload?.graph_variants || []).find((v) => v.id === variantId);
+        const segments = (variant?.graph_data_field || "").split(".").filter(Boolean);
+        if (!segments.length) {
+            return false;
+        }
+        const lastIdx = segments.length - 1;
+        const opts = (this.state.variantLinkPathHopFields[variantId] || [])[lastIdx] || [];
+        const sel = opts.find((f) => f.name === segments[lastIdx]);
+        return Boolean(sel?.relation);
+    }
+
+    canRemoveVariantLinkPathHop(variantId) {
+        const variant = (this.state.payload?.graph_variants || []).find((v) => v.id === variantId);
+        return Boolean((variant?.graph_data_field || "").split(".").filter(Boolean).length);
+    }
+
+    async refreshVariantLinkPathCatalogs(variantId) {
+        const variant = (this.state.payload?.graph_variants || []).find((v) => v.id === variantId);
+        if (!variant?.graph_model) {
+            this.state.variantLinkPathHopFields[variantId] = [];
+            return;
+        }
+        const segments = (variant.graph_data_field || "").split(".").filter(Boolean);
+        const hopCount = Math.max(
+            1,
+            segments.length + (this.state.variantLinkPathExtraHop[variantId] ? 1 : 0)
+        );
+        const catalogs = [];
+        let model = variant.graph_model;
+        for (let i = 0; i < hopCount; i++) {
+            if (!model) {
+                catalogs.push([]);
+                continue;
+            }
+            const fields = await this.orm.call(
+                "dashboard.blueprint",
+                "studio_model_fields",
+                [[this.blueprintId], model, ["many2one"]]
+            );
+            catalogs.push(fields);
+            const seg = segments[i];
+            if (seg) {
+                const sel = fields.find((f) => f.name === seg);
+                model = sel?.relation || false;
+            } else {
+                model = false;
+            }
+        }
+        this.state.variantLinkPathHopFields[variantId] = catalogs;
+    }
+
+    async refreshAllVariantLinkPathCatalogs() {
+        const ids = (this.state.payload?.graph_variants || []).map((v) => v.id);
+        await Promise.all(ids.map((id) => this.refreshVariantLinkPathCatalogs(id)));
+    }
+
+    async onVariantLinkPathHopChange(variantId, hopIndex, ev) {
+        const name = ev.target.value;
+        const variant = (this.state.payload?.graph_variants || []).find((v) => v.id === variantId);
+        if (!variant) {
+            return;
+        }
+        let segments = (variant.graph_data_field || "").split(".").filter(Boolean);
+        while (segments.length <= hopIndex) {
+            segments.push("");
+        }
+        if (name) {
+            segments[hopIndex] = name;
+            segments = segments.slice(0, hopIndex + 1);
+        } else {
+            segments = segments.slice(0, hopIndex);
+        }
+        const path = segments.filter(Boolean).join(".");
+        this.state.variantLinkPathExtraHop[variantId] = false;
+        await this.updateGraphVariant(variantId, "graph_data_field", path || false);
+        await this.refreshVariantLinkPathCatalogs(variantId);
+    }
+
+    async addVariantLinkPathHop(variantId) {
+        if (!this.canAddVariantLinkPathHop(variantId)) {
+            return;
+        }
+        this.state.variantLinkPathExtraHop[variantId] = true;
+        await this.refreshVariantLinkPathCatalogs(variantId);
+    }
+
+    async removeVariantLinkPathHop(variantId) {
+        const variant = (this.state.payload?.graph_variants || []).find((v) => v.id === variantId);
+        if (!variant) {
+            return;
+        }
+        const segments = (variant.graph_data_field || "").split(".").filter(Boolean);
+        if (!segments.length) {
+            return;
+        }
+        segments.pop();
+        this.state.variantLinkPathExtraHop[variantId] = false;
+        await this.updateGraphVariant(
+            variantId,
+            "graph_data_field",
+            segments.join(".") || false
+        );
+        await this.refreshVariantLinkPathCatalogs(variantId);
+    }
+
+    async onVariantActionSearch(variantId, graphModel, ev) {
+        const term = ev?.target?.value ?? this.variantPickerQuery(variantId, "action");
+        const key = this._variantPickerKey(variantId, "action");
+        this.state.variantPickerQuery[key] = term;
+        const res = await this.orm.call(
+            "dashboard.blueprint",
+            "studio_search_actions",
+            [
+                [this.blueprintId],
+                term || "",
+                25,
+                Boolean(this.state.variantPickerShowAll[variantId]),
+                graphModel || false,
+            ]
+        );
+        this.state.variantPickerResults[key] = res.actions || [];
+        this.state.variantPickerScopeLabel[variantId] = res.scope_label || "";
+    }
+
+    toggleVariantActionsShowAll(variantId, graphModel) {
+        this.state.variantPickerShowAll[variantId] = !this.state.variantPickerShowAll[variantId];
+        this.onVariantActionSearch(variantId, graphModel);
+    }
+
+    async pickVariantAction(variantId, act) {
+        const xmlid = (act?.xmlid || "").trim();
+        if (!xmlid) {
+            return;
+        }
+        const variant = (this.state.payload.graph_variants || []).find((v) => v.id === variantId);
+        this.clearVariantPicker(variantId, "action");
+        if (variant && variant.primary_action_xmlid === xmlid) {
+            return;
+        }
+        await this.updateGraphVariant(variantId, "primary_action_xmlid", xmlid);
+    }
+
+    onGraphVariantFieldBlur(variantId, field, ev) {
+        let value = ev.target.value;
+        const variant = (this.state.payload.graph_variants || []).find((v) => v.id === variantId);
+        if (!variant) {
+            return;
+        }
+        if (field === "primary_button_label") {
+            value = (value || "").trim();
+            if (!value) {
+                ev.target.value = variant.primary_button_label || "";
+                return;
+            }
+            if (variant.primary_button_label === value) {
+                return;
+            }
+            this.updateGraphVariant(variantId, field, value);
+        }
+    }
+
+    async removeGraphVariant(variantId) {
+        if (!confirm(_t("Remove this chart model option?"))) {
+            return;
+        }
+        this.state.saving = true;
+        try {
+            const payload = await this.orm.call(
+                "dashboard.blueprint",
+                "studio_unlink_graph_variant",
+                [[this.blueprintId], variantId]
+            );
+            await this.applyStudioMutation(payload);
+            this.notification.add(_t("Chart Model Option removed"), { type: "info" });
+        } catch (error) {
+            this.notification.add(
+                error?.data?.message || error.message || _t("Remove chart model option failed"),
+                { type: "danger" }
+            );
+        } finally {
+            this.state.saving = false;
+        }
+    }
+
+    async reorderGraphVariants(orderedIds) {
+        const payload = await this.orm.call(
+            "dashboard.blueprint",
+            "studio_reorder_graph_variants",
+            [[this.blueprintId], orderedIds]
+        );
+        await this.applyStudioMutation(payload);
+    }
+
+    onDragStartGraphVariant(variantId, ev) {
+        this._dragGraphVariantId = variantId;
+        if (ev.dataTransfer) {
+            ev.dataTransfer.effectAllowed = "move";
+            ev.dataTransfer.setData("text/plain", String(variantId));
+        }
+    }
+
+    async onDropGraphVariant(targetId, ev) {
+        ev.preventDefault();
+        const sourceId =
+            this._dragGraphVariantId || Number(ev.dataTransfer?.getData("text/plain"));
+        this._dragGraphVariantId = null;
+        if (!sourceId || sourceId === targetId) {
+            return;
+        }
+        const ids = (this.state.payload.graph_variants || []).map((v) => v.id);
+        const from = ids.indexOf(sourceId);
+        const to = ids.indexOf(targetId);
+        if (from < 0 || to < 0) {
+            return;
+        }
+        ids.splice(from, 1);
+        ids.splice(to, 0, sourceId);
+        try {
+            await this.reorderGraphVariants(ids);
+        } catch (error) {
+            this.notification.add(
+                error?.data?.message || error.message || _t("Reorder failed"),
+                { type: "danger" }
+            );
+        }
+    }
+
+    async moveGraphVariant(variantId, delta) {
+        const ids = (this.state.payload.graph_variants || []).map((v) => v.id);
+        const idx = ids.indexOf(variantId);
+        const next = idx + delta;
+        if (idx < 0 || next < 0 || next >= ids.length) {
+            return;
+        }
+        [ids[idx], ids[next]] = [ids[next], ids[idx]];
+        try {
+            await this.reorderGraphVariants(ids);
+        } catch (error) {
+            this.notification.add(
+                error?.data?.message || error.message || _t("Reorder failed"),
+                { type: "danger" }
+            );
         }
     }
 
@@ -2646,7 +3742,7 @@ export class DashboardStudioAction extends Component {
                 "studio_write_scope",
                 [[this.blueprintId], scopeId, { [field]: value }]
             );
-            await this.applyPayload(payload, false);
+            await this.applyStudioMutation(payload);
         } catch (error) {
             this.notification.add(
                 error?.data?.message || error.message || _t("Scope update failed"),
@@ -2717,7 +3813,7 @@ export class DashboardStudioAction extends Component {
                 "studio_unlink_scope",
                 [[this.blueprintId], scopeId]
             );
-            await this.applyPayload(payload, false);
+            await this.applyStudioMutation(payload);
             this.notification.add(_t("Scope removed"), { type: "info" });
         } catch (error) {
             this.notification.add(
@@ -2735,7 +3831,7 @@ export class DashboardStudioAction extends Component {
             "studio_reorder_scopes",
             [[this.blueprintId], orderedIds]
         );
-        await this.applyPayload(payload, false);
+        await this.applyStudioMutation(payload);
     }
 
     async removeHeaderLine(headerId) {
@@ -2752,7 +3848,7 @@ export class DashboardStudioAction extends Component {
             if (this.state.selectedHeaderId === headerId) {
                 this.state.selectedHeaderId = null;
             }
-            await this.applyPayload(payload, false);
+            await this.applyStudioMutation(payload);
             this.notification.add(_t("Header line removed"), { type: "info" });
         } catch (error) {
             this.notification.add(
@@ -2792,7 +3888,7 @@ export class DashboardStudioAction extends Component {
             "studio_reorder_headers",
             [[this.blueprintId], ids]
         );
-        await this.applyPayload(payload, false);
+        await this.applyStudioMutation(payload);
     }
 
     async moveHeaderLine(headerId, delta) {
@@ -2808,7 +3904,7 @@ export class DashboardStudioAction extends Component {
             "studio_reorder_headers",
             [[this.blueprintId], ids]
         );
-        await this.applyPayload(payload, false);
+        await this.applyStudioMutation(payload);
     }
 
     onDragStartScope(scopeId, ev) {
@@ -2826,16 +3922,20 @@ export class DashboardStudioAction extends Component {
         if (!sourceId || sourceId === targetId) {
             return;
         }
-        const ids = (this.state.payload.scopes || []).map((s) => s.id);
-        const from = ids.indexOf(sourceId);
-        const to = ids.indexOf(targetId);
+        const mode = this._scopeModeOf(sourceId);
+        if (!mode || mode !== this._scopeModeOf(targetId)) {
+            return;
+        }
+        const modeIds = this._scopesByMode(mode).map((s) => s.id);
+        const from = modeIds.indexOf(sourceId);
+        const to = modeIds.indexOf(targetId);
         if (from < 0 || to < 0) {
             return;
         }
-        ids.splice(from, 1);
-        ids.splice(to, 0, sourceId);
+        modeIds.splice(from, 1);
+        modeIds.splice(to, 0, sourceId);
         try {
-            await this.reorderScopes(ids);
+            await this.reorderScopes(this._mergeScopeModeOrder(mode, modeIds));
         } catch (error) {
             this.notification.add(
                 error?.data?.message || error.message || _t("Reorder failed"),
@@ -2845,15 +3945,19 @@ export class DashboardStudioAction extends Component {
     }
 
     async moveScope(scopeId, delta) {
-        const ids = (this.state.payload.scopes || []).map((s) => s.id);
-        const idx = ids.indexOf(scopeId);
-        const next = idx + delta;
-        if (idx < 0 || next < 0 || next >= ids.length) {
+        const mode = this._scopeModeOf(scopeId);
+        if (!mode) {
             return;
         }
-        [ids[idx], ids[next]] = [ids[next], ids[idx]];
+        const modeIds = this._scopesByMode(mode).map((s) => s.id);
+        const idx = modeIds.indexOf(scopeId);
+        const next = idx + delta;
+        if (idx < 0 || next < 0 || next >= modeIds.length) {
+            return;
+        }
+        [modeIds[idx], modeIds[next]] = [modeIds[next], modeIds[idx]];
         try {
-            await this.reorderScopes(ids);
+            await this.reorderScopes(this._mergeScopeModeOrder(mode, modeIds));
         } catch (error) {
             this.notification.add(
                 error?.data?.message || error.message || _t("Reorder failed"),

@@ -1,5 +1,7 @@
-/* Conditions domain builder: use full sheet width */
-.o_form_view {
+/* Conditions form + domain builder layout */
+.o_form_view.o_dashboard_condition_form,
+.o_form_view .o_dashboard_condition_form,
+.o_dialog .o_form_view {
     .o_dashboard_condition_domain,
     .o_dashboard_condition_domain .o_cell,
     .o_dashboard_condition_domain .o_wrap_input {
@@ -20,5 +22,21 @@
             width: 100%;
             max-width: 100%;
         }
+    }
+}
+
+/* Edit-condition dialog: give Note room; keep On / Apps on one row */
+.o_dialog .o_form_view.o_dashboard_condition_form,
+.o_dialog .modal-body .o_form_view {
+    .o_group.o_inner_group {
+        .o_wrap_field .o_field_widget {
+            max-width: 100%;
+        }
+    }
+
+    .o_field_widget.o_field_char[name="note"],
+    .o_field_char[name="note"] input {
+        width: 100%;
+        max-width: 100%;
     }
 }

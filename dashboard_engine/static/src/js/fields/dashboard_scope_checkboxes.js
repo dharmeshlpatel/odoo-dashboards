@@ -24,6 +24,9 @@ import { standardFieldProps } from "@web/views/fields/standard_field_props";
  * ``restrict`` scopes sit alone on a row; ``include`` scopes pack two-across
  * (same chrome as v1's My Pipeline / Pipeline|Leads arrangement, driven by
  * mode + sequence rather than CRM-specific markup).
+ *
+ * The live form may mount this widget twice on ``scope_ids`` with different
+ * domains (include vs restrict) so Data to Include and My Data stay separate.
  */
 export class DashboardScopeCheckboxesField extends Component {
     static template = "dashboard_engine.DashboardScopeCheckboxesField";
@@ -99,9 +102,12 @@ export class DashboardScopeCheckboxesField extends Component {
         return this.props.record.data[this.props.name].currentIds.includes(item.id);
     }
 
-    /** Include-mode boxes show a ? tooltip like stock settings fields with help=. */
+    /**
+     * Odoo settings style: help text sits under the label.
+     * Only show a ? when there is no visible description line.
+     */
     showHelpIcon(item) {
-        return item.mode === "include" && !!item.display_description;
+        return false;
     }
 
     commitChanges() {

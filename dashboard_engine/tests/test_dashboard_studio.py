@@ -187,6 +187,24 @@ class TestDashboardStudio(TransactionCase):
         self.assertFalse(all_hits["scoped"])
         self.assertEqual(all_hits["scope_label"], "Showing all actions")
 
+        focused = bp.studio_search_actions(
+            "", limit=20, all_models=False, res_model=bp.graph_model or bp.host_model_name
+        )
+        self.assertTrue(focused.get("scope_label"))
+        if focused.get("scoped") and (bp.graph_model or bp.host_model_name):
+            allowed = {bp.graph_model or bp.host_model_name}
+            for hit in focused["actions"]:
+                res_model = hit.get("res_model") or False
+                if res_model:
+                    self.assertIn(res_model, allowed)
+
+        chart_models = bp.studio_search_chart_models("", limit=20, all_models=False)
+        self.assertIn("models", chart_models)
+        self.assertTrue(chart_models.get("scoped"))
+        self.assertTrue(chart_models.get("scope_label"))
+        all_chart = bp.studio_search_chart_models("", limit=20, all_models=True)
+        self.assertFalse(all_chart.get("scoped"))
+
     @staticmethod
     def _menu_publish_would_confirm(payload):
         """Mirror Studio OWL publish() confirm gate (payload contract)."""
@@ -591,6 +609,53 @@ class TestDashboardStudio(TransactionCase):
             bp.studio_write_scope(
                 payload["created_scope_id"], {"domain": "not a domain"}
             )
+
+    def test_studio_graph_variant_crud_and_reorder(self):
+        bp = self._studio_blueprint()
+        bp.write(
+            {
+                "primary_action_xmlid": "base.action_partner_form",
+                "graph_data_field": "parent_id",
+            }
+        )
+        payload = bp.studio_create_graph_variant({})
+        vid = payload["created_graph_variant_id"]
+        self.assertTrue(vid)
+        row = next(v for v in payload["graph_variants"] if v["id"] == vid)
+        self.assertEqual(row["graph_model"], "res.partner")
+        self.assertTrue(row["is_default"])
+        bp.studio_write_graph_variant(
+            vid,
+            {
+                "primary_button_label": "Partner chart",
+                "graph_data_field": "commercial_partner_id",
+            },
+        )
+        variant = self.env["dashboard.blueprint.graph.variant"].browse(vid)
+        self.assertEqual(variant.primary_button_label, "Partner chart")
+        self.assertEqual(bp.primary_button_label, "Partner chart")
+        other = bp.studio_create_graph_variant(
+            {
+                "graph_model": "res.partner",
+                "primary_button_label": "Second",
+                "primary_action_xmlid": "base.action_partner_form",
+            }
+        )
+        oid = other["created_graph_variant_id"]
+        bp.studio_set_default_graph_variant(oid)
+        self.assertTrue(
+            self.env["dashboard.blueprint.graph.variant"].browse(oid).is_default
+        )
+        self.assertFalse(variant.is_default)
+        self.assertEqual(bp.primary_button_label, "Second")
+        bp.studio_reorder_graph_variants([oid, vid])
+        labels = bp.graph_variant_ids.sorted("sequence").mapped("primary_button_label")
+        self.assertEqual(labels[:2], ["Second", "Partner chart"])
+        bp.studio_unlink_graph_variant(oid)
+        self.assertFalse(
+            self.env["dashboard.blueprint.graph.variant"].browse(oid).exists()
+        )
+        self.assertTrue(variant.exists().is_default)
 
     def test_studio_payload_groupby_and_measure_ids(self):
         bp = self._make_bp_with_graph()

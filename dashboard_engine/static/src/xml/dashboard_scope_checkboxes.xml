@@ -5,7 +5,9 @@
             <t t-foreach="rows" t-as="row" t-key="row_index">
                 <div class="row mt16 o_settings_container">
                     <t t-foreach="row" t-as="item" t-key="item.id">
-                        <div class="col-12 col-lg-6 o_setting_box o_dashboard_scope_item">
+                        <!-- Odoo settings standard: two columns (col-lg-6) for include
+                             pairs (Pipeline | Leads). Restrict (My Data) stays full width. -->
+                        <div t-attf-class="o_setting_box o_dashboard_scope_item {{item.mode === 'restrict' ? 'col-12' : 'col-12 col-lg-6'}}">
                             <div class="o_setting_left_pane">
                                 <CheckBox
                                     value="isSelected(item)"
@@ -16,13 +18,9 @@
                             <div class="o_setting_right_pane" t-on-click="() => this.onLabelClick(item)">
                                 <label class="o_form_label">
                                     <t t-esc="item.display_label"/>
-                                    <span t-if="showHelpIcon(item)"
-                                          class="fa fa-question-circle-o ms-1 text-info"
-                                          t-att-title="item.display_description"
-                                          role="img"
-                                          aria-label="Help"/>
                                 </label>
-                                <div t-if="item.display_description" class="text-muted">
+                                <div t-if="item.display_description"
+                                     class="text-muted o_dashboard_scope_item_help">
                                     <t t-esc="item.display_description"/>
                                 </div>
                             </div>

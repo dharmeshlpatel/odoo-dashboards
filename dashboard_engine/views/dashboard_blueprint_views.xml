@@ -77,126 +77,224 @@
                 <field name="graph_model_id" invisible="1"/>
                 <field name="blueprint_id" invisible="1"/>
                 <field name="scope_warning" invisible="1"/>
+                <field name="has_include_scope" invisible="1"/>
+                <field name="has_restrict_scope" invisible="1"/>
                 <field name="groupby_has_date" invisible="1"/>
                 <field name="ordered_groupby_ids" invisible="1"/>
                 <!-- Date field pickers stay on the record but are not shown —
                      the blueprint seeds them; users pick months/years only. -->
                 <field name="period_field_id" invisible="1"/>
                 <field name="period_closed_field_id" invisible="1"/>
+                <field name="preferred_graph_model" invisible="1"/>
+                <field name="has_graph_variants" invisible="1"/>
                 <sheet>
-                    <div class="o_setting_container">
-                        <h4><b>General Settings</b></h4>
+                    <!-- 1) My Data (restrict scopes) — most used personal switch -->
+                    <div class="o_setting_container" invisible="not has_restrict_scope">
+                        <h4><b>My Data</b></h4>
                         <div class="o_dashboard_engine_setting_help">
-                            Define which data should be included in the dashboard.
+                            Start here if you only want to see work assigned to you.
+                            Turn it on to hide other people's records from the chart,
+                            KPIs, bottom buttons, views, and reports (including linked
+                            Sales when a map is active). Leave it off to see the full team
+                            picture.
                         </div>
                         <field name="scope_ids" nolabel="1" colspan="2"
                                widget="dashboard_scope_checkboxes"
-                               domain="[('blueprint_id', '=', blueprint_id)]"/>
+                               domain="[('blueprint_id', '=', blueprint_id),
+                                        ('mode', '=', 'restrict')]"/>
                     </div>
 
+                    <!-- 2) Graph Configuration: Chart model → Group By → Measures → Data to Include -->
                     <div class="o_setting_container">
                         <h4><b>Graph Configuration</b></h4>
                         <div class="o_dashboard_engine_setting_help">
-                            Define how the dashboard graph is generated.
+                            Use this section to build the chart. Everything below
+                            (Chart Model, Group By, Measures, and Data to Include)
+                            belongs here and changes the chart only — not KPIs,
+                            bottom buttons, views, or reports.
                         </div>
-                        <div class="row mt16 o_settings_container">
-                            <div class="col-12 col-lg-6 o_setting_box">
-                                <div class="o_setting_left_pane"/>
-                                <div class="o_setting_right_pane">
-                                    <b>Group By</b>
-                                    <div class="text-muted">
-                                        Choose how the graph should group the data
-                                        (for example, by stage, salesperson, or team).
-                                    </div>
-                                    <div class="mt16">
-                                        <field name="groupby_allowed_field_ids" invisible="1"/>
-                                        <field name="groupby_ids" nolabel="1"
-                                               widget="dashboard_groupby_tags"
-                                               options="{'no_create': True}"
-                                               domain="[('id', 'in', groupby_allowed_field_ids)]"/>
+                        <div class="o_dashboard_engine_subsections">
+                            <!-- Chart model first so users see the picker when variants exist -->
+                            <div class="row o_settings_container" invisible="not has_graph_variants">
+                                <div class="col-12 o_setting_box">
+                                    <div class="o_setting_left_pane"/>
+                                    <div class="o_setting_right_pane">
+                                        <div class="o_dashboard_engine_subsection_title">Chart Model</div>
+                                        <div class="text-muted">
+                                            Pick which records feed the chart — for example
+                                            Pipeline or Sales Orders. The left button label
+                                            and screen change with this choice so they
+                                            always match. Leave empty for the dashboard default.
+                                        </div>
+                                        <div class="mt16">
+                                            <field name="preferred_graph_variant_id" nolabel="1"
+                                                   options="{'no_create': True, 'no_open': True}"
+                                                   domain="[('blueprint_id', '=', blueprint_id)]"
+                                                   placeholder="Blueprint default"/>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
-                            <div class="col-12 col-lg-6 o_setting_box">
-                                <div class="o_setting_left_pane"/>
-                                <div class="o_setting_right_pane">
-                                    <b>Measures</b>
-                                    <div class="text-muted">
-                                        Select the value that the graph should calculate
-                                        and display (such as count or expected revenue).
-                                        Leave empty to count records.
+                            <div class="row o_settings_container">
+                                <div class="col-12 col-lg-6 o_setting_box">
+                                    <div class="o_setting_left_pane"/>
+                                    <div class="o_setting_right_pane">
+                                        <div class="o_dashboard_engine_subsection_title">Group By</div>
+                                        <div class="text-muted">
+                                            Choose how the chart is split — for example
+                                            by stage, salesperson, or team. Add more than
+                                            one tag to go deeper (the first tag is the top
+                                            level).
+                                        </div>
+                                        <div class="mt16">
+                                            <field name="groupby_allowed_field_ids" invisible="1"/>
+                                            <field name="groupby_ids" nolabel="1"
+                                                   widget="dashboard_groupby_tags"
+                                                   options="{'no_create': True}"
+                                                   domain="[('id', 'in', groupby_allowed_field_ids)]"/>
+                                        </div>
                                     </div>
-                                    <div class="mt16">
-                                        <field name="measure_field_id" nolabel="1"
-                                               options="{'no_create': True}"
-                                               domain="[('model_id', '=', graph_model_id),
-                                                        ('ttype', 'in', ['integer', 'float', 'monetary']),
-                                                        ('store', '=', True)]"/>
-                                        <field name="measure_aggregator"
-                                               invisible="not measure_field_id"/>
+                                </div>
+                                <div class="col-12 col-lg-6 o_setting_box">
+                                    <div class="o_setting_left_pane"/>
+                                    <div class="o_setting_right_pane">
+                                        <div class="o_dashboard_engine_subsection_title">Measures</div>
+                                        <div class="text-muted">
+                                            Choose what number the chart shows — for
+                                            example how many records, or expected revenue.
+                                            Leave empty to count records.
+                                        </div>
+                                        <div class="mt16">
+                                            <field name="measure_field_id" nolabel="1"
+                                                   options="{'no_create': True}"
+                                                   domain="[('model_id', '=', graph_model_id),
+                                                            ('ttype', 'in', ['integer', 'float', 'monetary']),
+                                                            ('store', '=', True)]"/>
+                                            <field name="measure_aggregator"
+                                                   invisible="not measure_field_id"/>
+                                        </div>
                                     </div>
+                                </div>
+                            </div>
+                            <!-- Title/help aligned like Custom Filter; Pipeline|Leads on their
+                                 own full-width row so they get the same space as Group By|Measures. -->
+                            <div class="row mt16 o_settings_container o_dashboard_engine_subsection"
+                                 invisible="not has_include_scope">
+                                <div class="col-12 o_setting_box">
+                                    <div class="o_setting_left_pane"/>
+                                    <div class="o_setting_right_pane">
+                                        <div class="o_dashboard_engine_subsection_title">Data to Include</div>
+                                        <div class="text-muted">
+                                            Still under Graph Configuration. Tick which record
+                                            types go into the chart — for example Pipeline,
+                                            Leads, or both.
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="row o_settings_container o_dashboard_engine_include_scopes"
+                                 invisible="not has_include_scope">
+                                <div class="col-12">
+                                    <field name="scope_ids" nolabel="1"
+                                           widget="dashboard_scope_checkboxes"
+                                           domain="[('blueprint_id', '=', blueprint_id),
+                                                    ('mode', '=', 'include')]"/>
                                 </div>
                             </div>
                         </div>
                     </div>
 
+                    <!-- 3) Filters: period + custom -->
                     <div class="o_setting_container">
                         <h4><b>Filters</b></h4>
                         <div class="o_dashboard_engine_setting_help">
-                            Apply additional conditions to refine the data shown
-                            in the graph.
+                            Use this section to narrow the data further. Everything
+                            below (Creation Date, Closed Date, and Custom Filter)
+                            belongs here. These filters apply to the chart, KPIs,
+                            bottom buttons, views, and reports (including linked
+                            Sales when available).
                         </div>
-                        <div invisible="not period_field_id and not period_closed_field_id"
-                             class="mb-3">
-                            Match
-                            <field name="period_operator" class="oe_inline text-primary fw-bold"
-                                   nolabel="1"/>
-                            of the following rules:
-                        </div>
-                        <div class="row mt16 o_settings_container">
-                            <div class="col-12 col-lg-6 o_setting_box"
-                                 invisible="not period_field_id">
-                                <b>Creation Date</b>
-                                <div class="row mt16">
-                                    <field name="period_mq_ids" nolabel="1"
-                                           class="col-6"
-                                           widget="many2many_tags"
-                                           options="{'no_create': True}"
-                                           placeholder="Months"/>
-                                    <field name="period_year_ids" nolabel="1"
-                                           class="col-6"
-                                           widget="many2many_tags"
-                                           options="{'no_create': True}"
-                                           placeholder="Year"/>
+                        <div class="o_dashboard_engine_subsections">
+                            <div class="row o_settings_container"
+                                 invisible="not period_field_id and not period_closed_field_id">
+                                <div class="col-12 o_setting_box">
+                                    <div class="o_setting_left_pane"/>
+                                    <div class="o_setting_right_pane">
+                                        Match
+                                        <field name="period_operator"
+                                               class="oe_inline text-primary fw-bold"
+                                               nolabel="1"/>
+                                        of the following rules:
+                                    </div>
                                 </div>
                             </div>
-                            <div class="col-12 col-lg-6 o_setting_box"
-                                 invisible="not period_closed_field_id">
-                                <b>Closed Date</b>
-                                <div class="row mt16">
-                                    <field name="period_closed_mq_ids" nolabel="1"
-                                           class="col-6"
-                                           widget="many2many_tags"
-                                           options="{'no_create': True}"
-                                           placeholder="Months"/>
-                                    <field name="period_closed_year_ids" nolabel="1"
-                                           class="col-6"
-                                           widget="many2many_tags"
-                                           options="{'no_create': True}"
-                                           placeholder="Year"/>
+                            <div class="row mt16 o_settings_container">
+                                <div class="col-12 col-lg-6 o_setting_box"
+                                     invisible="not period_field_id">
+                                    <div class="o_setting_left_pane"/>
+                                    <div class="o_setting_right_pane">
+                                        <div class="o_dashboard_engine_subsection_title">Creation Date</div>
+                                        <div class="text-muted">
+                                            Only keep records created in the months and
+                                            years you pick.
+                                        </div>
+                                        <div class="mt16 row">
+                                            <field name="period_mq_ids" nolabel="1"
+                                                   class="col-6"
+                                                   widget="many2many_tags"
+                                                   options="{'no_create': True}"
+                                                   placeholder="Months"/>
+                                            <field name="period_year_ids" nolabel="1"
+                                                   class="col-6"
+                                                   widget="many2many_tags"
+                                                   options="{'no_create': True}"
+                                                   placeholder="Year"/>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-12 col-lg-6 o_setting_box"
+                                     invisible="not period_closed_field_id">
+                                    <div class="o_setting_left_pane"/>
+                                    <div class="o_setting_right_pane">
+                                        <div class="o_dashboard_engine_subsection_title">Closed Date</div>
+                                        <div class="text-muted">
+                                            Only keep records closed (won or done) in the
+                                            months and years you pick.
+                                        </div>
+                                        <div class="mt16 row">
+                                            <field name="period_closed_mq_ids" nolabel="1"
+                                                   class="col-6"
+                                                   widget="many2many_tags"
+                                                   options="{'no_create': True}"
+                                                   placeholder="Months"/>
+                                            <field name="period_closed_year_ids" nolabel="1"
+                                                   class="col-6"
+                                                   widget="many2many_tags"
+                                                   options="{'no_create': True}"
+                                                   placeholder="Year"/>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
-                        </div>
-                        <div class="mt-3">
-                            <b>Custom Filter</b>
-                            <div class="text-muted">
-                                Add custom rules to further narrow down the data
-                                based on your business needs.
+                            <div class="row mt16 o_settings_container o_dashboard_engine_subsection">
+                                <div class="col-12 o_setting_box">
+                                    <div class="o_setting_left_pane"/>
+                                    <div class="o_setting_right_pane">
+                                        <div class="o_dashboard_engine_subsection_title">Custom Filter</div>
+                                        <div class="text-muted">
+                                            Still under Filters. Add your own rule when months
+                                            and years are not enough — for example only
+                                            high-probability deals.
+                                        </div>
+                                        <div class="mt16">
+                                            <field name="custom_filter" nolabel="1"
+                                                   widget="domain"
+                                                   options="{'model': 'graph_model'}"
+                                                   invisible="not graph_model"/>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
-                            <field name="custom_filter" nolabel="1"
-                                   widget="domain"
-                                   options="{'model': 'graph_model'}"
-                                   invisible="not graph_model"/>
                         </div>
                     </div>
                 </sheet>
@@ -241,7 +339,7 @@
                         1) Set <b>Dashboard</b> and <b>Menu</b> (host model, menu entry).
                         2) Configure <b>Configuration</b> (scopes, graph, filters — same as the live Configuration popup).
                         3) Compose <b>Card layout</b> (header, primary action, KPIs, bottom buttons).
-                        4) Fill <b>Manage menu</b> (Views / New / Reports — same as the live card menu).
+                        4) Fill <b>Manage Menu</b> (Views / New / Reports — same as the live card menu).
                         5) Publish — a menu appears under the parent you chose.
                     </div>
                     <div class="alert alert-success" role="status"
@@ -290,7 +388,7 @@
                             <field name="menu_web_icon" invisible="group_id"/>
                             <field name="menu_web_icon_data" invisible="group_id"/>
                         </group>
-                        <group string="Kanban lens">
+                        <group string="Kanban Lens">
                             <field name="lens_my_enabled"/>
                             <field name="lens_my_default" invisible="not lens_my_enabled"/>
                             <field name="lens_my_label" invisible="not lens_my_enabled"
@@ -314,11 +412,12 @@
                                 Defaults for the live Configuration popup.
                             </p>
                             <div class="o_dashboard_blueprint_section mb-3">
-                                <h4><b>General Settings</b></h4>
+                                <h4><b>My Data · Graph Configuration · Filters</b></h4>
                                 <div class="text-muted mb-2">
-                                    Define which data should be included in the dashboard.
-                                    Each line becomes a tick box in the live ⚙️ popup.
-                                    Use <code>uid</code> in a filter for the current user.
+                                    Same three blocks as the live ⚙️ popup and Studio Configuration.
+                                    <b>Restrict</b> scopes → <b>My Data</b> (e.g. only mine; use <code>uid</code>).
+                                    <b>Include</b> scopes → Graph Configuration → <b>Data to Include</b> (chart only).
+                                    Date fields and custom domain seed the <b>Filters</b> block.
                                 </div>
                                 <field name="scope_ids" nolabel="1">
                                     <list editable="bottom">
@@ -352,6 +451,33 @@
                                                 </list>
                                             </field>
                                         </group>
+                                        <group string="Target Maps (linked My / panel filters)"
+                                               invisible="mode != 'restrict'">
+                                            <div class="text-muted mb-2" colspan="2">
+                                                Map this My tick onto other models (e.g. Sales Orders).
+                                                End users never edit this — only builders / Studio.
+                                                Missing fields are skipped safely (no crash).
+                                            </div>
+                                            <field name="target_ids" nolabel="1" colspan="2">
+                                                <list editable="bottom">
+                                                    <field name="sequence" widget="handle"/>
+                                                    <field name="target_model_id"
+                                                           options="{'no_create': True}"/>
+                                                    <field name="target_model" column_invisible="1"/>
+                                                    <field name="domain" widget="domain"
+                                                           options="{'model': 'target_model', 'in_dialog': True, 'allow_expressions': True}"/>
+                                                    <field name="period_field" optional="show"/>
+                                                    <field name="period_closed_field" optional="hide"/>
+                                                    <field name="module_depends" optional="show"
+                                                           placeholder="sale"/>
+                                                    <field name="apply_kpi" optional="hide"/>
+                                                    <field name="apply_bottom" optional="hide"/>
+                                                    <field name="apply_views" optional="hide"/>
+                                                    <field name="apply_reports" optional="hide"/>
+                                                    <field name="apply_menu_new" optional="hide"/>
+                                                </list>
+                                            </field>
+                                        </group>
                                     </form>
                                 </field>
                                 <field name="scope_warning"
@@ -365,19 +491,45 @@
                             <div class="o_dashboard_blueprint_section mb-3">
                                 <div class="row">
                                     <div class="col-12 col-lg-6">
-                                        <h4><b>Graph Configuration</b></h4>
+                                        <h4><b>Graph Configuration · Shape</b></h4>
                                         <div class="text-muted mb-2">
-                                            Define how the dashboard graph is generated.
-                                            End users can still override Group By / Measures in their own Configuration popup.
+                                            Chart Model Options (Default + picker), then Group By / Measures / Filters
+                                            for the active chart. End users override Group By / Measures in the gear.
+                                        </div>
+                                        <div class="o_dashboard_engine_subsection mb-3">
+                                            <div class="o_dashboard_engine_subsection_title">Chart Model Options</div>
+                                            <div class="text-muted mb-2">
+                                                Model + link + primary button per row. Mark one Default
+                                                (mirrors blueprint chart fields). Empty list → use Graph Model below.
+                                            </div>
+                                            <field name="graph_variant_ids" nolabel="1"
+                                                   context="{'default_blueprint_id': id}">
+                                                <list editable="bottom">
+                                                    <field name="sequence" widget="handle"/>
+                                                    <field name="is_default" string="Default"/>
+                                                    <field name="graph_model_id" options="{'no_create': True}"/>
+                                                    <field name="graph_model" column_invisible="1"/>
+                                                    <field name="graph_data_field"
+                                                             widget="dashboard_relation_path"
+                                                             options="{'model': 'graph_model', 'follow_relations': True}"
+                                                             placeholder="Drill into related records until this card’s model"/>
+                                                    <field name="primary_button_label"/>
+                                                    <field name="primary_action_id" options="{'no_create': True}"/>
+                                                    <field name="primary_action_xmlid" column_invisible="1"/>
+                                                    <field name="primary_action_context" optional="hide"/>
+                                                </list>
+                                            </field>
                                         </div>
                                         <group col="1">
                                             <field name="graph_model_id"
-                                                   options="{'no_create': True}"/>
+                                                   options="{'no_create': True}"
+                                                   invisible="graph_variant_ids"
+                                                   help="Used when there are no picker options. With options, edit the Default row instead."/>
                                             <field name="graph_model" invisible="1"/>
                                             <field name="graph_data_field"
                                                    widget="dashboard_relation_path"
                                                    options="{'model': 'graph_model', 'follow_relations': True}"
-                                                   invisible="not graph_model_id"
+                                                   invisible="not graph_model_id or graph_variant_ids"
                                                    placeholder="Drill into related records until this card’s model"/>
                                             <field name="graph_data_field_id" invisible="1"/>
                                             <field name="graph_relation_path_id" invisible="1"/>
@@ -430,11 +582,11 @@
                         </page>
 
                         <!-- ========== Page 2: live card anatomy ========== -->
-                        <page string="Card layout" name="kanban_card">
+                        <page string="Card Layout" name="kanban_card">
                             <div class="o_dashboard_blueprint_card_map mb-3" aria-hidden="true">
                                 <div class="o_db_map_zone">Header</div>
                                 <div class="o_db_map_row">
-                                    <div class="o_db_map_zone">Primary button</div>
+                                    <div class="o_db_map_zone">Primary Button</div>
                                     <div class="o_db_map_zone">Right · KPIs</div>
                                 </div>
                                 <div class="o_db_map_zone">Footer · Totals</div>
@@ -481,7 +633,7 @@
                                 </group>
                             </group>
 
-                            <separator string="Primary button"/>
+                            <separator string="Primary Button"/>
                             <p class="text-muted">
                                 The button beside the graph; chart defaults are on Configuration.
                             </p>
@@ -544,7 +696,7 @@
                                        invisible="not graph_model"/>
                                 <field name="primary_action_context"
                                        widget="dashboard_context_kv"
-                                       string="Action defaults"/>
+                                       string="Action Defaults"/>
                             </group>
 
                             <separator string="Right · KPIs"/>
@@ -584,7 +736,7 @@
                                            options="{'no_create': True}"/>
                                     <field name="action_context"
                                            widget="dashboard_context_kv"
-                                           string="Action defaults"
+                                           string="Action Defaults"
                                            optional="hide"/>
                                     <field name="name" string="Technical Name" optional="hide"/>
                                     <field name="label_plural" optional="hide"/>
@@ -592,6 +744,10 @@
                                     <field name="style_mode" optional="hide"/>
                                     <field name="is_attention_signal" optional="hide"
                                            string="Attention"/>
+                                    <field name="panel_follow_my" optional="hide"
+                                           string="Follow My"/>
+                                    <field name="panel_follow_filters" optional="hide"
+                                           string="Follow Filters"/>
                                     <field name="show_if_zero" optional="hide"/>
                                     <field name="module_ids" optional="hide"
                                            widget="many2many_tags"
@@ -623,13 +779,17 @@
                                            options="{'no_create': True}"/>
                                     <field name="action_context"
                                            widget="dashboard_context_kv"
-                                           string="Action defaults"
+                                           string="Action Defaults"
                                            optional="hide"/>
                                     <field name="name" string="Technical Name" optional="hide"/>
                                     <field name="style" optional="hide"/>
                                     <field name="style_mode" optional="hide"/>
                                     <field name="is_attention_signal" optional="hide"
                                            string="Attention"/>
+                                    <field name="panel_follow_my" optional="hide"
+                                           string="Follow My"/>
+                                    <field name="panel_follow_filters" optional="hide"
+                                           string="Follow Filters"/>
                                     <field name="show_if_zero" optional="hide"/>
                                     <field name="action_method" optional="hide"/>
                                     <field name="module_ids" optional="hide"
@@ -678,7 +838,7 @@
                                            options="{'no_create': True}"/>
                                     <field name="action_context"
                                            widget="dashboard_context_kv"
-                                           string="Action defaults"
+                                           string="Action Defaults"
                                            optional="hide"/>
                                     <field name="name" string="Technical Name" optional="hide"/>
                                     <field name="show_if_zero" optional="hide"/>
@@ -690,7 +850,7 @@
 
                         </page>
 
-                        <page string="Manage menu" name="manage_menu">
+                        <page string="Manage Menu" name="manage_menu">
                             <p class="text-muted">
                                 Same as the live ⋮ menu — links only.
                             </p>
@@ -706,7 +866,7 @@
                                            options="{'no_create': True}"/>
                                     <field name="action_context"
                                            widget="dashboard_context_kv"
-                                           string="Action defaults"
+                                           string="Action Defaults"
                                            optional="hide"/>
                                     <field name="name" string="Technical Name" optional="hide"/>
                                     <field name="module_ids" optional="hide"
@@ -729,7 +889,7 @@
                                            options="{'no_create': True}"/>
                                     <field name="action_context"
                                            widget="dashboard_context_kv"
-                                           string="Action defaults"
+                                           string="Action Defaults"
                                            optional="hide"/>
                                     <field name="name" string="Technical Name" optional="hide"/>
                                     <field name="module_ids" optional="hide"
@@ -752,7 +912,7 @@
                                            options="{'no_create': True}"/>
                                     <field name="action_context"
                                            widget="dashboard_context_kv"
-                                           string="Action defaults"
+                                           string="Action Defaults"
                                            optional="hide"/>
                                     <field name="name" string="Technical Name" optional="hide"/>
                                     <field name="module_ids" optional="hide"
@@ -799,7 +959,7 @@
                                         <field name="visible_if_context"/>
                                         <field name="action_context"
                                                widget="dashboard_context_kv"
-                                               string="Action defaults"
+                                               string="Action Defaults"
                                                optional="show"/>
                                         <field name="action_view_mode"/>
                                         <field name="action_method" optional="show"/>

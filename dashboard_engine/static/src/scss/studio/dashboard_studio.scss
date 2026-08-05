@@ -122,14 +122,17 @@
         }
     }
     .o_ds_setup_mode {
-        max-width: 980px;
+        max-width: 1200px;
         margin-left: auto;
         margin-right: auto;
 
         .o_ds_setup_grid {
             display: grid;
-            grid-template-columns: 1fr;
+            grid-template-columns: 1fr 1fr;
             gap: 1.25rem;
+            @media (max-width: 992px) {
+                grid-template-columns: 1fr;
+            }
         }
         .o_ds_setup_card {
             background: var(--ds-card);
@@ -291,10 +294,10 @@
         }
     }
 
-    /* Odoo Studio–like Content workspace */
+    /* Odoo Studio–like Content workspace: toolbox | map 40% | editor 60% */
     .o_ds_workspace {
         display: grid;
-        grid-template-columns: 76px minmax(280px, 1fr) minmax(460px, 560px);
+        grid-template-columns: 76px minmax(0, 40fr) minmax(0, 60fr);
         min-height: 0;
         height: 100%;
         background: #fff;
@@ -684,13 +687,14 @@
     }
     .o_ds_item {
         display: flex;
-        align-items: center;
-        gap: 0.55rem;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 0.25rem;
         width: 100%;
         border: 1px solid var(--ds-border);
         background: #fff;
         border-radius: var(--ds-radius);
-        padding: 0.55rem 0.7rem;
+        padding: 0.4rem 0.55rem;
         text-align: left;
         transition: 0.12s ease;
         &:hover {
@@ -700,6 +704,153 @@
             border-color: var(--ds-accent);
             background: var(--ds-accent-soft);
         }
+        .o_ds_item_handle {
+            flex-shrink: 0;
+            .o_ds_item_grip {
+                cursor: grab;
+            }
+            .btn-link {
+                line-height: 1;
+            }
+        }
+    }
+    .o_ds_item_row {
+        display: flex;
+        align-items: center;
+        gap: 0.45rem;
+        min-width: 0;
+    }
+    .o_ds_item_main {
+        flex: 1 1 auto;
+        display: flex;
+        align-items: center;
+        gap: 0.45rem;
+        min-width: 0;
+        border: 0;
+        background: transparent;
+        padding: 0.25rem 0.35rem;
+        text-align: left;
+        color: inherit;
+        border-radius: var(--ds-radius);
+        &:hover {
+            background: rgba(0, 0, 0, 0.03);
+        }
+    }
+    .o_ds_item_remove {
+        flex-shrink: 0;
+        min-width: 2rem;
+        min-height: 2rem;
+        padding: 0.2rem;
+    }
+    .o_ds_item_shared {
+        background: var(--ds-panel);
+        .o_ds_item_shared_help {
+            font-size: 0.72rem;
+            line-height: 1.35;
+            color: var(--ds-muted);
+            padding: 0 0.35rem 0.15rem;
+        }
+    }
+    .o_ds_source_bp_link {
+        font-weight: 600;
+        text-decoration: none;
+        &:hover {
+            text-decoration: underline;
+        }
+    }
+    .o_ds_slot_action_picker {
+        .o_ds_slot_action_value {
+            min-height: calc(2.4em + 0.5rem + 2px);
+            line-height: 1.3;
+        }
+    }
+
+    /* Studio editor sections (KPI + Primary/Header/Config/items) */
+    .o_ds_studio_stack,
+    .o_ds_slot_editor {
+        display: flex;
+        flex-direction: column;
+        gap: 0.85rem;
+    }
+    .o_ds_studio_section,
+    .o_ds_slot_section {
+        border: 1px solid var(--ds-border);
+        border-radius: var(--ds-radius);
+        background: #fff;
+        overflow: hidden;
+    }
+    .o_ds_studio_section_head,
+    .o_ds_slot_section_head {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 0.65rem;
+        padding: 0.7rem 0.85rem;
+        background: var(--ds-panel);
+        border-bottom: 1px solid var(--ds-border);
+    }
+    .o_ds_studio_section_head_main {
+        display: flex;
+        align-items: flex-start;
+        gap: 0.65rem;
+        min-width: 0;
+        flex: 1 1 auto;
+    }
+    .o_ds_studio_step,
+    .o_ds_slot_step {
+        flex: 0 0 1.5rem;
+        width: 1.5rem;
+        height: 1.5rem;
+        margin-top: 0.1rem;
+        border-radius: 999px;
+        background: var(--ds-ink);
+        color: #fff;
+        font-size: 0.72rem;
+        font-weight: 700;
+        line-height: 1.5rem;
+        text-align: center;
+    }
+    .o_ds_studio_section_title,
+    .o_ds_slot_section_title {
+        font-size: 0.95rem;
+        font-weight: 700;
+        color: var(--ds-ink);
+        margin: 0;
+        line-height: 1.25;
+    }
+    .o_ds_studio_section_help,
+    .o_ds_slot_section_help {
+        margin: 0.2rem 0 0;
+        font-size: 0.75rem;
+        line-height: 1.35;
+        color: var(--ds-muted);
+    }
+    .o_ds_studio_section_body,
+    .o_ds_slot_section_body {
+        padding: 0.85rem;
+    }
+    .o_ds_studio_group,
+    .o_ds_slot_group {
+        margin-top: 0.85rem;
+        padding: 0.7rem 0.75rem 0.75rem;
+        border-left: 3px solid var(--ds-accent, #714b67);
+        background: rgba(0, 0, 0, 0.02);
+        border-radius: 0 var(--ds-radius) var(--ds-radius) 0;
+    }
+    .o_ds_studio_group_title,
+    .o_ds_slot_group_title {
+        font-size: 0.875rem;
+        font-weight: 700;
+        color: var(--ds-ink);
+        margin: 0 0 0.2rem;
+        line-height: 1.3;
+    }
+    .o_ds_studio_group_help,
+    .o_ds_slot_group_help {
+        margin: 0 0 0.65rem;
+        font-size: 0.75rem;
+        line-height: 1.35;
+        color: var(--ds-muted);
     }
     .o_ds_fieldset {
         background: transparent;
@@ -720,6 +871,33 @@
             color: var(--ds-ink);
             font-weight: 700;
             margin: 0 0 0.75rem;
+        }
+    }
+    .o_ds_section_help {
+        margin: -0.35rem 0 0.85rem;
+        line-height: 1.4;
+    }
+    .o_ds_subsection {
+        margin: 0 0 1.1rem;
+        padding: 0.75rem 0 0;
+        border-top: 1px dashed var(--ds-border);
+        &:first-of-type {
+            border-top: 0;
+            padding-top: 0;
+        }
+        &:last-child {
+            margin-bottom: 0;
+        }
+    }
+    .o_ds_subsection_title {
+        font-size: 0.875rem;
+        font-weight: 700;
+        color: var(--ds-ink);
+        margin: 0 0 0.35rem;
+    }
+    .o_ds_graph_meta_row {
+        .o_ds_check {
+            white-space: nowrap;
         }
     }
     .o_ds_field_row {
@@ -772,9 +950,116 @@
         gap: 0.35rem;
         margin-bottom: 0.5rem;
     }
-    .o_ds_scope_row {
+    .o_ds_variant_list {
+        display: flex;
+        flex-direction: column;
+        gap: 0.35rem;
+        margin-bottom: 0.5rem;
+        overflow-x: auto;
+    }
+    .o_ds_variant_row {
+        // handle | Default | model | link | button | action | trash
+        --ds-variant-cols: 2.75rem 3.25rem minmax(9rem, 1.2fr) minmax(10rem, 1.45fr)
+            minmax(6.5rem, 0.95fr) minmax(9rem, 1.3fr) 2.25rem;
         display: grid;
-        grid-template-columns: 2.5rem 1fr 1fr 5.5rem minmax(8rem, 1.4fr) 2.5rem 2rem;
+        grid-template-columns: var(--ds-variant-cols);
+        gap: 0.4rem;
+        align-items: start;
+        padding: 0.4rem 0.45rem;
+        border: 1px solid var(--ds-border);
+        border-radius: var(--ds-radius);
+        background: #fff;
+        min-width: 44rem;
+        cursor: grab;
+        > * {
+            min-width: 0;
+        }
+        input.form-control {
+            width: 100%;
+        }
+        > button.btn-outline-secondary {
+            justify-self: end;
+            margin-top: 0.2rem;
+        }
+        .o_ds_scope_handle_col,
+        .o_ds_variant_col_default {
+            margin-top: 0.35rem;
+        }
+        &:active {
+            cursor: grabbing;
+        }
+        &.o_ds_variant_header {
+            border: none;
+            background: transparent;
+            padding: 0 0.45rem 0.35rem;
+            min-width: 44rem;
+            cursor: default;
+            align-items: center;
+            > span {
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+                font-size: 0.875rem;
+                font-weight: 500;
+                color: var(--o-form-label-color, var(--ds-ink));
+                line-height: 1.3;
+            }
+            .o_ds_variant_col_default {
+                text-align: center;
+            }
+        }
+        .o_ds_variant_col_default {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 0;
+        }
+    }
+    .o_ds_variant_picker {
+        position: relative;
+        min-width: 0;
+        .o_ds_variant_picker_value {
+            font-size: 0.78rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            line-height: 1.35;
+            min-height: calc(1.5em + 0.5rem + 2px);
+        }
+        .o_ds_variant_picker_results {
+            position: absolute;
+            z-index: 30;
+            left: 0;
+            right: 0;
+            top: 100%;
+            max-height: 180px;
+            overflow: auto;
+            margin-top: 0.15rem;
+        }
+    }
+    .o_ds_variant_link {
+        min-width: 0;
+        .o_ds_link_path {
+            flex-wrap: wrap;
+        }
+        .o_ds_link_hop {
+            min-width: 6.5rem;
+            max-width: 100%;
+            font-size: 0.75rem;
+        }
+        .o_ds_variant_link_actions {
+            min-height: 1.25rem;
+        }
+        .o_ds_variant_ok {
+            font-size: 0.65rem;
+            font-weight: 700;
+            line-height: 1.2;
+            padding: 0.2em 0.45em;
+        }
+    }
+    .o_ds_scope_row {
+        // handle | name | description | domain | default | trash
+        display: grid;
+        grid-template-columns: 2.5rem 1fr 1fr minmax(8rem, 1.6fr) 2.5rem 2rem;
         gap: 0.35rem;
         align-items: center;
         padding: 0.35rem 0.4rem;
@@ -788,15 +1073,21 @@
         &.o_ds_scope_header {
             border: none;
             background: transparent;
-            padding: 0 0.4rem;
+            padding: 0 0.4rem 0.25rem;
             cursor: default;
+            > span {
+                font-size: 0.875rem;
+                font-weight: 500;
+                color: var(--o-form-label-color, var(--ds-ink));
+                line-height: 1.3;
+            }
         }
         @media (max-width: 1100px) {
             grid-template-columns: 2.5rem 1fr 1fr;
             grid-template-areas:
                 "handle name name"
                 ". desc desc"
-                ". mode domain"
+                ". domain domain"
                 ". default remove";
             .o_ds_scope_handle_col {
                 grid-area: handle;
@@ -807,16 +1098,13 @@
             input:nth-of-type(2) {
                 grid-area: desc;
             }
-            select {
-                grid-area: mode;
-            }
             .input-group {
                 grid-area: domain;
             }
             .o_ds_check {
                 grid-area: default;
             }
-            .o_ds_btn_danger {
+            > .btn {
                 grid-area: remove;
             }
         }
@@ -922,11 +1210,12 @@
         flex-direction: column;
         gap: 0.35rem;
         margin-bottom: 0.75rem;
-        span {
-            font-size: 0.8125rem;
-            font-weight: 700;
-            color: var(--ds-ink);
-            line-height: 1.2;
+        /* Match Odoo form field labels (o_form_label) */
+        > span {
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: var(--o-form-label-color, var(--ds-ink));
+            line-height: 1.3;
         }
     }
     .o_ds_check {
