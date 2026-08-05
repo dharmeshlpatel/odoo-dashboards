@@ -23,6 +23,7 @@ slots and enables the Needs attention lens.
     ],
     "data": [
         "data/seed_blueprints.xml",
+        "data/seed_graph_variants.xml",
         "data/seed_blueprint_headers.xml",
     ],
     "installable": True,

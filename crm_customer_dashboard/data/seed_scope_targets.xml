@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- CRM Customers My → crm.lead + sale.order panel maps (Product B′). -->
+<odoo noupdate="1">
+    <record id="scope_crm_mine_target_lead" model="dashboard.blueprint.scope.target">
+        <field name="scope_id" ref="scope_crm_mine"/>
+        <field name="sequence">10</field>
+        <field name="target_model">crm.lead</field>
+        <field name="domain">[('user_id', '=', uid)]</field>
+        <field name="period_field">create_date</field>
+        <field name="period_closed_field">date_closed</field>
+        <field name="apply_kpi" eval="True"/>
+        <field name="apply_bottom" eval="True"/>
+        <field name="apply_views" eval="True"/>
+        <field name="apply_reports" eval="True"/>
+        <field name="apply_menu_new" eval="False"/>
+    </record>
+
+    <record id="scope_crm_mine_target_sale" model="dashboard.blueprint.scope.target">
+        <field name="scope_id" ref="scope_crm_mine"/>
+        <field name="sequence">20</field>
+        <field name="target_model">sale.order</field>
+        <field name="module_depends">sale</field>
+        <field name="domain">[('user_id', '=', uid)]</field>
+        <field name="period_field">date_order</field>
+        <field name="apply_kpi" eval="True"/>
+        <field name="apply_bottom" eval="True"/>
+        <field name="apply_views" eval="True"/>
+        <field name="apply_reports" eval="True"/>
+        <field name="apply_menu_new" eval="False"/>
+    </record>
+
+    <record id="scope_crm_mine_target_invoice" model="dashboard.blueprint.scope.target">
+        <field name="scope_id" ref="scope_crm_mine"/>
+        <field name="sequence">30</field>
+        <field name="target_model">account.move</field>
+        <field name="module_depends">account</field>
+        <field name="domain">[('invoice_user_id', '=', uid), ('move_type', 'in', ('out_invoice', 'out_refund'))]</field>
+        <field name="period_field">invoice_date</field>
+        <field name="apply_kpi" eval="True"/>
+        <field name="apply_bottom" eval="True"/>
+        <field name="apply_views" eval="True"/>
+        <field name="apply_reports" eval="True"/>
+        <field name="apply_menu_new" eval="False"/>
+    </record>
+
+    <record id="scope_crm_mine_target_meeting" model="dashboard.blueprint.scope.target">
+        <field name="scope_id" ref="scope_crm_mine"/>
+        <field name="sequence">40</field>
+        <field name="target_model">calendar.event</field>
+        <field name="module_depends">calendar</field>
+        <field name="domain">[('user_id', '=', uid)]</field>
+        <field name="period_field">start</field>
+        <field name="apply_kpi" eval="False"/>
+        <field name="apply_bottom" eval="True"/>
+        <field name="apply_views" eval="False"/>
+        <field name="apply_reports" eval="False"/>
+        <field name="apply_menu_new" eval="False"/>
+    </record>
+</odoo>

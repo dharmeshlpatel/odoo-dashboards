@@ -69,14 +69,16 @@
         <field name="amount_aggregator">reserved_quantity:sum</field>
         <field name="module_depends">stock</field>
     </record>
+    <!-- Smart button (button_box): was Right · KPI link; match On Hand / Reserved. -->
     <record id="slot_stcat_reorder" model="dashboard.blueprint.slot">
         <field name="blueprint_id" ref="blueprint_stock_categories"/>
         <field name="key">cat_reorder</field>
-        <field name="name">Reorder</field>
-        <field name="section">kpi</field>
-        <field name="sequence">10</field>
-        <field name="label">Reorder rule</field>
-        <field name="label_plural">Reorder rules</field>
+        <field name="name">Reordering Rules</field>
+        <field name="section">button_box</field>
+        <field name="sequence">30</field>
+        <field name="label">Reordering Rules</field>
+        <field name="icon">fa-refresh</field>
+        <field name="show_if_zero" eval="True"/>
         <field name="compute_model">stock.warehouse.orderpoint</field>
         <field name="relate_field">product_category_id</field>
         <field name="compute_domain">[('active', '=', True)]</field>

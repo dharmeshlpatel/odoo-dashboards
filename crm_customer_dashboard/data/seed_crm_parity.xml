@@ -160,7 +160,9 @@
         <field name="action_xmlid">calendar.action_calendar_event</field>
         <field name="action_domain">[('partner_ids', '=', '{{id}}')]</field>
         <field name="action_context">{"search_default_partner_ids": [{{id}}], "default_partner_ids": [{{id}}], "partner_id": {{id}}}</field>
+        <field name="action_model">calendar.event</field>
         <field name="module_depends">calendar</field>
+        <field name="panel_follow_my" eval="True"/>
     </record>
 
     <!--

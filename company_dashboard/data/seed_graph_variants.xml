@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Default Chart model picker option(s) (mirrors blueprint graph / primary). -->
+<odoo noupdate="1">
+    <record id="graph_variant_company_crm_crm_lead" model="dashboard.blueprint.graph.variant">
+        <field name="blueprint_id" ref="blueprint_company_crm"/>
+        <field name="sequence">10</field>
+        <field name="is_default" eval="True"/>
+        <field name="graph_model">crm.lead</field>
+        <field name="graph_data_field">company_id</field>
+        <field name="primary_button_label">Pipeline Analysis</field>
+        <field name="primary_action_xmlid">crm.crm_lead_action_pipeline</field>
+        <field name="primary_action_context">{}</field>
+    </record>
+
+    <record id="graph_variant_company_invoice_account_invoice_report" model="dashboard.blueprint.graph.variant">
+        <field name="blueprint_id" ref="blueprint_company_invoice"/>
+        <field name="sequence">10</field>
+        <field name="is_default" eval="True"/>
+        <field name="graph_model">account.invoice.report</field>
+        <field name="graph_data_field">company_id</field>
+        <field name="primary_button_label">Invoice Analysis</field>
+        <field name="primary_action_xmlid">account.action_account_invoice_report_all</field>
+        <field name="primary_action_context">{}</field>
+    </record>
+
+    <record id="graph_variant_company_sales_sale_report" model="dashboard.blueprint.graph.variant">
+        <field name="blueprint_id" ref="blueprint_company_sales"/>
+        <field name="sequence">10</field>
+        <field name="is_default" eval="True"/>
+        <field name="graph_model">sale.report</field>
+        <field name="graph_data_field">company_id</field>
+        <field name="primary_button_label">Sales Analysis</field>
+        <field name="primary_action_xmlid">sale.action_order_report_all</field>
+        <field name="primary_action_context">{}</field>
+    </record>
+
+</odoo>

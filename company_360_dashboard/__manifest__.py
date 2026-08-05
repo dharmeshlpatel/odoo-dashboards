@@ -16,6 +16,7 @@
     ],
     "data": [
         "data/seed_blueprints.xml",
+        "data/seed_graph_variants.xml",
         "data/seed_headers.xml",
     ],
     "installable": True,

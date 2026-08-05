@@ -18,6 +18,7 @@ CRM Attribution (Campaign / Medium / Source) for dashboard_engine.
     "data": [
         "data/seed_conditions.xml",
         "data/seed_blueprints.xml",
+        "data/seed_graph_variants.xml",
     ],
     "installable": True,
     "application": False,

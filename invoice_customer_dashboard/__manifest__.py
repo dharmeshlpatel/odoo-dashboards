@@ -24,6 +24,7 @@ are installed.
         "data/seed_blueprints.xml",
         "data/seed_blueprint_headers.xml",
         "data/seed_invoice_parity.xml",
+        "data/seed_graph_variants.xml",
     ],
     "installable": True,
     "application": False,

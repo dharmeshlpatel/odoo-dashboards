@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Default Chart model picker option(s) (mirrors blueprint graph / primary). -->
+<odoo noupdate="1">
+    <record id="graph_variant_pos_customers_report_pos_order" model="dashboard.blueprint.graph.variant">
+        <field name="blueprint_id" ref="blueprint_pos_customers"/>
+        <field name="sequence">10</field>
+        <field name="is_default" eval="True"/>
+        <field name="graph_model">report.pos.order</field>
+        <field name="graph_data_field">partner_id</field>
+        <field name="primary_button_label">POS Analysis</field>
+        <field name="primary_action_xmlid">point_of_sale.action_report_pos_order_all</field>
+        <field name="primary_action_context">{}</field>
+    </record>
+
+</odoo>

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Default Chart model picker option(s) (mirrors blueprint graph / primary). -->
+<odoo noupdate="1">
+    <record id="graph_variant_sales_salespersons_sale_report" model="dashboard.blueprint.graph.variant">
+        <field name="blueprint_id" ref="blueprint_sales_salespersons"/>
+        <field name="sequence">10</field>
+        <field name="is_default" eval="True"/>
+        <field name="graph_model">sale.report</field>
+        <field name="graph_data_field">user_id</field>
+        <field name="primary_button_label">Sales Analysis</field>
+        <field name="primary_action_xmlid">sale.action_order_report_salesperson</field>
+        <field name="primary_action_context">{}</field>
+    </record>
+
+</odoo>

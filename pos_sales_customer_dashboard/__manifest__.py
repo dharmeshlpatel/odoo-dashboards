@@ -13,6 +13,7 @@
         "data/seed_blueprint_headers.xml",
         "data/seed_pos_parity.xml",
         "data/seed_pos_customer_parity.xml",
+        "data/seed_graph_variants.xml",
     ],
     "installable": True,
     "application": False,

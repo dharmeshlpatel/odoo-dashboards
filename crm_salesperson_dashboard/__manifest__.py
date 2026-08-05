@@ -22,6 +22,7 @@ link. Independent of ``crm_customer_dashboard``.
     ],
     "data": [
         "data/seed_crm_salesperson.xml",
+        "data/seed_graph_variants.xml",
         "data/seed_blueprint_headers.xml",
     ],
     "installable": True,

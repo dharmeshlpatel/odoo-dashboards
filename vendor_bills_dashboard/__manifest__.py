@@ -17,6 +17,7 @@ Vendor Bills dashboard for dashboard_engine (AP).
     "data": [
         "data/seed_conditions.xml",
         "data/seed_blueprints.xml",
+        "data/seed_graph_variants.xml",
         "data/seed_headers.xml",
     ],
     "installable": True,

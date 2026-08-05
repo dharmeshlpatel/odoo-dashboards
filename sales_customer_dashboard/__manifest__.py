@@ -21,7 +21,7 @@ Ships the Sales Customers blueprint preset for ``dashboard_engine``.
         "data/seed_blueprints.xml",
         "data/seed_blueprint_headers.xml",
         "data/seed_sales_parity.xml",
-        # Share links via post_init when CRM Customers pack is also installed.
+        "data/seed_graph_variants.xml",
     ],
     "installable": True,
     "application": False,

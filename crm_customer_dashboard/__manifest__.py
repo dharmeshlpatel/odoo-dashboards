@@ -2,7 +2,7 @@
 # Part of GritXi. See LICENSE file for full copyright and licensing details.
 {
     "name": "CRM Customers Dashboard",
-    "version": "19.0.1.0.1",
+    "version": "19.0.1.0.3",
     "category": "Sales/CRM",
     "summary": "CRM Customers kanban dashboard preset for Dynamic Dashboard Engine",
     "description": """
@@ -22,10 +22,10 @@ Requires CRM. Salesperson dashboards ship in ``crm_salesperson_dashboard``.
     "data": [
         "data/seed_conditions.xml",
         "data/seed_blueprints.xml",
+        "data/seed_scope_targets.xml",
         "data/seed_blueprint_headers.xml",
         "data/seed_crm_parity.xml",
-        # Share links loaded after peer install via post_init (avoids circular
-        # CRM↔Sales install order). File kept for documentation / future bridge.
+        "data/seed_graph_variants.xml",
     ],
     "installable": True,
     "application": False,

@@ -34,7 +34,7 @@
         <field name="blueprint_id" ref="blueprint_crm_customers"/>
         <field name="sequence">10</field>
         <field name="name">My Pipeline</field>
-        <field name="description">Show only opportunities that are assigned to you.</field>
+        <field name="description">Only show opportunities assigned to you.</field>
         <field name="mode">restrict</field>
         <field name="domain">[('user_id', '=', uid)]</field>
         <field name="default_on" eval="False"/>
@@ -44,7 +44,7 @@
         <field name="blueprint_id" ref="blueprint_crm_customers"/>
         <field name="sequence">20</field>
         <field name="name">Pipeline</field>
-        <field name="description">Include opportunity-related records in the dashboard analysis.</field>
+        <field name="description">Add opportunities (Pipeline) to the chart.</field>
         <field name="mode">include</field>
         <field name="domain">[('type', '=', 'opportunity')]</field>
         <field name="default_on" eval="True"/>
@@ -54,7 +54,7 @@
         <field name="blueprint_id" ref="blueprint_crm_customers"/>
         <field name="sequence">30</field>
         <field name="name">Leads</field>
-        <field name="description">Include lead-related records in the dashboard analysis.</field>
+        <field name="description">Add leads to the chart.</field>
         <field name="mode">include</field>
         <field name="domain">[('type', '=', 'lead')]</field>
         <field name="default_on" eval="False"/>
