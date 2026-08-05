@@ -3,6 +3,7 @@
 import { Component, onWillStart, onPatched, useRef, useState } from "@odoo/owl";
 import { registry } from "@web/core/registry";
 import { useService } from "@web/core/utils/hooks";
+import { user } from "@web/core/user";
 import { _t } from "@web/core/l10n/translation";
 import { ConfirmationDialog } from "@web/core/confirmation_dialog/confirmation_dialog";
 import { DomainSelectorDialog } from "@web/core/domain_selector_dialog/domain_selector_dialog";
@@ -211,6 +212,7 @@ export class DashboardStudioAction extends Component {
         this.state = useState({
             zone: "kpis",
             studioMode: "content", // setup | content | layout
+            canOpenAdvanced: false,
             payload: null,
             selectedSlotId: null,
             selectedHeaderId: null,
@@ -285,6 +287,9 @@ export class DashboardStudioAction extends Component {
             slotRelatePathExtraHop: false,
         });
         onWillStart(async () => {
+            this.state.canOpenAdvanced = await user.hasGroup(
+                "dashboard_engine.group_dashboard_engine_manager"
+            );
             await this.loadPayload();
             await this.loadCatalogs();
             await this.loadSamples("");
@@ -4016,14 +4021,15 @@ export class DashboardStudioAction extends Component {
     }
 
     async openAdvanced() {
-        await this.action.doAction({
-            type: "ir.actions.act_window",
-            name: _t("Advanced blueprint"),
-            res_model: "dashboard.blueprint",
-            res_id: this.blueprintId,
-            views: [[false, "form"]],
-            target: "current",
-        });
+        if (!this.state.canOpenAdvanced) {
+            return;
+        }
+        const action = await this.orm.call(
+            "dashboard.blueprint",
+            "action_open_advanced",
+            [[this.blueprintId]]
+        );
+        await this.action.doAction(action);
     }
 
     sectionBadge(section) {

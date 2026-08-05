@@ -321,6 +321,14 @@ class TestDashboardStudio(TransactionCase):
         self.assertEqual(action["tag"], "dashboard_engine.studio")
         self.assertEqual(action["params"]["blueprint_id"], bp.id)
 
+    def test_action_open_advanced(self):
+        bp = self._studio_blueprint()
+        action = bp.action_open_advanced()
+        self.assertEqual(action["type"], "ir.actions.act_window")
+        self.assertEqual(action["res_model"], "dashboard.blueprint")
+        self.assertEqual(action["res_id"], bp.id)
+        self.assertEqual(action["views"], [(False, "form")])
+
     def test_studio_layout_default_and_validate(self):
         bp = self._studio_blueprint()
         default = bp.studio_default_layout()

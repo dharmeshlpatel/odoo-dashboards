@@ -6,10 +6,10 @@
         <field name="arch" type="xml">
             <form string="New Dashboard">
                 <group>
-                    <field name="name"/>
-                    <field name="host_model_id" options="{'no_create': True}"/>
-                    <field name="key" placeholder="auto from name"/>
-                    <field name="open_studio"/>
+                    <field name="name" string="Name"/>
+                    <field name="host_model_id" string="Host Model" options="{'no_create': True}"/>
+                    <field name="key" string="Technical Key" placeholder="auto from name"/>
+                    <field name="open_studio" string="Open Studio After Create"/>
                 </group>
                 <footer>
                     <button name="action_create" type="object" string="Create"

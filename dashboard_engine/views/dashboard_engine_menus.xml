@@ -20,7 +20,7 @@
               parent="menu_dashboard_engine_root"
               action="action_dashboard_blueprint"
               sequence="5"
-              groups="dashboard_engine.group_dashboard_engine_manager"/>
+              groups="dashboard_engine.group_dashboard_engine_studio"/>
 
     <menuitem id="menu_dashboard_engine_hub_menus"
               name="Hub Menus"
@@ -36,6 +36,7 @@
               sequence="8"
               groups="dashboard_engine.group_dashboard_engine_manager"/>
 
+    <!-- Kept for shortcuts / favorites; list New also opens this wizard. -->
     <menuitem id="menu_dashboard_engine_create"
               name="New Dashboard"
               parent="menu_dashboard_engine_root"

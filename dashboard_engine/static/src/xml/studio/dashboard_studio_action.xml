@@ -28,7 +28,9 @@
                           t-att-class="'o_ds_state badge ' + (state.payload.state === 'published' ? 'text-bg-success' : 'text-bg-secondary')"
                           t-esc="state.payload.state"/>
                     <span t-if="state.dirty or state.layoutDirty or state.setupDirty" class="badge text-bg-warning">Unsaved</span>
-                    <button type="button" class="btn btn-light btn-sm" t-on-click="openAdvanced" title="Open Advanced form">
+                    <button t-if="state.canOpenAdvanced" type="button"
+                            class="btn btn-light btn-sm" t-on-click="openAdvanced"
+                            title="Open Advanced form (Administrators)">
                         <i class="fa fa-flask me-1"/>Advanced
                     </button>
                     <button type="button" class="btn btn-secondary btn-sm" t-on-click="discard"

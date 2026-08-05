@@ -1502,6 +1502,18 @@ class DashboardBlueprint(models.Model):
             },
         }
 
+    def action_open_advanced(self):
+        """Open the classic Advanced form (Manager / power users)."""
+        self.ensure_one()
+        return {
+            "type": "ir.actions.act_window",
+            "name": _("Advanced"),
+            "res_model": self._name,
+            "res_id": self.id,
+            "views": [(False, "form")],
+            "target": "current",
+        }
+
     # ------------------------------------------------------------------
     # Dashboard Studio — payload + guided writes + catalogs
     # ------------------------------------------------------------------

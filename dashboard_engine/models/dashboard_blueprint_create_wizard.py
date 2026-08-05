@@ -9,20 +9,20 @@ class DashboardBlueprintCreateWizard(models.TransientModel):
     _name = "dashboard.blueprint.create.wizard"
     _description = "Create Dashboard Blueprint"
 
-    name = fields.Char(required=True, default="My Dashboard")
+    name = fields.Char(required=True, default="My Dashboard", string="Name")
     host_model_id = fields.Many2one(
         "ir.model",
-        string="Host model",
+        string="Host Model",
         required=True,
         domain="[('transient', '=', False)]",
         help="Model of each card (e.g. Contact, User).",
     )
     key = fields.Char(
-        string="Technical key",
+        string="Technical Key",
         help="Leave empty to generate from the name.",
     )
     open_studio = fields.Boolean(
-        string="Open Studio after create",
+        string="Open Studio After Create",
         default=True,
     )
 

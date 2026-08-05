@@ -4,7 +4,10 @@
         <field name="name">dashboard.blueprint.list</field>
         <field name="model">dashboard.blueprint</field>
         <field name="arch" type="xml">
-            <list>
+            <list js_class="dashboard_blueprint_list"
+                  action="action_open_studio"
+                  type="object"
+                  sample="1">
                 <field name="sequence" widget="handle"/>
                 <field name="name"/>
                 <field name="host_model_id" string="Host Model"/>
@@ -22,6 +25,9 @@
                 <button name="action_open_studio" type="object" string="Customize"
                         icon="fa-pencil"
                         groups="dashboard_engine.group_dashboard_engine_studio"/>
+                <button name="action_open_advanced" type="object" string="Advanced"
+                        icon="fa-flask"
+                        groups="dashboard_engine.group_dashboard_engine_manager"/>
             </list>
         </field>
     </record>
@@ -335,12 +341,9 @@
                             bg_color="text-bg-danger" invisible="active"/>
                     <div class="alert alert-info" role="status"
                          invisible="state == 'published'">
-                        <b>How to build a dashboard:</b>
-                        1) Set <b>Dashboard</b> and <b>Menu</b> (host model, menu entry).
-                        2) Configure <b>Configuration</b> (scopes, graph, filters — same as the live Configuration popup).
-                        3) Compose <b>Card layout</b> (header, primary action, KPIs, bottom buttons).
-                        4) Fill <b>Manage Menu</b> (Views / New / Reports — same as the live card menu).
-                        5) Publish — a menu appears under the parent you chose.
+                        <b>Advanced form</b> — for Administrators / power users.
+                        Day-to-day building uses <b>Studio</b> (list → Customize, or New wizard).
+                        Here you can still edit Configuration, Card layout, Manage Menu, and Technical.
                     </div>
                     <div class="alert alert-success" role="status"
                          invisible="state != 'published' or health_issue_count &gt; 0">
@@ -990,12 +993,12 @@
         <field name="context">{'search_default_published': 1}</field>
         <field name="help" type="html">
             <p class="o_view_nocontent_smiling_face">
-                Create a blueprint to build a kanban dashboard for any Odoo model.
+                Create a dashboard blueprint for any Odoo model.
             </p>
             <p>
-                Set Dashboard and Menu, configure Configuration, compose the
-                Card layout, then Publish. Required Apps keep CRM / Sales / POS
-                optional until installed.
+                Click <b>New</b> to open the create wizard, then edit in
+                <b>Studio</b>. Click a row or <b>Customize</b> to reopen Studio.
+                Administrators can open the classic <b>Advanced</b> form when needed.
             </p>
         </field>
     </record>
