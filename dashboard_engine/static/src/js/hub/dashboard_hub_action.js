@@ -19,6 +19,9 @@ export class DashboardHubAction extends Component {
         this.orm = useService("orm");
         this.actionService = useService("action");
         this.selectionRequest = 0;
+        // Phase 5: keep action/view metadata per blueprint for instant re-open
+        // inside the same Hub session (no second /web/action/load).
+        this._actionCache = new Map();
         this.state = useState({
             tree: [],
             activeBlueprintId: false,
@@ -118,36 +121,51 @@ export class DashboardHubAction extends Component {
         this.setHubDisplayName(dashboard.name);
         this.state.loadingView = true;
         try {
-            const action = await rpc("/web/action/load", {
-                action_id: dashboard.action_id,
-            });
-            if (request !== this.selectionRequest) {
+            let cached = this._actionCache.get(blueprintId);
+            if (!cached) {
+                const action = await rpc("/web/action/load", {
+                    action_id: dashboard.action_id,
+                });
+                if (request !== this.selectionRequest) {
+                    return;
+                }
+                if (!action) {
+                    return;
+                }
+                const kanban = (action.views || []).find(([, type]) => type === "kanban");
+                const searchViewId = Array.isArray(action.search_view_id)
+                    ? action.search_view_id[0]
+                    : action.search_view_id || false;
+                const context = makeContext(
+                    [user.context, action.context || {}],
+                    user.context
+                );
+                const domain =
+                    typeof action.domain === "string"
+                        ? evaluateExpr(
+                              action.domain,
+                              Object.assign({}, user.context, context)
+                          )
+                        : action.domain || [];
+                cached = {
+                    resModel: action.res_model,
+                    viewId: kanban ? kanban[0] : false,
+                    searchViewId,
+                    context,
+                    domain,
+                };
+                this._actionCache.set(blueprintId, cached);
+            } else if (request !== this.selectionRequest) {
                 return;
             }
-            if (!action) {
-                return;
-            }
-            const kanban = (action.views || []).find(([, type]) => type === "kanban");
-            const searchViewId = Array.isArray(action.search_view_id)
-                ? action.search_view_id[0]
-                : action.search_view_id || false;
-            // Match action_service: evaluate action context on top of user context.
-            const context = makeContext(
-                [user.context, action.context || {}],
-                user.context
-            );
-            const domain =
-                typeof action.domain === "string"
-                    ? evaluateExpr(action.domain, Object.assign({}, user.context, context))
-                    : action.domain || [];
-            const resModel = action.res_model;
+            const { resModel, viewId, searchViewId, context, domain } = cached;
             this.state.viewProps = {
                 resModel,
                 type: "kanban",
-                viewId: kanban ? kanban[0] : false,
+                viewId,
                 searchViewId,
                 views: [
-                    [kanban ? kanban[0] : false, "kanban"],
+                    [viewId, "kanban"],
                     [searchViewId, "search"],
                     [false, "form"],
                 ],
