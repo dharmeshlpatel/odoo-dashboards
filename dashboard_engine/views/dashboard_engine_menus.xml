@@ -6,7 +6,7 @@
               sequence="25"
               groups="dashboard_engine.group_dashboard_engine_user"/>
 
-    <!-- Static hub menu retired: dashboard.blueprint.hub generates menus. -->
+    <!-- End-user hub under this app removed; use Hub Menus admin + app menus. -->
     <menuitem id="menu_dashboard_engine_hub"
               name="Dashboards"
               parent="menu_dashboard_engine_root"
@@ -16,7 +16,7 @@
               groups="dashboard_engine.group_dashboard_engine_user"/>
 
     <menuitem id="menu_dashboard_engine_blueprints"
-              name="Blueprints"
+              name="Dashboards"
               parent="menu_dashboard_engine_root"
               action="action_dashboard_blueprint"
               sequence="5"

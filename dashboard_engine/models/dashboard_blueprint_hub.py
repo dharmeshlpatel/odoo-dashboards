@@ -19,9 +19,9 @@ class DashboardBlueprintHub(models.Model):
     menu_parent_id = fields.Many2one(
         "ir.ui.menu",
         string="Parent Menu",
-        required=True,
         ondelete="restrict",
-        help="Where this hub menu sits in the Odoo menu tree.",
+        help="Where this hub menu sits in the Odoo menu tree. "
+        "Empty = no hub menu is generated (hub groups can still be used).",
     )
     menu_sequence = fields.Integer(default=10, string="Menu Sequence")
     menu_group_ids = fields.Many2many(
@@ -97,7 +97,7 @@ class DashboardBlueprintHub(models.Model):
             hub.with_context(skip_hub_menu_sync=True).write(
                 {
                     "generated_action_id": action.id,
-                    "generated_menu_id": menu.id,
+                    "generated_menu_id": menu.id if menu else False,
                 }
             )
 
@@ -118,6 +118,11 @@ class DashboardBlueprintHub(models.Model):
     def _upsert_menu(self, action):
         self.ensure_one()
         Menu = self.env["ir.ui.menu"].sudo()
+        if not self.menu_parent_id:
+            # No parent → hide/remove any previously generated Engine hub menu.
+            if self.generated_menu_id:
+                self.generated_menu_id.write({"active": False})
+            return Menu.browse()
         vals = {
             "name": self.name,
             "action": "ir.actions.client,%s" % action.id,
