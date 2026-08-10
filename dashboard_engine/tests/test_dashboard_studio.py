@@ -157,6 +157,35 @@ class TestDashboardStudio(TransactionCase):
         payload = bp.studio_unlink_slot(created_id)
         self.assertEqual(len([s for s in payload["slots"] if s["section"] == "kpi"]), 1)
 
+    def test_studio_totals_and_shortcuts_lock_count_amount(self):
+        """Totals/Shortcuts share KPI figure path; Shows is always Count + Amount."""
+        bp = self._studio_blueprint()
+        total_payload = bp.studio_create_slot("button_box", {"label": "Due"})
+        total = bp.slot_ids.browse(total_payload["created_slot_id"])
+        self.assertEqual(total.section, "button_box")
+        self.assertEqual(total.value_mode, "count_amount")
+        self.assertEqual(total.compute_model, "res.partner")
+        total.write({"value_mode": "count"})
+        self.assertEqual(total.value_mode, "count_amount")
+
+        short_payload = bp.studio_create_slot("bottom", {"label": "Meetings"})
+        shortcut = bp.slot_ids.browse(short_payload["created_slot_id"])
+        self.assertEqual(shortcut.section, "bottom")
+        self.assertEqual(shortcut.value_mode, "count_amount")
+        bp.studio_write_slot(
+            shortcut.id,
+            {
+                "compute_model": "res.partner",
+                "relate_field": "parent_id",
+                "compute_domain": "[('is_company', '=', True)]",
+                "value_mode": "amount",
+            },
+        )
+        shortcut.invalidate_recordset()
+        self.assertEqual(shortcut.value_mode, "count_amount")
+        self.assertEqual(shortcut.compute_domain, "[('is_company', '=', True)]")
+        self.assertEqual(shortcut.relate_field, "parent_id")
+
     def test_studio_reorder_slots_rejects_stale_list(self):
         bp = self._studio_blueprint()
         with self.assertRaises(UserError):
@@ -205,6 +234,20 @@ class TestDashboardStudio(TransactionCase):
         all_chart = bp.studio_search_chart_models("", limit=20, all_models=True)
         self.assertFalse(all_chart.get("scoped"))
 
+        groupby = bp.studio_groupby_fields(bp.graph_model or bp.host_model_name)
+        self.assertTrue(isinstance(groupby, list))
+        self.assertTrue(all("id" in row and "name" in row for row in groupby))
+        self.assertFalse(any(row["name"] == "id" for row in groupby))
+        # Raw date/datetime excluded; period virtual tags (x_*) allowed.
+        for row in groupby:
+            if row["ttype"] in ("date", "datetime"):
+                self.assertTrue(row["name"].startswith("x_"))
+
+        stored = bp.studio_model_fields(
+            bp.host_model_name, ["integer", "float", "monetary"], True
+        )
+        self.assertTrue(all(row.get("store") for row in stored))
+
     @staticmethod
     def _menu_publish_would_confirm(payload):
         """Mirror Studio OWL publish() confirm gate (payload contract)."""
@@ -219,6 +262,7 @@ class TestDashboardStudio(TransactionCase):
     def test_scope_warning_studio_write_payload_and_pref(self):
         bp = self._studio_blueprint()
         msg = "At least one of 'Pipeline' or 'Leads' must stay on."
+        # No Chart Model Options yet — blueprint field still works.
         payload = bp.studio_write_blueprint({"scope_warning": msg})
         self.assertEqual(bp.scope_warning, msg)
         self.assertEqual(payload.get("scope_warning"), msg)
@@ -236,6 +280,66 @@ class TestDashboardStudio(TransactionCase):
         self.assertEqual(payload.get("scope_warning") or "", "")
         pref.invalidate_recordset()
         self.assertFalse(pref.scope_warning)
+
+    def test_scope_warning_per_graph_variant(self):
+        bp = self._studio_blueprint()
+        bp.write(
+            {
+                "primary_action_xmlid": "base.action_partner_form",
+                "scope_warning": "Blueprint fallback",
+            }
+        )
+        # Payload heal creates the Default option and copies the warning.
+        payload = bp.get_studio_payload()
+        self.assertTrue(payload.get("graph_variants"))
+        default_id = payload["default_graph_variant_id"]
+        self.assertTrue(default_id)
+        self.assertEqual(
+            next(
+                r["scope_warning"]
+                for r in payload["graph_variants"]
+                if r["id"] == default_id
+            ),
+            "Blueprint fallback",
+        )
+
+        lead_msg = "Keep Pipeline or Leads on."
+        sale_msg = "Keep at least one Sales filter on."
+        payload = bp.studio_write_graph_variant(
+            default_id, {"scope_warning": lead_msg}
+        )
+        self.assertEqual(
+            next(
+                r["scope_warning"]
+                for r in payload["graph_variants"]
+                if r["id"] == default_id
+            ),
+            lead_msg,
+        )
+        bp.invalidate_recordset(["scope_warning"])
+        self.assertEqual(bp.scope_warning, lead_msg)
+
+        payload = bp.studio_create_graph_variant(
+            {
+                "graph_model": "res.partner",
+                "primary_button_label": "Second",
+                "primary_action_xmlid": "base.action_partner_form",
+            }
+        )
+        second_id = payload.get("created_graph_variant_id")
+        bp.studio_write_graph_variant(second_id, {"scope_warning": sale_msg})
+
+        pref = self.env["dashboard.user.pref"].create(
+            {
+                "blueprint_id": bp.id,
+                "user_id": self.env.user.id,
+            }
+        )
+        # No gear pick → Default option warning.
+        self.assertEqual(pref.scope_warning, lead_msg)
+        pref.preferred_graph_variant_id = second_id
+        pref.invalidate_recordset(["scope_warning"])
+        self.assertEqual(pref.scope_warning, sale_msg)
 
     def test_publish_confirm_payload_menu_contract(self):
         """Payload fields must drive the Studio Publish confirm dialog."""
@@ -555,6 +659,40 @@ class TestDashboardStudio(TransactionCase):
         with self.assertRaises(UserError):
             bp.studio_write_blueprint({"graph_domain": "not a domain"})
 
+    def test_studio_variant_custom_filter_per_option(self):
+        """Custom Filter lives on the Chart Model Option and feeds runtime domain."""
+        bp = self._studio_blueprint()
+        bp.write(
+            {
+                "primary_action_xmlid": "base.action_partner_form",
+                "graph_data_field": "parent_id",
+                "graph_domain": "[('is_company', '=', True)]",
+            }
+        )
+        payload = bp.studio_create_graph_variant({})
+        vid = payload["created_graph_variant_id"]
+        row = next(v for v in payload["graph_variants"] if v["id"] == vid)
+        self.assertIn("is_company", row.get("graph_domain") or "")
+
+        bp.studio_write_graph_variant(
+            vid, {"graph_domain": "[('active', '=', True)]"}
+        )
+        variant = self.env["dashboard.blueprint.graph.variant"].browse(vid)
+        self.assertIn("active", variant.graph_domain or "")
+        self.assertIn("active", bp.graph_domain or "")  # Default option mirrors
+
+        with self.assertRaises(UserError):
+            bp.studio_write_graph_variant(vid, {"graph_domain": "not a domain"})
+
+        settings = bp._effective_graph_settings()
+        self.assertTrue(
+            any(
+                isinstance(leaf, (list, tuple)) and leaf[0] == "active"
+                for leaf in settings["domain"]
+            ),
+            settings["domain"],
+        )
+
     def test_studio_payload_scope_includes_domain_and_description(self):
         bp = self._studio_blueprint()
         Scope = self.env["dashboard.blueprint.scope"]
@@ -665,6 +803,486 @@ class TestDashboardStudio(TransactionCase):
         )
         self.assertTrue(variant.exists().is_default)
 
+    def test_studio_graph_variant_date_filter_crud(self):
+        """Per-option Date Filters list (Studio step 1 — config only)."""
+        bp = self._studio_blueprint()
+        bp.write(
+            {
+                "primary_action_xmlid": "base.action_partner_form",
+                "graph_data_field": "parent_id",
+            }
+        )
+        Field = self.env["ir.model.fields"]
+        create_date = Field.search(
+            [("model", "=", "res.partner"), ("name", "=", "create_date")], limit=1
+        )
+        write_date = Field.search(
+            [("model", "=", "res.partner"), ("name", "=", "write_date")], limit=1
+        )
+        if not create_date or not write_date:
+            self.skipTest("create_date/write_date missing on res.partner")
+        bp.write({"period_field_id": create_date.id})
+        payload = bp.studio_create_graph_variant({})
+        vid = payload["created_graph_variant_id"]
+        row = next(v for v in payload["graph_variants"] if v["id"] == vid)
+        self.assertTrue(row.get("date_filters"))
+        self.assertEqual(row["date_filters"][0]["field_name"], "create_date")
+
+        created = bp.studio_create_graph_variant_date_filter(
+            vid, {"field_id": write_date.id, "label": "Last Update"}
+        )
+        df_id = created["created_graph_variant_date_filter_id"]
+        self.assertTrue(df_id)
+        labels = [
+            d["label"]
+            for v in created["graph_variants"]
+            if v["id"] == vid
+            for d in v["date_filters"]
+        ]
+        self.assertIn("Last Update", labels)
+
+        bp.studio_write_graph_variant_date_filter(df_id, {"label": "Updated On"})
+        df = self.env["dashboard.blueprint.graph.variant.date.filter"].browse(df_id)
+        self.assertEqual(df.label, "Updated On")
+        self.assertEqual(df.field_name, "write_date")
+
+        bp.studio_unlink_graph_variant_date_filter(df_id)
+        self.assertFalse(df.exists())
+        # Blur-after-remove must not raise (Studio label blur can race unlink).
+        bp.studio_write_graph_variant_date_filter(df_id, {"label": "Gone"})
+
+    def test_date_filter_default_periods_seed_pref(self):
+        """Builder default months/years seed first gear open; user picks win later."""
+        bp = self._studio_blueprint()
+        bp.write(
+            {
+                "primary_action_xmlid": "base.action_partner_form",
+                "graph_data_field": "parent_id",
+            }
+        )
+        Field = self.env["ir.model.fields"]
+        create_date = Field.search(
+            [("model", "=", "res.partner"), ("name", "=", "create_date")], limit=1
+        )
+        mq = self.env["period.month.quarter"].search([], limit=1)
+        year = self.env["period.year"].search([], limit=1)
+        if not create_date or not mq or not year:
+            self.skipTest("date field or period catalogs missing")
+        bp.write({"period_field_id": create_date.id})
+        payload = bp.studio_create_graph_variant({})
+        vid = payload["created_graph_variant_id"]
+        row = next(v for v in payload["graph_variants"] if v["id"] == vid)
+        df_id = row["date_filters"][0]["id"]
+        self.assertTrue(payload.get("period_mq_catalog"))
+        self.assertTrue(payload.get("period_year_catalog"))
+
+        bp.studio_write_graph_variant_date_filter(
+            df_id,
+            {
+                "default_period_mq_ids": [mq.id],
+                "default_period_year_ids": [year.id],
+            },
+        )
+        df = self.env["dashboard.blueprint.graph.variant.date.filter"].browse(df_id)
+        self.assertEqual(df.default_period_mq_ids, mq)
+        self.assertEqual(df.default_period_year_ids, year)
+
+        pref = self.env["dashboard.user.pref"].create(bp._default_pref_values())
+        line = pref.period_line_ids.filtered(lambda l: l.field_name == "create_date")[:1]
+        self.assertTrue(line)
+        self.assertEqual(line.period_mq_ids, mq)
+        self.assertEqual(line.period_year_ids, year)
+
+        other_year = self.env["period.year"].search([("id", "!=", year.id)], limit=1)
+        if other_year:
+            line.write({"period_year_ids": [(6, 0, other_year.ids)]})
+            pref._sync_pref_period_lines()
+            kept = pref.period_line_ids.filtered(
+                lambda l: l.field_name == "create_date"
+            )[:1]
+            self.assertEqual(kept.period_year_ids, other_year)
+
+    def test_pref_period_lines_follow_chart_model_option(self):
+        """Live gear date rows sync from option date_filter_ids; domain uses them."""
+        bp = self._studio_blueprint()
+        bp.write(
+            {
+                "primary_action_xmlid": "base.action_partner_form",
+                "graph_data_field": "parent_id",
+            }
+        )
+        Field = self.env["ir.model.fields"]
+        create_date = Field.search(
+            [("model", "=", "res.partner"), ("name", "=", "create_date")], limit=1
+        )
+        write_date = Field.search(
+            [("model", "=", "res.partner"), ("name", "=", "write_date")], limit=1
+        )
+        year = self.env["period.year"].search([], limit=1)
+        if not create_date or not write_date or not year:
+            self.skipTest("date fields or period.year missing")
+        bp.write({"period_field_id": create_date.id})
+        payload = bp.studio_create_graph_variant({})
+        vid = payload["created_graph_variant_id"]
+        bp.studio_create_graph_variant_date_filter(
+            vid, {"field_id": write_date.id, "label": "Updated On"}
+        )
+
+        pref = self.env["dashboard.user.pref"].create(bp._default_pref_values())
+        self.assertTrue(pref.period_line_ids)
+        names = pref.period_line_ids.sorted("sequence").mapped("field_name")
+        self.assertIn("create_date", names)
+        self.assertIn("write_date", names)
+
+        open_line = pref.period_line_ids.filtered(
+            lambda l: l.field_name == "create_date"
+        )[:1]
+        open_line.write({"period_year_ids": [(6, 0, year.ids)]})
+        domain = pref._period_domain()
+        self.assertTrue(
+            any(
+                isinstance(leaf, tuple) and leaf[0] == "create_date"
+                for leaf in domain
+            ),
+            domain,
+        )
+
+        # Switching Chart Model rebuilds rows but keeps years for same field.
+        # Second option is seeded from blueprint period_field_id (create_date only).
+        other = bp.studio_create_graph_variant(
+            {
+                "graph_model": "res.partner",
+                "primary_button_label": "Second",
+                "primary_action_xmlid": "base.action_partner_form",
+            }
+        )["created_graph_variant_id"]
+        other_variant = self.env["dashboard.blueprint.graph.variant"].browse(other)
+        self.assertEqual(
+            other_variant.date_filter_ids.mapped("field_name"), ["create_date"]
+        )
+        pref.preferred_graph_variant_id = other
+        pref.invalidate_recordset()
+        names2 = pref.period_line_ids.sorted("sequence").mapped("field_name")
+        self.assertEqual(names2, ["create_date"])
+        kept = pref.period_line_ids.filtered(lambda l: l.field_name == "create_date")
+        self.assertEqual(kept.period_year_ids, year)
+
+    def test_graph_variant_defaults_override_blueprint(self):
+        """Variant Group By / Measure / Include win over blueprint until pref."""
+        bp = self._studio_blueprint()
+        bp.write(
+            {
+                "primary_action_xmlid": "base.action_partner_form",
+                "graph_data_field": "parent_id",
+                "graph_measure": "__count",
+            }
+        )
+        Field = self.env["ir.model.fields"]
+        country = Field.search(
+            [("model", "=", "res.partner"), ("name", "=", "country_id")], limit=1
+        )
+        credit = Field.search(
+            [
+                ("model", "=", "res.partner"),
+                ("name", "=", "credit"),
+                ("store", "=", True),
+            ],
+            limit=1,
+        )
+        if not country:
+            self.skipTest("country_id missing on res.partner")
+        payload = bp.studio_create_graph_variant({})
+        vid = payload["created_graph_variant_id"]
+        variant = self.env["dashboard.blueprint.graph.variant"].browse(vid)
+        scope = self.env["dashboard.blueprint.scope"].create(
+            {
+                "blueprint_id": bp.id,
+                "name": "Companies",
+                "mode": "include",
+                "domain": "[('is_company', '=', True)]",
+                "default_on": False,
+            }
+        )
+        write_vals = {
+            "default_groupby_field_ids": country.ids,
+            "default_scope_ids": scope.ids,
+        }
+        if credit:
+            write_vals["default_measure_field_id"] = credit.id
+            write_vals["default_measure_aggregator"] = "sum"
+        bp.studio_write_graph_variant(vid, write_vals)
+        variant.invalidate_recordset()
+        self.assertEqual(variant.default_groupby_ids, country)
+        self.assertEqual(variant.default_scope_ids, scope)
+
+        settings = bp._effective_graph_settings()
+        self.assertEqual(settings["groupby"], "country_id")
+        self.assertIn("country_id", settings["groupbys"])
+        if credit:
+            self.assertEqual(settings["measure"], "credit:sum")
+
+        # Fresh pref seeds from the option (options-only source of truth).
+        pref_vals = bp._default_pref_values()
+        self.assertIn(country.id, pref_vals["groupby_ids"][0][2])
+        self.assertIn(scope.id, pref_vals["scope_ids"][0][2])
+        if credit:
+            self.assertEqual(pref_vals["measure_field_id"], credit.id)
+
+        # Empty option Group By / Measure → id / Count (not blueprint leftovers).
+        bp.studio_write_graph_variant(
+            vid,
+            {
+                "default_groupby_field_ids": [],
+                "default_measure_field_id": False,
+                "default_scope_ids": [],
+            },
+        )
+        settings2 = bp._effective_graph_settings()
+        self.assertEqual(settings2["groupby"], "id")
+        self.assertEqual(settings2["measure"], "__count")
+        variant.invalidate_recordset()
+        self.assertFalse(bp._default_include_scopes(variant).ids)
+
+    def test_select_chart_model_sets_groupby_measure_include(self):
+        """Gear Chart Model pick reseeds Group By / Measure / Data to Include."""
+        bp = self._studio_blueprint()
+        bp.write({"primary_action_xmlid": "base.action_partner_form"})
+        scope_a = self.env["dashboard.blueprint.scope"].create(
+            {
+                "blueprint_id": bp.id,
+                "name": "Companies",
+                "mode": "include",
+                "domain": "[('is_company', '=', True)]",
+                "default_on": True,
+            }
+        )
+        scope_b = self.env["dashboard.blueprint.scope"].create(
+            {
+                "blueprint_id": bp.id,
+                "name": "People",
+                "mode": "include",
+                "domain": "[('is_company', '=', False)]",
+                "default_on": False,
+            }
+        )
+        parent = self.env["ir.model.fields"].search(
+            [("model", "=", "res.partner"), ("name", "=", "parent_id")], limit=1
+        )
+        child = self.env["ir.model.fields"].search(
+            [("model", "=", "res.partner"), ("name", "=", "color")], limit=1
+        )
+        first = bp.studio_create_graph_variant({})["created_graph_variant_id"]
+        bp.studio_write_graph_variant(
+            first,
+            {
+                "default_groupby_field_ids": [parent.id] if parent else [],
+                "default_scope_ids": scope_a.ids,
+            },
+        )
+        second_id = bp.studio_create_graph_variant(
+            {
+                "graph_model": "res.partner",
+                "primary_button_label": "Second",
+                "primary_action_xmlid": "base.action_partner_form",
+                "graph_data_field": "parent_id",
+            }
+        )["created_graph_variant_id"]
+        bp.studio_write_graph_variant(
+            second_id,
+            {
+                "default_groupby_field_ids": [child.id] if child else [],
+                "default_measure_field_id": False,
+                "default_scope_ids": scope_b.ids,
+            },
+        )
+        pref = self.env["dashboard.user.pref"].create(bp._default_pref_values())
+        self.assertIn(scope_a.id, pref.scope_ids.ids)
+        second = self.env["dashboard.blueprint.graph.variant"].browse(second_id)
+        form_pref = pref.new(
+            {
+                "blueprint_id": bp.id,
+                "user_id": pref.user_id.id,
+                "company_id": pref.company_id.id,
+                "preferred_graph_variant_id": pref.preferred_graph_variant_id.id,
+                "preferred_graph_model": pref.preferred_graph_model,
+                "scope_ids": [(6, 0, pref.scope_ids.ids)],
+                "groupby_ids": [(6, 0, pref.groupby_ids.ids)],
+                "measure_field_id": pref.measure_field_id.id or False,
+            }
+        )
+        form_pref.preferred_graph_variant_id = second
+        form_pref._onchange_preferred_graph_variant_id()
+        if child:
+            self.assertIn(child.id, form_pref.groupby_ids.ids)
+        self.assertIn(scope_b.id, form_pref.scope_ids.ids)
+        self.assertNotIn(scope_a.id, form_pref.scope_ids.ids)
+
+    def test_chart_model_name_search_falls_back_when_label_is_invalid(self):
+        """Gear dropdown must not stay empty when the typed label is unusable."""
+        bp = self._studio_blueprint()
+        # Keep blueprint link empty so the broken option stays invalid.
+        bp.write({"primary_action_xmlid": "base.action_partner_form", "graph_data_field": False})
+        broken = self.env["dashboard.blueprint.graph.variant"].create(
+            {
+                "blueprint_id": bp.id,
+                "sequence": 5,
+                "graph_model": "res.partner",
+                "graph_data_field": False,
+                "primary_button_label": "Sales Analysis",
+                "primary_action_xmlid": "base.action_partner_form",
+                "is_default": True,
+            }
+        )
+        good = self.env["dashboard.blueprint.graph.variant"].create(
+            {
+                "blueprint_id": bp.id,
+                "sequence": 10,
+                "graph_model": "res.partner",
+                "graph_data_field": "parent_id",
+                "primary_button_label": "Partners",
+                "primary_action_xmlid": "base.action_partner_form",
+            }
+        )
+        self.assertFalse(broken._is_valid_candidate())
+        self.assertTrue(good._is_valid_candidate())
+        Variant = self.env["dashboard.blueprint.graph.variant"]
+        domain = [("blueprint_id", "=", bp.id)]
+        rows = Variant.name_search("Sales Analysis", domain=domain, limit=20)
+        self.assertEqual(rows, [(good.id, "Partners")])
+
+    def test_onchange_chart_model_reseeds_scope_ids_on_cache(self):
+        """Dialog onchange must update Include ticks + active graph_model."""
+        bp = self._studio_blueprint()
+        bp.write({"primary_action_xmlid": "base.action_partner_form"})
+        scope_a = self.env["dashboard.blueprint.scope"].create(
+            {
+                "blueprint_id": bp.id,
+                "name": "Companies",
+                "mode": "include",
+                "domain": "[('is_company', '=', True)]",
+            }
+        )
+        scope_b = self.env["dashboard.blueprint.scope"].create(
+            {
+                "blueprint_id": bp.id,
+                "name": "People",
+                "mode": "include",
+                "domain": "[('is_company', '=', False)]",
+            }
+        )
+        first = bp.studio_create_graph_variant({})["created_graph_variant_id"]
+        bp.studio_write_graph_variant(first, {"default_scope_ids": scope_a.ids})
+        second_id = bp.studio_create_graph_variant(
+            {
+                "graph_model": "res.partner",
+                "primary_button_label": "Second",
+                "primary_action_xmlid": "base.action_partner_form",
+            }
+        )["created_graph_variant_id"]
+        bp.studio_write_graph_variant(second_id, {"default_scope_ids": scope_b.ids})
+        pref = self.env["dashboard.user.pref"].create(bp._default_pref_values())
+        self.assertIn(scope_a, pref.scope_ids)
+        second = self.env["dashboard.blueprint.graph.variant"].browse(second_id)
+        # Form-dialog path: NewId cache + onchange (not write()).
+        form_pref = pref.new(
+            {
+                "blueprint_id": bp.id,
+                "user_id": pref.user_id.id,
+                "company_id": pref.company_id.id,
+                "preferred_graph_variant_id": pref.preferred_graph_variant_id.id,
+                "preferred_graph_model": pref.preferred_graph_model,
+                "scope_ids": [(6, 0, pref.scope_ids.ids)],
+                "groupby_ids": [(6, 0, pref.groupby_ids.ids)],
+            }
+        )
+        form_pref.preferred_graph_variant_id = second
+        form_pref._onchange_preferred_graph_variant_id()
+        form_pref.modified(["preferred_graph_variant_id"])
+        self.assertIn(scope_b.id, form_pref.scope_ids.ids)
+        self.assertNotIn(scope_a.id, form_pref.scope_ids.ids)
+        self.assertEqual(form_pref.graph_model, "res.partner")
+
+    def test_switch_chart_model_reseeds_pref_for_gear_and_chart(self):
+        """Gear + chart follow each option's Group By / Measure / Include."""
+        bp = self._studio_blueprint()
+        bp.write(
+            {
+                "primary_action_xmlid": "base.action_partner_form",
+                "graph_data_field": "parent_id",
+            }
+        )
+        Field = self.env["ir.model.fields"]
+        country = Field.search(
+            [("model", "=", "res.partner"), ("name", "=", "country_id")], limit=1
+        )
+        state = Field.search(
+            [("model", "=", "res.partner"), ("name", "=", "state_id")], limit=1
+        )
+        if not country or not state:
+            self.skipTest("country_id/state_id missing on res.partner")
+        scope_a = self.env["dashboard.blueprint.scope"].create(
+            {
+                "blueprint_id": bp.id,
+                "name": "Companies",
+                "mode": "include",
+                "domain": "[('is_company', '=', True)]",
+                "default_on": False,
+            }
+        )
+        scope_b = self.env["dashboard.blueprint.scope"].create(
+            {
+                "blueprint_id": bp.id,
+                "name": "People",
+                "mode": "include",
+                "domain": "[('is_company', '=', False)]",
+                "default_on": False,
+            }
+        )
+        first = bp.studio_create_graph_variant({})["created_graph_variant_id"]
+        bp.studio_write_graph_variant(
+            first,
+            {
+                "default_groupby_field_ids": country.ids,
+                "default_scope_ids": scope_a.ids,
+                "primary_button_label": "First",
+            },
+        )
+        second = bp.studio_create_graph_variant(
+            {
+                "graph_model": "res.partner",
+                "primary_button_label": "Second",
+                "primary_action_xmlid": "base.action_partner_form",
+            }
+        )["created_graph_variant_id"]
+        bp.studio_write_graph_variant(
+            second,
+            {
+                "default_groupby_field_ids": state.ids,
+                "default_scope_ids": scope_b.ids,
+            },
+        )
+
+        pref = self.env["dashboard.user.pref"].create(bp._default_pref_values())
+        self.assertEqual(pref.preferred_graph_variant_id.id, first)
+        self.assertEqual(pref.groupby_ids, country)
+        self.assertEqual(pref.scope_ids & scope_a, scope_a)
+        self.assertEqual(pref.graph_model, "res.partner")
+        self.assertIn(scope_a, pref.applicable_include_scope_ids)
+
+        settings = bp._effective_graph_settings()
+        self.assertEqual(settings["groupby"], "country_id")
+
+        pref.preferred_graph_variant_id = second
+        pref.invalidate_recordset()
+        self.assertEqual(pref.groupby_ids, state)
+        self.assertEqual(pref.scope_ids & scope_b, scope_b)
+        self.assertFalse(pref.scope_ids & scope_a)
+        settings2 = bp._effective_graph_settings()
+        self.assertEqual(settings2["groupby"], "state_id")
+        # Pref domain must use the active option's include ticks.
+        domain = pref._pref_domain()
+        self.assertTrue(domain)
+
     def test_studio_payload_groupby_and_measure_ids(self):
         bp = self._make_bp_with_graph()
         Field = self.env["ir.model.fields"]
@@ -768,9 +1386,7 @@ class TestDashboardStudio(TransactionCase):
                 "domain": "[]",
             }
         )
-        all_rows = bp.studio_condition_catalog()
-        self.assertTrue(any(r["id"] == partner_cond.id for r in all_rows))
-        self.assertTrue(any(r["id"] == user_cond.id for r in all_rows))
+        self.assertEqual(bp.studio_condition_catalog(), [])
         partner_rows = bp.studio_condition_catalog(model="res.partner")
         ids = {r["id"] for r in partner_rows}
         self.assertIn(partner_cond.id, ids)

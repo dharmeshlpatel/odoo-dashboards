@@ -80,6 +80,32 @@ class DashboardBlueprintScopeTarget(models.Model):
         string="Closed period field",
         help="Target field for gear Closed Date filter, if any.",
     )
+    period_field_id = fields.Many2one(
+        "ir.model.fields",
+        string="Create / open period field",
+        compute="_compute_period_field_ids",
+        inverse="_inverse_period_field_id",
+        store=True,
+        readonly=False,
+        ondelete="set null",
+        domain=(
+            "[('model_id', '=', target_model_id), "
+            "('ttype', 'in', ['date', 'datetime'])]"
+        ),
+    )
+    period_closed_field_id = fields.Many2one(
+        "ir.model.fields",
+        string="Closed period field",
+        compute="_compute_period_field_ids",
+        inverse="_inverse_period_closed_field_id",
+        store=True,
+        readonly=False,
+        ondelete="set null",
+        domain=(
+            "[('model_id', '=', target_model_id), "
+            "('ttype', 'in', ['date', 'datetime'])]"
+        ),
+    )
     apply_kpi = fields.Boolean(default=True, string="Apply to KPIs")
     apply_bottom = fields.Boolean(default=True, string="Apply to bottoms")
     apply_views = fields.Boolean(default=True, string="Apply to views")
@@ -104,6 +130,41 @@ class DashboardBlueprintScopeTarget(models.Model):
     def _inverse_target_model_id(self):
         for rec in self:
             rec.target_model = rec.target_model_id.model or False
+
+    @api.depends("period_field", "period_closed_field", "target_model")
+    def _compute_period_field_ids(self):
+        Fields = self.env["ir.model.fields"].sudo()
+        for rec in self:
+            rec.period_field_id = (
+                Fields.search(
+                    [
+                        ("model", "=", rec.target_model),
+                        ("name", "=", rec.period_field),
+                    ],
+                    limit=1,
+                )
+                if rec.target_model and rec.period_field
+                else False
+            )
+            rec.period_closed_field_id = (
+                Fields.search(
+                    [
+                        ("model", "=", rec.target_model),
+                        ("name", "=", rec.period_closed_field),
+                    ],
+                    limit=1,
+                )
+                if rec.target_model and rec.period_closed_field
+                else False
+            )
+
+    def _inverse_period_field_id(self):
+        for rec in self:
+            rec.period_field = rec.period_field_id.name or False
+
+    def _inverse_period_closed_field_id(self):
+        for rec in self:
+            rec.period_closed_field = rec.period_closed_field_id.name or False
 
     def _modules_ok(self):
         self.ensure_one()
@@ -717,26 +778,52 @@ class DashboardUserPrefPanel(models.Model):
     def _panel_period_domain_for_model(self, model_name):
         self.ensure_one()
         bp = self.blueprint_id
-        if model_name == bp.graph_model:
+        if model_name == (self.graph_model or bp.graph_model):
             return self._period_domain()
         target = bp._scope_target_for(model_name)
         if not target:
             return []
+        lines = self.period_line_ids.sorted("sequence")
         ranges = []
-        if target.period_field and (self.period_mq_ids or self.period_year_ids):
-            ranges += self._period_ranges_for_name(
-                target.period_field,
-                self.period_mq_ids,
-                self.period_year_ids,
-            )
-        if target.period_closed_field and (
-            self.period_closed_mq_ids or self.period_closed_year_ids
-        ):
-            ranges += self._period_ranges_for_name(
-                target.period_closed_field,
-                self.period_closed_mq_ids,
-                self.period_closed_year_ids,
-            )
+        if lines:
+            # Scope targets still map only two peer fields (index 0 / 1).
+            open_line = lines[0] if len(lines) > 0 else False
+            closed_line = lines[1] if len(lines) > 1 else False
+            if (
+                target.period_field
+                and open_line
+                and (open_line.period_mq_ids or open_line.period_year_ids)
+            ):
+                ranges += self._period_ranges_for_name(
+                    target.period_field,
+                    open_line.period_mq_ids,
+                    open_line.period_year_ids,
+                )
+            if (
+                target.period_closed_field
+                and closed_line
+                and (closed_line.period_mq_ids or closed_line.period_year_ids)
+            ):
+                ranges += self._period_ranges_for_name(
+                    target.period_closed_field,
+                    closed_line.period_mq_ids,
+                    closed_line.period_year_ids,
+                )
+        else:
+            if target.period_field and (self.period_mq_ids or self.period_year_ids):
+                ranges += self._period_ranges_for_name(
+                    target.period_field,
+                    self.period_mq_ids,
+                    self.period_year_ids,
+                )
+            if target.period_closed_field and (
+                self.period_closed_mq_ids or self.period_closed_year_ids
+            ):
+                ranges += self._period_ranges_for_name(
+                    target.period_closed_field,
+                    self.period_closed_mq_ids,
+                    self.period_closed_year_ids,
+                )
         if not ranges:
             return []
         combine = (

@@ -2181,6 +2181,65 @@ class TestDashboardBlueprintEngine(TransactionCase):
             ),
         )
 
+    def test_primary_action_ignores_stale_measure_from_other_chart_model(self):
+        """Stale Sales Orders measure must not crash Pipeline Analysis GraphView."""
+        bp = self.env.ref(
+            "crm_customer_dashboard.blueprint_crm_customers", raise_if_not_found=False
+        )
+        if not bp or "crm.lead" not in self.env or "sale.order" not in self.env:
+            self.skipTest("CRM customers / Sales models missing")
+        partner = self.env["res.partner"].create({"name": "Stale Measure Co"})
+        pipe = bp.graph_variant_ids.filtered(lambda v: v.graph_model == "crm.lead")[:1]
+        so_amt = self.env["ir.model.fields"].search(
+            [("model", "=", "sale.order"), ("name", "=", "amount_untaxed")], limit=1
+        )
+        if not pipe or not so_amt:
+            self.skipTest("CRM Pipeline option or amount_untaxed missing")
+        pref = bp._get_or_create_pref()
+        pref.with_context(skip_variant_graph_defaults=True).write(
+            {
+                "preferred_graph_variant_id": pipe.id,
+                "preferred_graph_model": "crm.lead",
+                "measure_field_id": so_amt.id,
+                "measure_aggregator": "sum",
+            }
+        )
+        settings = bp._effective_graph_settings()
+        self.assertNotEqual(
+            self.env["dashboard.blueprint"]._odoo_view_measure_name(
+                settings.get("measure")
+            ),
+            "amount_untaxed",
+            settings,
+        )
+        action = self.env["dashboard.blueprint"].execute_primary_action(
+            bp.key, "res.partner", partner.id
+        )
+        ctx = action.get("context") or {}
+        self.assertNotEqual(ctx.get("graph_measure"), "amount_untaxed", ctx)
+
+    def test_primary_action_uses_active_chart_model_for_graph_ctx(self):
+        """Sales Orders pick must pass sale.order measure into the primary graph."""
+        bp = self.env.ref(
+            "crm_customer_dashboard.blueprint_crm_customers", raise_if_not_found=False
+        )
+        if not bp or "sale.order" not in self.env:
+            self.skipTest("CRM customers / Sales models missing")
+        partner = self.env["res.partner"].create({"name": "SO Primary Co"})
+        so = bp.graph_variant_ids.filtered(lambda v: v.graph_model == "sale.order")[:1]
+        if not so:
+            self.skipTest("Sales Orders chart option missing")
+        bp._ensure_option_graph_defaults()
+        pref = bp._get_or_create_pref()
+        pref.write({"preferred_graph_variant_id": so.id})
+        action = self.env["dashboard.blueprint"].execute_primary_action(
+            bp.key, "res.partner", partner.id
+        )
+        self.assertEqual(action.get("res_model"), "sale.order")
+        ctx = action.get("context") or {}
+        self.assertEqual(ctx.get("graph_measure"), "amount_untaxed", ctx)
+        self.assertTrue(ctx.get("graph_groupbys"), ctx)
+
     def test_primary_action_skips_graph_ctx_when_model_mismatch(self):
         """Graph groupbys must not be pushed when action model != graph model."""
         if (

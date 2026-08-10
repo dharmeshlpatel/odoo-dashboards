@@ -85,12 +85,13 @@
                 <field name="scope_warning" invisible="1"/>
                 <field name="has_include_scope" invisible="1"/>
                 <field name="has_restrict_scope" invisible="1"/>
+                <field name="applicable_include_scope_ids" invisible="1"/>
                 <field name="groupby_has_date" invisible="1"/>
                 <field name="ordered_groupby_ids" invisible="1"/>
-                <!-- Date field pickers stay on the record but are not shown —
-                     the blueprint seeds them; users pick months/years only. -->
+                <!-- Legacy Open/Closed field ids stay mirrored from period lines. -->
                 <field name="period_field_id" invisible="1"/>
                 <field name="period_closed_field_id" invisible="1"/>
+                <field name="has_period_lines" invisible="1"/>
                 <field name="preferred_graph_model" invisible="1"/>
                 <field name="has_graph_variants" invisible="1"/>
                 <sheet>
@@ -136,7 +137,7 @@
                                             <field name="preferred_graph_variant_id" nolabel="1"
                                                    options="{'no_create': True, 'no_open': True}"
                                                    domain="[('blueprint_id', '=', blueprint_id)]"
-                                                   placeholder="Blueprint default"/>
+                                                   placeholder="Dashboard default"/>
                                         </div>
                                     </div>
                                 </div>
@@ -203,8 +204,7 @@
                                 <div class="col-12">
                                     <field name="scope_ids" nolabel="1"
                                            widget="dashboard_scope_checkboxes"
-                                           domain="[('blueprint_id', '=', blueprint_id),
-                                                    ('mode', '=', 'include')]"/>
+                                           domain="[('id', 'in', applicable_include_scope_ids)]"/>
                                 </div>
                             </div>
                         </div>
@@ -214,15 +214,15 @@
                     <div class="o_setting_container">
                         <h4><b>Filters</b></h4>
                         <div class="o_dashboard_engine_setting_help">
-                            Use this section to narrow the data further. Everything
-                            below (Creation Date, Closed Date, and Custom Filter)
-                            belongs here. These filters apply to the chart, KPIs,
-                            bottom buttons, views, and reports (including linked
-                            Sales when available).
+                            Narrow data by date and custom rules. Date rows follow
+                            the selected Chart Model (each model can offer different
+                            dates). These filters apply to the chart, KPIs, bottom
+                            buttons, views, and reports (including linked Sales when
+                            available).
                         </div>
                         <div class="o_dashboard_engine_subsections">
                             <div class="row o_settings_container"
-                                 invisible="not period_field_id and not period_closed_field_id">
+                                 invisible="not has_period_lines">
                                 <div class="col-12 o_setting_box">
                                     <div class="o_setting_left_pane"/>
                                     <div class="o_setting_right_pane">
@@ -234,51 +234,28 @@
                                     </div>
                                 </div>
                             </div>
-                            <div class="row mt16 o_settings_container">
-                                <div class="col-12 col-lg-6 o_setting_box"
-                                     invisible="not period_field_id">
+                            <div class="row mt16 o_settings_container"
+                                 invisible="not has_period_lines">
+                                <div class="col-12 o_setting_box">
                                     <div class="o_setting_left_pane"/>
                                     <div class="o_setting_right_pane">
-                                        <div class="o_dashboard_engine_subsection_title">Creation Date</div>
-                                        <div class="text-muted">
-                                            Only keep records created in the months and
-                                            years you pick.
-                                        </div>
-                                        <div class="mt16 row">
-                                            <field name="period_mq_ids" nolabel="1"
-                                                   class="col-6"
-                                                   widget="many2many_tags"
-                                                   options="{'no_create': True}"
-                                                   placeholder="Months"/>
-                                            <field name="period_year_ids" nolabel="1"
-                                                   class="col-6"
-                                                   widget="many2many_tags"
-                                                   options="{'no_create': True}"
-                                                   placeholder="Year"/>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div class="col-12 col-lg-6 o_setting_box"
-                                     invisible="not period_closed_field_id">
-                                    <div class="o_setting_left_pane"/>
-                                    <div class="o_setting_right_pane">
-                                        <div class="o_dashboard_engine_subsection_title">Closed Date</div>
-                                        <div class="text-muted">
-                                            Only keep records closed (won or done) in the
-                                            months and years you pick.
-                                        </div>
-                                        <div class="mt16 row">
-                                            <field name="period_closed_mq_ids" nolabel="1"
-                                                   class="col-6"
-                                                   widget="many2many_tags"
-                                                   options="{'no_create': True}"
-                                                   placeholder="Months"/>
-                                            <field name="period_closed_year_ids" nolabel="1"
-                                                   class="col-6"
-                                                   widget="many2many_tags"
-                                                   options="{'no_create': True}"
-                                                   placeholder="Year"/>
-                                        </div>
+                                        <field name="period_line_ids" nolabel="1"
+                                               context="{'default_pref_id': id}">
+                                            <list editable="bottom" create="false" delete="false">
+                                                <field name="sequence" column_invisible="1"/>
+                                                <field name="label" readonly="1" string="Date"/>
+                                                <field name="period_mq_ids"
+                                                       widget="many2many_tags"
+                                                       options="{'no_create': True}"
+                                                       string="Months"/>
+                                                <field name="period_year_ids"
+                                                       widget="many2many_tags"
+                                                       options="{'no_create': True}"
+                                                       string="Years"/>
+                                                <field name="field_name" column_invisible="1"/>
+                                                <field name="field_id" column_invisible="1"/>
+                                            </list>
+                                        </field>
                                     </div>
                                 </div>
                             </div>
@@ -364,8 +341,10 @@
                     <group>
                         <group string="Dashboard">
                             <field name="host_model_id" options="{'no_create': True}"
+                                   domain="[('transient', '=', False)]"
                                    help="Business object shown as each kanban card (e.g. Contact)."/>
                             <field name="host_model_name" invisible="1"/>
+                            <field name="host_link_model_ids" invisible="1"/>
                             <field name="module_ids" widget="many2many_tags"
                                    options="{'no_create': True}"
                                    help="Dashboard stays hidden until these apps are installed."/>
@@ -465,12 +444,21 @@
                                                 <list editable="bottom">
                                                     <field name="sequence" widget="handle"/>
                                                     <field name="target_model_id"
-                                                           options="{'no_create': True}"/>
+                                                           options="{'no_create': True}"
+                                                           domain="[('transient', '=', False)]"/>
                                                     <field name="target_model" column_invisible="1"/>
                                                     <field name="domain" widget="domain"
                                                            options="{'model': 'target_model', 'in_dialog': True, 'allow_expressions': True}"/>
-                                                    <field name="period_field" optional="show"/>
-                                                    <field name="period_closed_field" optional="hide"/>
+                                                    <field name="period_field_id" optional="show"
+                                                           options="{'no_create': True}"
+                                                           domain="[('model_id', '=', target_model_id),
+                                                                    ('ttype', 'in', ['date', 'datetime'])]"/>
+                                                    <field name="period_closed_field_id" optional="hide"
+                                                           options="{'no_create': True}"
+                                                           domain="[('model_id', '=', target_model_id),
+                                                                    ('ttype', 'in', ['date', 'datetime'])]"/>
+                                                    <field name="period_field" column_invisible="1"/>
+                                                    <field name="period_closed_field" column_invisible="1"/>
                                                     <field name="module_depends" optional="show"
                                                            placeholder="sale"/>
                                                     <field name="apply_kpi" optional="hide"/>
@@ -484,10 +472,12 @@
                                     </form>
                                 </field>
                                 <field name="scope_warning"
+                                       invisible="graph_variant_ids"
                                        placeholder="e.g. At least one of 'Pipeline' or 'Leads' must stay on."/>
-                                <div class="text-muted mb-2">
+                                <div class="text-muted mb-2" invisible="graph_variant_ids">
                                     Shown in the live ⚙️ popup when all Include scopes are unticked.
-                                    Leave empty for no warning.
+                                    Leave empty for no warning. With Chart Model Options, set Scope Warning
+                                    on each option row instead.
                                 </div>
                             </div>
 
@@ -496,38 +486,108 @@
                                     <div class="col-12 col-lg-6">
                                         <h4><b>Graph Configuration · Shape</b></h4>
                                         <div class="text-muted mb-2">
-                                            Chart Model Options (Default + picker), then Group By / Measures / Filters
-                                            for the active chart. End users override Group By / Measures in the gear.
+                                            Chart Model Options hold Group By / Measure / Data to Include ticks
+                                            for each chart model (even when there is only one). End users can
+                                            still override Group By / Measures in the gear.
                                         </div>
                                         <div class="o_dashboard_engine_subsection mb-3">
                                             <div class="o_dashboard_engine_subsection_title">Chart Model Options</div>
                                             <div class="text-muted mb-2">
-                                                Model + link + primary button per row. Mark one Default
-                                                (mirrors blueprint chart fields). Empty list → use Graph Model below.
+                                                Model + link + primary button + Group By / Measure / Include ticks
+                                                per row. Mark one Default (mirrors blueprint chart fields).
                                             </div>
                                             <field name="graph_variant_ids" nolabel="1"
                                                    context="{'default_blueprint_id': id}">
                                                 <list editable="bottom">
                                                     <field name="sequence" widget="handle"/>
                                                     <field name="is_default" string="Default"/>
-                                                    <field name="graph_model_id" options="{'no_create': True}"/>
+                                                    <field name="graph_model_id" options="{'no_create': True}"
+                                                           domain="[('id', 'in', parent.host_link_model_ids)]"/>
                                                     <field name="graph_model" column_invisible="1"/>
                                                     <field name="graph_data_field"
                                                              widget="dashboard_relation_path"
                                                              options="{'model': 'graph_model', 'follow_relations': True}"
                                                              placeholder="Drill into related records until this card’s model"/>
                                                     <field name="primary_button_label"/>
-                                                    <field name="primary_action_id" options="{'no_create': True}"/>
+                                                    <field name="primary_action_id" options="{'no_create': True}"
+                                                           domain="['|', ('res_model', '=', graph_model),
+                                                                    ('res_model', '=', False)]"/>
                                                     <field name="primary_action_xmlid" column_invisible="1"/>
                                                     <field name="primary_action_context" optional="hide"/>
+                                                    <field name="graph_groupby_allowed_field_ids" column_invisible="1"/>
+                                                    <field name="applicable_include_scope_ids" column_invisible="1"/>
+                                                    <field name="default_ordered_groupby_ids" column_invisible="1"/>
+                                                    <field name="default_groupby_ids"
+                                                           widget="dashboard_groupby_tags"
+                                                           options="{'no_create': True}"
+                                                           domain="[('id', 'in', graph_groupby_allowed_field_ids)]"
+                                                           string="Group By"/>
+                                                    <field name="default_measure_field_id"
+                                                           options="{'no_create': True}"
+                                                           domain="[('model_id', '=', graph_model_id),
+                                                                    ('ttype', 'in', ['integer', 'float', 'monetary']),
+                                                                    ('store', '=', True)]"
+                                                           string="Measure"/>
+                                                    <field name="default_measure_aggregator"
+                                                           string="Measured As"/>
+                                                    <field name="default_scope_ids"
+                                                           widget="many2many_tags"
+                                                           options="{'no_create': True}"
+                                                           domain="[('id', 'in', applicable_include_scope_ids)]"
+                                                           string="Data to Include"/>
+                                                    <field name="scope_warning"
+                                                           string="Scope Warning"
+                                                           optional="show"
+                                                           placeholder="Warning if all Include scopes off"/>
                                                 </list>
+                                                <form string="Chart Model Option">
+                                                    <group>
+                                                        <field name="is_default"/>
+                                                        <field name="graph_model_id" options="{'no_create': True}"
+                                                               domain="[('id', 'in', parent.host_link_model_ids)]"/>
+                                                        <field name="graph_model" invisible="1"/>
+                                                        <field name="graph_data_field"
+                                                                 widget="dashboard_relation_path"
+                                                                 options="{'model': 'graph_model', 'follow_relations': True}"/>
+                                                        <field name="primary_button_label"/>
+                                                        <field name="primary_action_id" options="{'no_create': True}"/>
+                                                        <field name="scope_warning"/>
+                                                    </group>
+                                                    <group string="Date Filters">
+                                                        <field name="date_filter_ids" nolabel="1"
+                                                               context="{'default_variant_id': id}">
+                                                            <list editable="bottom">
+                                                                <field name="sequence" widget="handle"/>
+                                                                <field name="label"/>
+                                                                <field name="field_id"
+                                                                       options="{'no_create': True}"
+                                                                       domain="[('model_id', '=', parent.graph_model_id),
+                                                                                ('ttype', 'in', ['date', 'datetime'])]"/>
+                                                                <field name="field_name" column_invisible="1"/>
+                                                                <field name="default_period_mq_ids"
+                                                                       widget="many2many_tags"
+                                                                       options="{'no_create': True}"
+                                                                       optional="show"/>
+                                                                <field name="default_period_year_ids"
+                                                                       widget="many2many_tags"
+                                                                       options="{'no_create': True}"
+                                                                       optional="show"/>
+                                                            </list>
+                                                        </field>
+                                                    </group>
+                                                    <group string="Custom Filter">
+                                                        <field name="graph_domain" widget="domain"
+                                                               options="{'model': 'graph_model', 'in_dialog': True}"/>
+                                                    </group>
+                                                </form>
                                             </field>
                                         </div>
                                         <group col="1">
                                             <field name="graph_model_id"
                                                    options="{'no_create': True}"
+                                                   domain="[('id', 'in', host_link_model_ids)]"
                                                    invisible="graph_variant_ids"
-                                                   help="Used when there are no picker options. With options, edit the Default row instead."/>
+                                                   help="Used when there are no picker options. Prefer adding a Chart Model Option."/>
                                             <field name="graph_model" invisible="1"/>
                                             <field name="graph_data_field"
                                                    widget="dashboard_relation_path"
@@ -544,23 +604,25 @@
                                             <field name="graph_groupby_ids"
                                                    widget="dashboard_groupby_tags"
                                                    options="{'no_create': True}"
-                                                   invisible="not graph_model_id"
+                                                   invisible="not graph_model_id or graph_variant_ids"
                                                    domain="[('id', 'in', graph_groupby_allowed_field_ids)]"/>
                                             <field name="graph_measure_field_id"
                                                    options="{'no_create': True}"
-                                                   invisible="not graph_model_id"
+                                                   invisible="not graph_model_id or graph_variant_ids"
                                                    domain="[('model_id', '=', graph_model_id),
                                                             ('ttype', 'in', ['integer', 'float', 'monetary']),
                                                             ('store', '=', True)]"
-                                                   help="Leave empty to count records."/>
+                                                   help="Leave empty to count records. Hidden when Chart Model Options exist."/>
                                             <field name="graph_measure_aggregator"
-                                                   invisible="not graph_measure_field_id"/>
+                                                   invisible="not graph_measure_field_id or graph_variant_ids"/>
                                         </group>
                                     </div>
                                     <div class="col-12 col-lg-6">
-                                        <h4><b>Filters</b></h4>
+                                        <h4><b>Fallback seeds</b></h4>
                                         <div class="text-muted mb-2">
-                                            Default date fields for the live popup, plus an optional custom domain.
+                                            Used only to seed empty Chart Model Option Date Filters / Custom Filter
+                                            when the option model matches. Prefer editing Filters and Custom Filter
+                                            on each Chart Model Option (expand a row in Studio).
                                         </div>
                                         <group col="1">
                                             <field name="period_field_id"
@@ -606,7 +668,8 @@
                                 <group string="Title &amp; Image">
                                     <field name="header_title_field_id"
                                            options="{'no_create': True}"
-                                           domain="[('model', '=', host_model_name)]"/>
+                                           domain="[('model', '=', host_model_name),
+                                                    ('ttype', 'not in', ['binary', 'html', 'one2many', 'many2many'])]"/>
                                     <field name="header_image_field_id"
                                            options="{'no_create': True}"
                                            domain="[('model', '=', host_model_name),
@@ -656,8 +719,12 @@
                                 </group>
                                 <group string="Action"
                                        groups="dashboard_engine.group_dashboard_engine_manager">
+                                    <field name="graph_model" invisible="1"/>
                                     <field name="primary_action_id"
-                                           options="{'no_create': True}"/>
+                                           options="{'no_create': True}"
+                                           domain="['|', '|', ('res_model', '=', host_model_name),
+                                                    ('res_model', '=', graph_model),
+                                                    ('res_model', '=', False)]"/>
                                     <div class="text-muted" colspan="2">
                                         Leave empty to build the screen from the chart
                                         settings. Rows below: if apps are installed,
@@ -667,18 +734,26 @@
                                         <list editable="bottom">
                                             <field name="sequence" widget="handle"/>
                                             <field name="name" string="Label"/>
+                                            <field name="host_model_name" column_invisible="1"/>
+                                            <field name="graph_model" column_invisible="1"/>
                                             <field name="module_ids" string="Required Apps"
                                                    widget="many2many_tags"
                                                    options="{'no_create': True}"/>
                                             <field name="action_id"
-                                                   options="{'no_create': True}"/>
+                                                   options="{'no_create': True}"
+                                                   domain="['|', '|', ('res_model', '=', host_model_name),
+                                                            ('res_model', '=', graph_model),
+                                                            ('res_model', '=', False)]"/>
                                         </list>
                                     </field>
                                 </group>
                                 <group string="Action"
                                        groups="!dashboard_engine.group_dashboard_engine_manager">
                                     <field name="primary_action_id"
-                                           options="{'no_create': True}"/>
+                                           options="{'no_create': True}"
+                                           domain="['|', '|', ('res_model', '=', host_model_name),
+                                                    ('res_model', '=', graph_model),
+                                                    ('res_model', '=', False)]"/>
                                     <div class="text-muted" colspan="2">
                                         Leave empty to build the screen from the chart
                                         settings automatically.
@@ -724,7 +799,8 @@
                                                     ('ttype', 'in', ['integer', 'float', 'monetary']),
                                                     ('store', '=', True)]"/>
                                     <field name="compute_model_id"
-                                           options="{'no_create': True}"/>
+                                           options="{'no_create': True}"
+                                           domain="[('id', 'in', parent.host_link_model_ids)]"/>
                                     <field name="relate_field"
                                            widget="dashboard_relation_path"
                                            options="{'model': 'compute_model', 'follow_relations': True}"
@@ -736,7 +812,12 @@
                                            options="{'no_create_edit': False}"
                                            domain="[('model', '=', compute_model)]"/>
                                     <field name="action_id"
-                                           options="{'no_create': True}"/>
+                                           options="{'no_create': True}"
+                                           domain="['|', '|', '|',
+                                                    ('res_model', '=', action_model),
+                                                    ('res_model', '=', compute_model),
+                                                    ('res_model', '=', host_model_name),
+                                                    ('res_model', '=', False)]"/>
                                     <field name="action_context"
                                            widget="dashboard_context_kv"
                                            string="Action Defaults"
@@ -760,26 +841,60 @@
 
                             <separator string="Footer · Totals"/>
                             <p class="text-muted">
-                                Upper footer strip from count or amount fields on this card.
+                                Same as KPIs: Source Model + filters, or clear Source Model and use Count/Amount Field on the card. Always Count + Amount.
                             </p>
                             <field name="button_box_slot_ids" nolabel="1"
-                                   context="{'default_section': 'button_box', 'default_blueprint_id': id}">
+                                   context="{'default_section': 'button_box', 'default_blueprint_id': id, 'default_value_mode': 'count_amount'}">
                                 <list editable="bottom">
                                     <field name="sequence" widget="handle"/>
                                     <field name="section" column_invisible="1"/>
                                     <field name="host_model_name" column_invisible="1"/>
-                                    <field name="value_mode" optional="show"/>
+                                    <field name="compute_model" column_invisible="1"/>
+                                    <field name="action_model" column_invisible="1"/>
+                                    <field name="ui_number_from_related" column_invisible="1"/>
+                                    <field name="ui_number_from_host" column_invisible="1"/>
+                                    <field name="value_mode" column_invisible="1"/>
                                     <field name="label"/>
+                                    <field name="label_plural" optional="hide"/>
                                     <field name="icon"/>
-                                    <field name="count_field_id"
+                                    <field name="amount_measure_field_id"
+                                           invisible="not ui_number_from_related"
                                            options="{'no_create': True}"
-                                           domain="[('model', '=', host_model_name)]"/>
-                                    <field name="amount_field_id"
+                                           domain="[('model_id', '=', compute_model_id),
+                                                    ('ttype', 'in', ['integer', 'float', 'monetary']),
+                                                    ('store', '=', True)]"/>
+                                    <field name="compute_model_id"
+                                           invisible="not ui_number_from_related"
+                                           options="{'no_create': True}"
+                                           domain="[('id', 'in', parent.host_link_model_ids)]"/>
+                                    <field name="relate_field"
+                                           invisible="not ui_number_from_related"
+                                           widget="dashboard_relation_path"
+                                           options="{'model': 'compute_model', 'follow_relations': True}"
+                                           placeholder="Link to Host (or leave empty)"/>
+                                    <field name="relate_field_id" column_invisible="1"/>
+                                    <field name="relation_path_id" column_invisible="1"/>
+                                    <field name="count_field_id"
+                                           invisible="not ui_number_from_host"
                                            options="{'no_create': True}"
                                            domain="[('model', '=', host_model_name),
                                                     ('ttype', 'in', ['integer', 'float', 'monetary'])]"/>
+                                    <field name="amount_field_id"
+                                           invisible="not ui_number_from_host"
+                                           options="{'no_create': True}"
+                                           domain="[('model', '=', host_model_name),
+                                                    ('ttype', 'in', ['integer', 'float', 'monetary'])]"/>
+                                    <field name="condition_ids" optional="show"
+                                           widget="many2many_tags"
+                                           options="{'no_create_edit': False}"
+                                           domain="[('model', '=', compute_model)]"/>
                                     <field name="action_id"
-                                           options="{'no_create': True}"/>
+                                           options="{'no_create': True}"
+                                           domain="['|', '|', '|',
+                                                    ('res_model', '=', action_model),
+                                                    ('res_model', '=', compute_model),
+                                                    ('res_model', '=', host_model_name),
+                                                    ('res_model', '=', False)]"/>
                                     <field name="action_context"
                                            widget="dashboard_context_kv"
                                            string="Action Defaults"
@@ -803,10 +918,10 @@
 
                             <separator string="Footer · Shortcuts"/>
                             <p class="text-muted">
-                                Set Count Model to count related records, or clear it and set Count/Amount Field to use values on the card.
+                                Same as KPIs: Source Model + filters, or clear Source Model and use Count/Amount Field on the card. Always Count + Amount.
                             </p>
                             <field name="bottom_slot_ids" nolabel="1"
-                                   context="{'default_section': 'bottom', 'default_blueprint_id': id}">
+                                   context="{'default_section': 'bottom', 'default_blueprint_id': id, 'default_value_mode': 'count_amount'}">
                                 <list editable="bottom">
                                     <field name="sequence" widget="handle"/>
                                     <field name="section" column_invisible="1"/>
@@ -815,12 +930,20 @@
                                     <field name="action_model" column_invisible="1"/>
                                     <field name="ui_number_from_related" column_invisible="1"/>
                                     <field name="ui_number_from_host" column_invisible="1"/>
-                                    <field name="value_mode" optional="show"/>
+                                    <field name="value_mode" column_invisible="1"/>
                                     <field name="label"/>
+                                    <field name="label_plural" optional="hide"/>
                                     <field name="icon"/>
+                                    <field name="amount_measure_field_id"
+                                           invisible="not ui_number_from_related"
+                                           options="{'no_create': True}"
+                                           domain="[('model_id', '=', compute_model_id),
+                                                    ('ttype', 'in', ['integer', 'float', 'monetary']),
+                                                    ('store', '=', True)]"/>
                                     <field name="compute_model_id"
                                            invisible="not ui_number_from_related"
-                                           options="{'no_create': True}"/>
+                                           options="{'no_create': True}"
+                                           domain="[('id', 'in', parent.host_link_model_ids)]"/>
                                     <field name="relate_field"
                                            invisible="not ui_number_from_related"
                                            widget="dashboard_relation_path"
@@ -831,14 +954,24 @@
                                     <field name="count_field_id"
                                            invisible="not ui_number_from_host"
                                            options="{'no_create': True}"
-                                           domain="[('model', '=', host_model_name)]"/>
+                                           domain="[('model', '=', host_model_name),
+                                                    ('ttype', 'in', ['integer', 'float', 'monetary'])]"/>
                                     <field name="amount_field_id"
                                            invisible="not ui_number_from_host"
                                            options="{'no_create': True}"
                                            domain="[('model', '=', host_model_name),
                                                     ('ttype', 'in', ['integer', 'float', 'monetary'])]"/>
+                                    <field name="condition_ids" optional="show"
+                                           widget="many2many_tags"
+                                           options="{'no_create_edit': False}"
+                                           domain="[('model', '=', compute_model)]"/>
                                     <field name="action_id"
-                                           options="{'no_create': True}"/>
+                                           options="{'no_create': True}"
+                                           domain="['|', '|', '|',
+                                                    ('res_model', '=', action_model),
+                                                    ('res_model', '=', compute_model),
+                                                    ('res_model', '=', host_model_name),
+                                                    ('res_model', '=', False)]"/>
                                     <field name="action_context"
                                            widget="dashboard_context_kv"
                                            string="Action Defaults"
@@ -864,9 +997,17 @@
                                 <list editable="bottom">
                                     <field name="sequence" widget="handle"/>
                                     <field name="section" column_invisible="1"/>
+                                    <field name="host_model_name" column_invisible="1"/>
+                                    <field name="action_model" column_invisible="1"/>
+                                    <field name="compute_model" column_invisible="1"/>
                                     <field name="label"/>
                                     <field name="action_id"
-                                           options="{'no_create': True}"/>
+                                           options="{'no_create': True}"
+                                           domain="['|', '|', '|',
+                                                    ('res_model', '=', action_model),
+                                                    ('res_model', '=', compute_model),
+                                                    ('res_model', '=', host_model_name),
+                                                    ('res_model', '=', False)]"/>
                                     <field name="action_context"
                                            widget="dashboard_context_kv"
                                            string="Action Defaults"
@@ -887,9 +1028,17 @@
                                 <list editable="bottom">
                                     <field name="sequence" widget="handle"/>
                                     <field name="section" column_invisible="1"/>
+                                    <field name="host_model_name" column_invisible="1"/>
+                                    <field name="action_model" column_invisible="1"/>
+                                    <field name="compute_model" column_invisible="1"/>
                                     <field name="label"/>
                                     <field name="action_id"
-                                           options="{'no_create': True}"/>
+                                           options="{'no_create': True}"
+                                           domain="['|', '|', '|',
+                                                    ('res_model', '=', action_model),
+                                                    ('res_model', '=', compute_model),
+                                                    ('res_model', '=', host_model_name),
+                                                    ('res_model', '=', False)]"/>
                                     <field name="action_context"
                                            widget="dashboard_context_kv"
                                            string="Action Defaults"
@@ -910,9 +1059,17 @@
                                 <list editable="bottom">
                                     <field name="sequence" widget="handle"/>
                                     <field name="section" column_invisible="1"/>
+                                    <field name="host_model_name" column_invisible="1"/>
+                                    <field name="action_model" column_invisible="1"/>
+                                    <field name="compute_model" column_invisible="1"/>
                                     <field name="label"/>
                                     <field name="action_id"
-                                           options="{'no_create': True}"/>
+                                           options="{'no_create': True}"
+                                           domain="['|', '|', '|',
+                                                    ('res_model', '=', action_model),
+                                                    ('res_model', '=', compute_model),
+                                                    ('res_model', '=', host_model_name),
+                                                    ('res_model', '=', False)]"/>
                                     <field name="action_context"
                                            widget="dashboard_context_kv"
                                            string="Action Defaults"
@@ -986,14 +1143,14 @@
     </record>
 
     <record id="action_dashboard_blueprint" model="ir.actions.act_window">
-        <field name="name">Dashboard Blueprints</field>
+        <field name="name">Dashboards</field>
         <field name="res_model">dashboard.blueprint</field>
         <field name="view_mode">list,form</field>
         <field name="search_view_id" ref="view_dashboard_blueprint_search"/>
         <field name="context">{'search_default_published': 1}</field>
         <field name="help" type="html">
             <p class="o_view_nocontent_smiling_face">
-                Create a dashboard blueprint for any Odoo model.
+                Create a dashboard for any Odoo model.
             </p>
             <p>
                 Click <b>New</b> to open the create wizard, then edit in

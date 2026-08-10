@@ -14,10 +14,19 @@ import {
     rowsFromContextRaw,
     serializeContextRows,
     createEmptyContextRow,
+    createContextPreset,
     emptyGroupRule,
     collectGroupXmlids,
     applyGroupLabels,
     VALUE_TYPES,
+    CONTEXT_PRESETS,
+    CARD_PASS_TARGETS,
+    contextRowPurpose,
+    contextRowTitle,
+    searchFilterShortName,
+    formDefaultShortName,
+    toSearchFilterKey,
+    toFormDefaultKey,
 } from "../fields/context_kv_utils";
 
 const MANAGE_SECTIONS = [
@@ -85,14 +94,14 @@ const ZONES = [
         label: "Totals",
         icon: "fa-calculator",
         section: "button_box",
-        subtitle: "Currency/amount boxes shown below the chart",
+        subtitle: "Same figure setup as KPIs (always count + amount)",
     },
     {
         id: "shortcuts",
         label: "Shortcuts",
         icon: "fa-external-link",
         section: "bottom",
-        subtitle: "Quick-action chips on the card",
+        subtitle: "Same figure setup as KPIs (always count + amount)",
     },
     {
         id: "manage",
@@ -106,7 +115,7 @@ const ZONES = [
         label: "Configuration",
         icon: "fa-cog",
         section: null,
-        subtitle: "My Data, Graph Configuration (Chart Model Options, Group By, Measures, Data to Include), and Filters",
+        subtitle: "My Data and Graph Configuration (Chart Model Options: Group By, Measure, Data to Include, Filters, Custom Filter)",
     },
 ];
 
@@ -204,6 +213,8 @@ export class DashboardStudioAction extends Component {
         this.HEADER_IMAGE_STYLES = HEADER_IMAGE_STYLES;
         this.HEADER_SEPARATORS = HEADER_SEPARATORS;
         this.CONTEXT_VALUE_TYPES = VALUE_TYPES;
+        this.CONTEXT_PRESETS = CONTEXT_PRESETS;
+        this.CARD_PASS_TARGETS = CARD_PASS_TARGETS;
         this.previewChartRef = useRef("previewChart");
         this._previewChart = null;
         this._dragSlotId = null;
@@ -266,6 +277,13 @@ export class DashboardStudioAction extends Component {
             variantModelShowAll: {},
             variantLinkPathHopFields: {},
             variantLinkPathExtraHop: {},
+            variantDefaultsOpen: {},
+            variantDefaultsCatalogs: {},
+            actionModelByXmlid: {},
+            contextFieldsCatalog: {},
+            contextFiltersCatalog: {},
+            contextRecordHits: {},
+            contextRecordQuery: {},
             sampleQuery: "",
             sampleId: null,
             preview: null,
@@ -728,20 +746,9 @@ export class DashboardStudioAction extends Component {
         return Boolean(this.state.preview?.ok);
     }
 
-    _isGroupByCatalogField(field) {
-        if (!field || field.name === "id") {
-            return false;
-        }
-        if (field.ttype === "date" || field.ttype === "datetime") {
-            return field.name.startsWith("x_");
-        }
-        return field.store !== false;
-    }
-
     get graphGroupByCatalog() {
-        return (this.state.catalogs.graphFieldRecords || []).filter((f) =>
-            this._isGroupByCatalogField(f)
-        );
+        // Server already applied dashboard_groupby_allowed_fields rules.
+        return this.state.catalogs.graphFieldRecords || [];
     }
 
     get graphGroupBySelectedChips() {
@@ -1062,8 +1069,12 @@ export class DashboardStudioAction extends Component {
             this.state.layoutDirty = false;
             this._syncSetupFromPayload(payload);
             this._syncEditorFromSelection();
+            this._syncVariantDefaultsOpen({ ensureOneOpen: true });
             this.state.dirty = false;
             this.state.setupBanner = null;
+            if (this.state.zone === "config") {
+                await this.refreshAllVariantDefaultsCatalogs();
+            }
             await this.loadPreview();
         } finally {
             this.state.loading = false;
@@ -1361,31 +1372,50 @@ export class DashboardStudioAction extends Component {
         let graphFieldRecords = [];
         let graphMeasureFields = [];
         if (graphModel) {
-            graphFieldRecords = await this.orm.searchRead(
-                "ir.model.fields",
-                [["model", "=", graphModel]],
-                ["id", "name", "field_description", "ttype", "store"],
-                { order: "field_description", limit: 500 }
-            );
-            graphFieldRecords = graphFieldRecords.map((f) => ({
+            const [groupbyRows, measureMeta] = await Promise.all([
+                this.orm.call(
+                    "dashboard.blueprint",
+                    "studio_groupby_fields",
+                    [[bp], graphModel]
+                ),
+                this.orm.searchRead(
+                    "ir.model.fields",
+                    [
+                        ["model", "=", graphModel],
+                        ["ttype", "in", ["integer", "float", "monetary", "date", "datetime"]],
+                    ],
+                    ["id", "name", "field_description", "ttype", "store"],
+                    { order: "field_description", limit: 500 }
+                ),
+            ]);
+            graphFieldRecords = (groupbyRows || []).map((f) => ({
                 id: f.id,
                 name: f.name,
-                string: f.field_description || f.name,
+                string: f.string || f.field_description || f.name,
                 field_description: f.field_description,
                 ttype: f.ttype,
                 store: f.store,
             }));
-            graphMeasureFields = graphFieldRecords.filter(
-                (f) =>
-                    f.store !== false &&
-                    ["integer", "float", "monetary"].includes(f.ttype)
-            );
-            graphDateFields = graphFieldRecords
+            graphMeasureFields = (measureMeta || [])
+                .filter(
+                    (f) =>
+                        f.store !== false &&
+                        ["integer", "float", "monetary"].includes(f.ttype)
+                )
+                .map((f) => ({
+                    id: f.id,
+                    name: f.name,
+                    string: f.field_description || f.name,
+                    field_description: f.field_description,
+                    ttype: f.ttype,
+                    store: f.store,
+                }));
+            graphDateFields = (measureMeta || [])
                 .filter((f) => f.ttype === "date" || f.ttype === "datetime")
                 .map((f) => ({
                     id: f.id,
                     name: f.name,
-                    string: f.string,
+                    string: f.field_description || f.name,
                 }));
         }
         this.state.catalogs.hostFields = hostFields;
@@ -1532,12 +1562,26 @@ export class DashboardStudioAction extends Component {
         this.state.linkPathHopFields = catalogs;
     }
 
+    _actionFocusResModel() {
+        if (["kpis", "totals", "shortcuts", "manage"].includes(this.state.zone)) {
+            const ed = this.state.editor || {};
+            return (ed.action_model || ed.compute_model || "").trim() || false;
+        }
+        return false;
+    }
+
     async searchActions(term) {
         this.state.actionQuery = term;
         const res = await this.orm.call(
             "dashboard.blueprint",
             "studio_search_actions",
-            [[this.blueprintId], term || "", 25, this.state.actionsShowAll || false]
+            [
+                [this.blueprintId],
+                term || "",
+                25,
+                this.state.actionsShowAll || false,
+                this._actionFocusResModel(),
+            ]
         );
         this.state.catalogs.actions = res.actions || [];
         this.state.actionScopeLabel = res.scope_label || "";
@@ -1565,7 +1609,9 @@ export class DashboardStudioAction extends Component {
             this.state.linkPathExtraHop = false;
             this.refreshLinkPathCatalogs();
             this.refreshAllVariantLinkPathCatalogs();
+            this.refreshAllVariantDefaultsCatalogs();
         }
+        this.searchActions(this.state.actionQuery || "");
     }
 
     selectSlot(slotId) {
@@ -1621,6 +1667,7 @@ export class DashboardStudioAction extends Component {
             this.state.linkPathExtraHop = false;
             this.refreshLinkPathCatalogs();
             this._hydrateEditorGroupLabels();
+            this.refreshContextTargetCatalogs();
             return;
         }
         if (this.state.zone === "header") {
@@ -1657,7 +1704,9 @@ export class DashboardStudioAction extends Component {
             ed.compute_model_label = slot.compute_model_label || "";
             ed.relate_field = slot.relate_field || "";
             ed.compute_domain = slot.compute_domain || "[]";
-            ed.value_mode = slot.value_mode || "count";
+            ed.value_mode = this._figureZonesLockedToCountAmount()
+                ? "count_amount"
+                : slot.value_mode || "count";
             const [amtField, amtAgg] = (slot.amount_aggregator || "").split(":");
             ed.amount_measure_field = amtField || "";
             ed.amount_aggregator_type = amtAgg || "sum";
@@ -1679,6 +1728,8 @@ export class DashboardStudioAction extends Component {
         this.refreshConditionCatalog();
         this.refreshSlotRelatePathCatalogs();
         this.refreshSlotMeasureFields();
+        this.refreshContextTargetCatalogs();
+        this.searchActions(this.state.actionQuery || "");
     }
 
     onEditorInput(field, ev) {
@@ -1696,19 +1747,34 @@ export class DashboardStudioAction extends Component {
             this.refreshConditionCatalog();
             this.refreshSlotRelatePathCatalogs();
             this.refreshSlotMeasureFields();
+            this.searchActions(this.state.actionQuery || "");
         }
         if (field === "value_mode") {
             this._onSlotValueModeChange(value);
         }
+        if (field === "action_xmlid" || field === "primary_action_xmlid") {
+            this.refreshContextTargetCatalogs();
+        }
+    }
+
+    /** Totals + Shortcuts always Count + Amount (Shows is KPI-only). */
+    _figureZonesLockedToCountAmount() {
+        return ["shortcuts", "totals"].includes(this.state.zone);
     }
 
     get slotShowsCount() {
+        if (this._figureZonesLockedToCountAmount()) {
+            return true;
+        }
         return ["count", "count_amount"].includes(
             this.state.editor.value_mode || "count"
         );
     }
 
     get slotShowsAmount() {
+        if (this._figureZonesLockedToCountAmount()) {
+            return true;
+        }
         return ["amount", "count_amount"].includes(
             this.state.editor.value_mode || "count"
         );
@@ -1742,9 +1808,9 @@ export class DashboardStudioAction extends Component {
     }
 
     get slotFigureHelp() {
-        if (this.state.zone === "shortcuts") {
+        if (this._figureZonesLockedToCountAmount()) {
             return _t(
-                "Optional count/amount for this shortcut, which records feed it, and filters."
+                "Count and amount from related records (with filters), or clear Source Model and use fields on this card."
             );
         }
         return _t(
@@ -1754,7 +1820,7 @@ export class DashboardStudioAction extends Component {
 
     get slotHostFieldsHelp() {
         return _t(
-            "Totals read fields from this card’s record (not a related model)."
+            "No Source Model — read Count/Amount Field from this card’s record."
         );
     }
 
@@ -1780,10 +1846,14 @@ export class DashboardStudioAction extends Component {
             );
         }
         if (zone === "totals") {
-            return _t("Amount/count boxes under the chart. Select one to edit below.");
+            return _t(
+                "Amount/count boxes under the chart — same figure options as KPIs (always count + amount)."
+            );
         }
         if (zone === "shortcuts") {
-            return _t("Quick-action chips on the card. Select one to edit below.");
+            return _t(
+                "Quick-action chips — same figure options as KPIs (always count + amount)."
+            );
         }
         return _t("KPI badges on the card. Select one to edit below.");
     }
@@ -1845,7 +1915,7 @@ export class DashboardStudioAction extends Component {
             this.state.catalogs.slotMeasureFields = await this.orm.call(
                 "dashboard.blueprint",
                 "studio_model_fields",
-                [[this.blueprintId], model, ["integer", "float", "monetary"]]
+                [[this.blueprintId], model, ["integer", "float", "monetary"], true]
             );
         } catch {
             this.state.catalogs.slotMeasureFields = [];
@@ -1933,6 +2003,9 @@ export class DashboardStudioAction extends Component {
         this.state.slotModelResults = [];
         this.state.editor.relate_field = "";
         this.state.editor.amount_measure_field = "";
+        // Related path and host fields are mutually exclusive in Studio.
+        this.state.editor.count_field = "";
+        this.state.editor.amount_field = "";
         this.state.slotRelatePathExtraHop = false;
         this.markDirty();
         this.refreshConditionCatalog();
@@ -1945,6 +2018,8 @@ export class DashboardStudioAction extends Component {
         this.state.editor.compute_model_label = "";
         this.state.editor.relate_field = "";
         this.state.editor.amount_measure_field = "";
+        this.state.editor.compute_domain = "[]";
+        this.state.editor.condition_ids = [];
         this.state.slotRelatePathExtraHop = false;
         this.state.slotRelatePathHopFields = [];
         this.state.catalogs.slotMeasureFields = [];
@@ -2201,8 +2276,223 @@ export class DashboardStudioAction extends Component {
         this._touchContextRows();
     }
 
+    addContextPreset(presetId) {
+        this.state.editor.contextRows.push(createContextPreset(presetId));
+        this._touchContextRows();
+        this.refreshContextTargetCatalogs();
+    }
+
     removeContextRow(index) {
         this.state.editor.contextRows.splice(index, 1);
+        this._touchContextRows();
+    }
+
+    contextRowPurpose(row) {
+        return contextRowPurpose(row);
+    }
+
+    contextRowTitle(row) {
+        return contextRowTitle(row);
+    }
+
+    searchFilterShortName(row) {
+        return searchFilterShortName(row?.key);
+    }
+
+    formDefaultShortName(row) {
+        return formDefaultShortName(row?.key);
+    }
+
+    isKnownCardPassTarget(key) {
+        return CARD_PASS_TARGETS.some((target) => target.key === key);
+    }
+
+    /** Xmlid of the action owning the currently open "When Opened" rows. */
+    _contextActionXmlid() {
+        const ed = this.state.editor || {};
+        const xmlid =
+            this.state.zone === "primary" || this.state.zone === "config"
+                ? ed.primary_action_xmlid
+                : ed.action_xmlid;
+        return (xmlid || "").trim();
+    }
+
+    /** Best-known target model for the open editor's "When Opened" rows. */
+    contextTargetModel() {
+        const xmlid = this._contextActionXmlid();
+        if (xmlid) {
+            const resolved = this.state.actionModelByXmlid[xmlid];
+            if (resolved) {
+                return resolved;
+            }
+        }
+        const ed = this.state.editor || {};
+        return ed.compute_model || this.state.payload?.host_model || "";
+    }
+
+    /** Resolve the action's model (if needed) then (re)load its field/filter catalogs. */
+    async refreshContextTargetCatalogs() {
+        const xmlid = this._contextActionXmlid();
+        if (xmlid && this.state.actionModelByXmlid[xmlid] === undefined) {
+            try {
+                const res = await this.orm.call(
+                    "dashboard.blueprint",
+                    "studio_resolve_action_model",
+                    [[this.blueprintId], xmlid]
+                );
+                this.state.actionModelByXmlid[xmlid] = res?.res_model || false;
+            } catch {
+                this.state.actionModelByXmlid[xmlid] = false;
+            }
+        }
+        const model = this.contextTargetModel();
+        if (!model) {
+            return;
+        }
+        await Promise.all([
+            this._ensureContextFieldsCatalog(model),
+            this._ensureContextFiltersCatalog(model),
+        ]);
+    }
+
+    async _ensureContextFieldsCatalog(model) {
+        if (this.state.contextFieldsCatalog[model]) {
+            return;
+        }
+        try {
+            const rows = await this.orm.call("dashboard.blueprint", "studio_model_fields", [
+                [this.blueprintId],
+                model,
+                null,
+                false,
+            ]);
+            this.state.contextFieldsCatalog[model] = rows || [];
+        } catch {
+            this.state.contextFieldsCatalog[model] = [];
+        }
+    }
+
+    async _ensureContextFiltersCatalog(model) {
+        if (this.state.contextFiltersCatalog[model]) {
+            return;
+        }
+        try {
+            const rows = await this.orm.call(
+                "dashboard.blueprint",
+                "studio_action_search_filters",
+                [[this.blueprintId], model]
+            );
+            this.state.contextFiltersCatalog[model] = rows || [];
+        } catch {
+            this.state.contextFiltersCatalog[model] = [];
+        }
+    }
+
+    contextFieldOptions() {
+        const model = this.contextTargetModel();
+        return model ? this.state.contextFieldsCatalog[model] || [] : [];
+    }
+
+    contextFilterOptions() {
+        const model = this.contextTargetModel();
+        return model ? this.state.contextFiltersCatalog[model] || [] : [];
+    }
+
+    contextFieldFor(row) {
+        const shortName = formDefaultShortName(row?.key);
+        if (!shortName) {
+            return null;
+        }
+        return this.contextFieldOptions().find((f) => f.name === shortName) || null;
+    }
+
+    isKnownFilterName(name) {
+        if (!name) {
+            return false;
+        }
+        return this.contextFilterOptions().some((f) => f.name === name);
+    }
+
+    isKnownFieldName(name) {
+        if (!name) {
+            return false;
+        }
+        return this.contextFieldOptions().some((f) => f.name === name);
+    }
+
+    contextRecordDisplay(rowIndex, row) {
+        if (this.state.contextRecordQuery[rowIndex] !== undefined) {
+            return this.state.contextRecordQuery[rowIndex];
+        }
+        return row.fixedValue || "";
+    }
+
+    getContextRecordHits(rowIndex) {
+        return this.state.contextRecordHits[rowIndex] || [];
+    }
+
+    async onContextRecordSearchInput(rowIndex, ev) {
+        const term = ev.target.value;
+        this.state.contextRecordQuery[rowIndex] = term;
+        if (!term) {
+            this.state.contextRecordHits[rowIndex] = [];
+            return;
+        }
+        const row = this.state.editor.contextRows[rowIndex];
+        const fieldMeta = this.contextFieldFor(row);
+        const relModel = fieldMeta?.relation || this.contextTargetModel();
+        if (!relModel) {
+            return;
+        }
+        try {
+            const hits = await this.orm.call("dashboard.blueprint", "studio_search_records", [
+                [this.blueprintId],
+                relModel,
+                term,
+                8,
+            ]);
+            this.state.contextRecordHits[rowIndex] = hits || [];
+        } catch {
+            this.state.contextRecordHits[rowIndex] = [];
+        }
+    }
+
+    pickContextRecord(rowIndex, hit) {
+        this.state.editor.contextRows[rowIndex].fixedValue = String(hit.id);
+        this.state.contextRecordQuery[rowIndex] = hit.name;
+        this.state.contextRecordHits[rowIndex] = [];
+        this._touchContextRows();
+    }
+
+    onContextCardPassTarget(index, ev) {
+        const key = ev.target.value;
+        const row = this.state.editor.contextRows[index];
+        row.key = key;
+        row.valueType = "record_id";
+        this._touchContextRows();
+    }
+
+    onContextSearchFilterName(index, ev) {
+        const row = this.state.editor.contextRows[index];
+        row.key = toSearchFilterKey(ev.target.value);
+        row.valueType = "fixed";
+        if (row.fixedValue === "" || row.fixedValue === undefined) {
+            row.fixedValue = "1";
+        }
+        this._touchContextRows();
+    }
+
+    onContextFormFieldName(index, ev) {
+        const row = this.state.editor.contextRows[index];
+        row.key = toFormDefaultKey(ev.target.value);
+        row.valueType = "fixed";
+        this._touchContextRows();
+    }
+
+    onContextGroupSettingName(index, ev) {
+        const row = this.state.editor.contextRows[index];
+        row.key = toFormDefaultKey(ev.target.value || "type");
+        row.valueType = "group";
         this._touchContextRows();
     }
 
@@ -2416,6 +2706,7 @@ export class DashboardStudioAction extends Component {
             this.state.editor.action_xmlid = xmlid;
         }
         this.markDirty();
+        this.refreshContextTargetCatalogs();
     }
 
     async applyPayload(payload, selectCreated = true, options = {}) {
@@ -2434,7 +2725,10 @@ export class DashboardStudioAction extends Component {
             this.state.selectedHeaderId = payload.created_header_id;
         }
         if (selectCreated && payload.created_graph_variant_id) {
-            // no selection UI yet; payload refresh is enough
+            for (const id of Object.keys(this.state.variantDefaultsOpen)) {
+                this.state.variantDefaultsOpen[id] = false;
+            }
+            this.state.variantDefaultsOpen[payload.created_graph_variant_id] = true;
         }
         if (payload.layout && (!this.state.layoutDirty || options.resetEditor)) {
             this.state.layoutDraft = JSON.parse(JSON.stringify(payload.layout));
@@ -2446,9 +2740,11 @@ export class DashboardStudioAction extends Component {
             this._syncEditorFromSelection();
             this.state.dirty = false;
         }
+        this._syncVariantDefaultsOpen();
         this.state.dirtyToken = (this.state.dirtyToken || 0) + 1;
         if (this.state.zone === "config") {
             await this.refreshAllVariantLinkPathCatalogs();
+            await this.refreshAllVariantDefaultsCatalogs();
         }
         await this.loadPreview();
     }
@@ -2848,7 +3144,9 @@ export class DashboardStudioAction extends Component {
                     compute_model: ed.compute_model || false,
                     relate_field: ed.relate_field || false,
                     compute_domain: ed.compute_domain || "[]",
-                    value_mode: ed.value_mode || "count",
+                    value_mode: this._figureZonesLockedToCountAmount()
+                        ? "count_amount"
+                        : ed.value_mode || "count",
                     amount_aggregator: this._slotAmountAggregatorValue(),
                     module_ids: ed.module_ids || [],
                     condition_ids: ed.condition_ids || [],
@@ -2921,6 +3219,24 @@ export class DashboardStudioAction extends Component {
             onConfirm: (domain) => {
                 this.state.editor.graph_domain = domain;
                 this.markDirty();
+            },
+        });
+    }
+
+    openVariantGraphDomainEditor(variantId) {
+        const variant = (this.state.payload?.graph_variants || []).find(
+            (v) => v.id === variantId
+        );
+        if (!variant?.graph_model) {
+            this.notification.add(_t("Set Chart Model first."), { type: "warning" });
+            return;
+        }
+        this.dialog.add(DomainSelectorDialog, {
+            resModel: variant.graph_model,
+            domain: variant.graph_domain || "[]",
+            title: _t("Custom Filter"),
+            onConfirm: (domain) => {
+                this.updateGraphVariant(variantId, "graph_domain", domain || "[]");
             },
         });
     }
@@ -3064,6 +3380,10 @@ export class DashboardStudioAction extends Component {
     }
 
     async addItem(sectionOverride = null) {
+        // Owl click handlers pass the event; ignore non-string overrides.
+        if (sectionOverride != null && typeof sectionOverride !== "string") {
+            sectionOverride = null;
+        }
         this.state.saving = true;
         try {
             if (this.state.zone === "header") {
@@ -3336,6 +3656,9 @@ export class DashboardStudioAction extends Component {
                 [[this.blueprintId], {}]
             );
             await this.applyStudioMutation(payload, true);
+            if (payload.created_graph_variant_id) {
+                await this.ensureVariantDefaultsCatalog(payload.created_graph_variant_id);
+            }
             this.notification.add(_t("Chart Model Option added"), { type: "success" });
         } catch (error) {
             this.notification.add(
@@ -3382,6 +3705,415 @@ export class DashboardStudioAction extends Component {
                 { type: "danger" }
             );
             await this.loadPayload();
+        }
+    }
+
+    variantDefaultsOpen(variantId) {
+        return Boolean(this.state.variantDefaultsOpen[variantId]);
+    }
+
+    variantHasCustomDefaults(variant) {
+        return Boolean(
+            (variant.default_groupby_field_ids || []).length ||
+                variant.default_measure_field_id ||
+                (variant.default_scope_ids || []).length
+        );
+    }
+
+    async toggleVariantDefaults(variantId) {
+        const open = !this.state.variantDefaultsOpen[variantId];
+        if (open) {
+            // One option open at a time — less noise for builders.
+            for (const id of Object.keys(this.state.variantDefaultsOpen)) {
+                this.state.variantDefaultsOpen[id] = false;
+            }
+        }
+        this.state.variantDefaultsOpen[variantId] = open;
+        if (open) {
+            await this.ensureVariantDefaultsCatalog(variantId);
+        }
+    }
+
+    /**
+     * Prune deleted option ids from the open map.
+     * ensureOneOpen: first load — expand Default (or first).
+     * Also reopen when the expanded option was deleted.
+     */
+    _syncVariantDefaultsOpen({ ensureOneOpen = false } = {}) {
+        const rows = this.state.payload?.graph_variants || [];
+        const ids = new Set(rows.map((r) => String(r.id)));
+        let removedOpen = false;
+        for (const key of Object.keys(this.state.variantDefaultsOpen)) {
+            if (!ids.has(String(key))) {
+                if (this.state.variantDefaultsOpen[key]) {
+                    removedOpen = true;
+                }
+                delete this.state.variantDefaultsOpen[key];
+            }
+        }
+        if (!rows.length) {
+            return;
+        }
+        const anyOpen = rows.some((r) => this.state.variantDefaultsOpen[r.id]);
+        if (!anyOpen && (ensureOneOpen || removedOpen)) {
+            const preferred = rows.find((r) => r.is_default) || rows[0];
+            this.state.variantDefaultsOpen[preferred.id] = true;
+        }
+    }
+
+    async ensureVariantDefaultsCatalog(variantId) {
+        const variant = (this.state.payload?.graph_variants || []).find((v) => v.id === variantId);
+        const model = variant?.graph_model;
+        if (!model) {
+            return;
+        }
+        const cached = this.state.variantDefaultsCatalogs[variantId];
+        if (cached?.model === model) {
+            return;
+        }
+        const [groupby, measures, dateFields] = await Promise.all([
+            this.orm.call("dashboard.blueprint", "studio_groupby_fields", [
+                [this.blueprintId],
+                model,
+            ]),
+            this.orm.call("dashboard.blueprint", "studio_model_fields", [
+                [this.blueprintId],
+                model,
+                ["integer", "float", "monetary"],
+                true,
+            ]),
+            this.orm.call("dashboard.blueprint", "studio_model_fields", [
+                [this.blueprintId],
+                model,
+                ["date", "datetime"],
+                true,
+            ]),
+        ]);
+        this.state.variantDefaultsCatalogs[variantId] = {
+            model,
+            groupby: groupby || [],
+            measures: measures || [],
+            dateFields: dateFields || [],
+        };
+    }
+
+    async refreshAllVariantDefaultsCatalogs() {
+        const rows = this.state.payload?.graph_variants || [];
+        await Promise.all(
+            rows.filter((v) => v.graph_model).map((v) => this.ensureVariantDefaultsCatalog(v.id))
+        );
+    }
+
+    variantGroupByCatalog(variantId) {
+        return this.state.variantDefaultsCatalogs[variantId]?.groupby || [];
+    }
+
+    variantMeasureCatalog(variantId) {
+        return (this.state.variantDefaultsCatalogs[variantId]?.measures || []).filter(
+            (f) => f.id
+        );
+    }
+
+    variantDateFieldCatalog(variantId) {
+        return (this.state.variantDefaultsCatalogs[variantId]?.dateFields || []).filter(
+            (f) => f.id
+        );
+    }
+
+    variantDateFilters(variant) {
+        return variant.date_filters || [];
+    }
+
+    variantDateFilterFieldIds(variant) {
+        return this.variantDateFilters(variant).map((d) => d.field_id);
+    }
+
+    get periodMqCatalog() {
+        return this.state.payload?.period_mq_catalog || [];
+    }
+
+    get periodYearCatalog() {
+        return this.state.payload?.period_year_catalog || [];
+    }
+
+    variantGroupByChips(variant) {
+        const ids = variant.default_groupby_field_ids || [];
+        const names = variant.default_groupby_field_names || [];
+        const catalog = this.variantGroupByCatalog(variant.id);
+        return ids.map((id, index) => {
+            const row = catalog.find((f) => f.id === id);
+            return {
+                id,
+                index,
+                label: row?.string || names[index] || `#${id}`,
+            };
+        });
+    }
+
+    variantIncludeScopes(variant) {
+        const allowed = new Set(variant.applicable_include_scope_ids || []);
+        return (this.state.payload?.scopes || []).filter(
+            (s) => s.mode === "include" && allowed.has(s.id)
+        );
+    }
+
+    async onVariantGroupByPick(variantId, ev) {
+        const raw = ev.target.value;
+        ev.target.value = "";
+        if (!raw) {
+            return;
+        }
+        const id = Number(raw);
+        if (!id) {
+            return;
+        }
+        const allowed = new Set(
+            (this.variantGroupByCatalog(variantId) || [])
+                .map((f) => f.id)
+                .filter(Boolean)
+        );
+        if (!allowed.has(id)) {
+            this.notification.add(
+                _t("Group By must be a field on this chart model."),
+                { type: "warning" }
+            );
+            return;
+        }
+        const variant = (this.state.payload.graph_variants || []).find((v) => v.id === variantId);
+        const ids = [...(variant?.default_groupby_field_ids || [])];
+        if (ids.includes(id)) {
+            return;
+        }
+        ids.push(id);
+        await this.updateGraphVariant(variantId, "default_groupby_field_ids", ids);
+    }
+
+    async removeVariantGroupBy(variantId, fieldId) {
+        const variant = (this.state.payload.graph_variants || []).find((v) => v.id === variantId);
+        const ids = (variant?.default_groupby_field_ids || []).filter((id) => id !== fieldId);
+        await this.updateGraphVariant(variantId, "default_groupby_field_ids", ids);
+    }
+
+    async moveVariantGroupBy(variantId, fieldId, delta) {
+        const variant = (this.state.payload.graph_variants || []).find((v) => v.id === variantId);
+        const ids = [...(variant?.default_groupby_field_ids || [])];
+        const idx = ids.indexOf(fieldId);
+        const next = idx + delta;
+        if (idx < 0 || next < 0 || next >= ids.length) {
+            return;
+        }
+        [ids[idx], ids[next]] = [ids[next], ids[idx]];
+        await this.updateGraphVariant(variantId, "default_groupby_field_ids", ids);
+    }
+
+    async onVariantMeasureChange(variantId, ev) {
+        const raw = ev.target.value;
+        if (!raw) {
+            await this.updateGraphVariant(variantId, "default_measure_field_id", false);
+            return;
+        }
+        const id = Number(raw);
+        if (!id) {
+            return;
+        }
+        // Only accept fields from this option's chart-model measure catalog.
+        const allowed = new Set(
+            (this.variantMeasureCatalog(variantId) || [])
+                .map((f) => f.id)
+                .filter(Boolean)
+        );
+        if (!allowed.has(id)) {
+            this.notification.add(
+                _t("Measure must be a field on this chart model."),
+                { type: "warning" }
+            );
+            return;
+        }
+        await this.updateGraphVariant(variantId, "default_measure_field_id", id);
+        const variant = (this.state.payload.graph_variants || []).find((v) => v.id === variantId);
+        if (variant && !variant.default_measure_aggregator) {
+            await this.updateGraphVariant(variantId, "default_measure_aggregator", "sum");
+        }
+    }
+
+    async onVariantMeasureAggregatorChange(variantId, ev) {
+        await this.updateGraphVariant(
+            variantId,
+            "default_measure_aggregator",
+            ev.target.value || "sum"
+        );
+    }
+
+    async onVariantDefaultScopeToggle(variantId, scopeId, ev) {
+        const variant = (this.state.payload.graph_variants || []).find((v) => v.id === variantId);
+        const ids = new Set(variant?.default_scope_ids || []);
+        if (ev.target.checked) {
+            ids.add(scopeId);
+        } else {
+            ids.delete(scopeId);
+        }
+        await this.updateGraphVariant(variantId, "default_scope_ids", [...ids]);
+    }
+
+    async addIncludeScopeForVariant(variantId) {
+        const variant = (this.state.payload?.graph_variants || []).find((v) => v.id === variantId);
+        if (!variant?.graph_model) {
+            this.notification.add(_t("Set Chart Model first."), { type: "warning" });
+            return;
+        }
+        this.state.saving = true;
+        try {
+            const payload = await this.orm.call(
+                "dashboard.blueprint",
+                "studio_create_scope",
+                [
+                    [this.blueprintId],
+                    {
+                        name: _t("Data to Include"),
+                        mode: "include",
+                        domain: "[]",
+                        default_on: false,
+                    },
+                ]
+            );
+            const scopeId = payload.created_scope_id;
+            await this.applyStudioMutation(payload, true);
+            if (scopeId) {
+                const fresh = (this.state.payload?.graph_variants || []).find(
+                    (v) => v.id === variantId
+                );
+                const ids = [...(fresh?.default_scope_ids || []), scopeId];
+                await this.updateGraphVariant(variantId, "default_scope_ids", ids);
+            }
+            this.notification.add(_t("Data to Include added for this chart model"), {
+                type: "success",
+            });
+        } catch (error) {
+            this.notification.add(
+                error?.data?.message || error.message || _t("Add scope failed"),
+                { type: "danger" }
+            );
+        } finally {
+            this.state.saving = false;
+        }
+    }
+
+    async onVariantDateFilterPick(variantId, ev) {
+        const raw = ev.target.value;
+        ev.target.value = "";
+        if (!raw) {
+            return;
+        }
+        this.state.saving = true;
+        try {
+            const payload = await this.orm.call(
+                "dashboard.blueprint",
+                "studio_create_graph_variant_date_filter",
+                [[this.blueprintId], variantId, { field_id: parseInt(raw, 10) }]
+            );
+            await this.applyStudioMutation(payload, true);
+            this.notification.add(_t("Date filter added for this chart model"), {
+                type: "success",
+            });
+        } catch (error) {
+            this.notification.add(
+                error?.data?.message || error.message || _t("Add date filter failed"),
+                { type: "danger" }
+            );
+        } finally {
+            this.state.saving = false;
+        }
+    }
+
+    async onDateFilterLabelBlur(rowId, ev) {
+        // Remove uses mousedown; blur can still fire after unlink in some browsers.
+        if (this.state.saving) {
+            return;
+        }
+        const label = (ev.target.value || "").trim();
+        if (!label) {
+            return;
+        }
+        const current = (this.state.payload?.graph_variants || [])
+            .flatMap((v) => v.date_filters || [])
+            .find((d) => d.id === rowId);
+        if (!current || (current.label || "") === label) {
+            return;
+        }
+        try {
+            const payload = await this.orm.call(
+                "dashboard.blueprint",
+                "studio_write_graph_variant_date_filter",
+                [[this.blueprintId], rowId, { label }]
+            );
+            await this.applyStudioMutation(payload);
+        } catch (error) {
+            this.notification.add(
+                error?.data?.message || error.message || _t("Date filter update failed"),
+                { type: "danger" }
+            );
+            await this.loadPayload();
+        }
+    }
+
+    async onDateFilterDefaultPeriodToggle(rowId, field, periodId, ev) {
+        const current = (this.state.payload?.graph_variants || [])
+            .flatMap((v) => v.date_filters || [])
+            .find((d) => d.id === rowId);
+        if (!current) {
+            return;
+        }
+        const key = field === "default_period_year_ids"
+            ? "default_period_year_ids"
+            : "default_period_mq_ids";
+        const selected = new Set(current[key] || []);
+        if (ev.target.checked) {
+            selected.add(periodId);
+        } else {
+            selected.delete(periodId);
+        }
+        this.state.saving = true;
+        try {
+            const payload = await this.orm.call(
+                "dashboard.blueprint",
+                "studio_write_graph_variant_date_filter",
+                [[this.blueprintId], rowId, { [key]: [...selected] }]
+            );
+            await this.applyStudioMutation(payload);
+        } catch (error) {
+            this.notification.add(
+                error?.data?.message || error.message || _t("Default period update failed"),
+                { type: "danger" }
+            );
+            await this.loadPayload();
+        } finally {
+            this.state.saving = false;
+        }
+    }
+
+    async removeDateFilter(rowId, ev) {
+        // Run on mousedown so label blur does not race a write against unlink.
+        ev?.preventDefault?.();
+        ev?.stopPropagation?.();
+        if (this.state.saving) {
+            return;
+        }
+        this.state.saving = true;
+        try {
+            const payload = await this.orm.call(
+                "dashboard.blueprint",
+                "studio_unlink_graph_variant_date_filter",
+                [[this.blueprintId], rowId]
+            );
+            await this.applyStudioMutation(payload);
+            this.notification.add(_t("Date filter removed"), { type: "info" });
+        } catch (error) {
+            this.notification.add(
+                error?.data?.message || error.message || _t("Remove date filter failed"),
+                { type: "danger" }
+            );
+        } finally {
+            this.state.saving = false;
         }
     }
 
@@ -3470,7 +4202,11 @@ export class DashboardStudioAction extends Component {
             return;
         }
         await this.updateGraphVariant(variantId, "graph_model", model);
+        delete this.state.variantDefaultsCatalogs[variantId];
         await this.refreshVariantLinkPathCatalogs(variantId);
+        if (this.state.variantDefaultsOpen[variantId]) {
+            await this.ensureVariantDefaultsCatalog(variantId);
+        }
     }
 
     variantLinkPathRows(variantId) {
@@ -3653,6 +4389,22 @@ export class DashboardStudioAction extends Component {
                 return;
             }
             this.updateGraphVariant(variantId, field, value);
+            return;
+        }
+        if (field === "scope_warning") {
+            value = (value || "").trim();
+            if ((variant.scope_warning || "") === value) {
+                return;
+            }
+            this.updateGraphVariant(variantId, field, value || false);
+            return;
+        }
+        if (field === "graph_domain") {
+            value = (value || "").trim() || "[]";
+            if ((variant.graph_domain || "[]") === value) {
+                return;
+            }
+            this.updateGraphVariant(variantId, field, value);
         }
     }
 
@@ -3740,12 +4492,17 @@ export class DashboardStudioAction extends Component {
         }
     }
 
-    async updateScope(scopeId, field, value) {
+    async updateScope(scopeId, field, value, resModel = null) {
         try {
+            const kwargs = {};
+            if (resModel) {
+                kwargs.res_model = resModel;
+            }
             const payload = await this.orm.call(
                 "dashboard.blueprint",
                 "studio_write_scope",
-                [[this.blueprintId], scopeId, { [field]: value }]
+                [[this.blueprintId], scopeId, { [field]: value }],
+                kwargs
             );
             await this.applyStudioMutation(payload);
         } catch (error) {
@@ -3757,7 +4514,7 @@ export class DashboardStudioAction extends Component {
         }
     }
 
-    onScopeFieldBlur(scopeId, field, ev) {
+    onScopeFieldBlur(scopeId, field, ev, resModel = null) {
         let value = ev.target.value;
         const scope = (this.state.payload.scopes || []).find((s) => s.id === scopeId);
         if (!scope) {
@@ -3772,7 +4529,7 @@ export class DashboardStudioAction extends Component {
             if (scope.name === value) {
                 return;
             }
-            this.updateScope(scopeId, field, value);
+            this.updateScope(scopeId, field, value, resModel);
             return;
         }
         if (field === "description") {
@@ -3780,7 +4537,7 @@ export class DashboardStudioAction extends Component {
             if ((scope.description || "") === (value || "")) {
                 return;
             }
-            this.updateScope(scopeId, field, next);
+            this.updateScope(scopeId, field, next, resModel);
             return;
         }
         if (field === "domain") {
@@ -3788,21 +4545,22 @@ export class DashboardStudioAction extends Component {
             if ((scope.domain || "[]") === value) {
                 return;
             }
-            this.updateScope(scopeId, field, value);
+            this.updateScope(scopeId, field, value, resModel);
         }
     }
 
-    openScopeDomainEditor(scopeId) {
+    openScopeDomainEditor(scopeId, resModel = null) {
         const scope = (this.state.payload.scopes || []).find((s) => s.id === scopeId);
         if (!scope) {
             return;
         }
+        const model = resModel || this._scopeResModel();
         this.dialog.add(DomainSelectorDialog, {
-            resModel: this._scopeResModel(),
+            resModel: model,
             domain: scope.domain || "[]",
             title: _t("Scope filter"),
             onConfirm: (domain) => {
-                this.updateScope(scopeId, "domain", domain);
+                this.updateScope(scopeId, "domain", domain, model);
             },
         });
     }
@@ -3971,6 +4729,22 @@ export class DashboardStudioAction extends Component {
         }
     }
 
+    async onPublishToggle(ev) {
+        const wantPublished = Boolean(ev.target.checked);
+        const isPublished = this.state.payload?.state === "published";
+        if (wantPublished === isPublished) {
+            return;
+        }
+        if (wantPublished) {
+            const ok = await this.publish();
+            if (!ok && ev.target) {
+                ev.target.checked = false;
+            }
+            return;
+        }
+        await this.unpublish();
+    }
+
     async publish() {
         const p = this.state.payload || {};
         const liveLeaf = p.generated_menu_leaf || "";
@@ -4000,18 +4774,29 @@ export class DashboardStudioAction extends Component {
                 });
             });
             if (!confirmed) {
-                return;
+                return false;
             }
         }
-        await this.orm.call("dashboard.blueprint", "action_publish", [[this.blueprintId]]);
-        await this.loadPayload();
-        this.notification.add(_t("Published — live card updated"), { type: "success" });
+        this.state.saving = true;
+        try {
+            await this.orm.call("dashboard.blueprint", "action_publish", [[this.blueprintId]]);
+            await this.loadPayload();
+            this.notification.add(_t("Published — live card updated"), { type: "success" });
+            return true;
+        } finally {
+            this.state.saving = false;
+        }
     }
 
     async unpublish() {
-        await this.orm.call("dashboard.blueprint", "action_unpublish", [[this.blueprintId]]);
-        await this.loadPayload();
-        this.notification.add(_t("Unpublished"), { type: "warning" });
+        this.state.saving = true;
+        try {
+            await this.orm.call("dashboard.blueprint", "action_unpublish", [[this.blueprintId]]);
+            await this.loadPayload();
+            this.notification.add(_t("Unpublished"), { type: "warning" });
+        } finally {
+            this.state.saving = false;
+        }
     }
 
     async discard() {

@@ -24,10 +24,17 @@
                     </div>
                 </div>
                 <div class="o_ds_toolbar_actions d-flex align-items-center gap-2">
-                    <span t-if="state.payload"
-                          t-att-class="'o_ds_state badge ' + (state.payload.state === 'published' ? 'text-bg-success' : 'text-bg-secondary')"
-                          t-esc="state.payload.state"/>
                     <span t-if="state.dirty or state.layoutDirty or state.setupDirty" class="badge text-bg-warning">Unsaved</span>
+                    <div class="o_field_boolean o_boolean_toggle form-check form-switch o_ds_publish_switch mb-0"
+                         t-if="state.payload"
+                         title="Published dashboards are live in the menu">
+                        <input type="checkbox" class="form-check-input"
+                               id="o_ds_publish_toggle"
+                               t-att-checked="state.payload.state === 'published'"
+                               t-att-disabled="state.saving or state.loading"
+                               t-on-change="onPublishToggle"/>
+                        <label class="form-check-label" for="o_ds_publish_toggle">Published</label>
+                    </div>
                     <button t-if="state.canOpenAdvanced" type="button"
                             class="btn btn-light btn-sm" t-on-click="openAdvanced"
                             title="Open Advanced form (Administrators)">
@@ -52,24 +59,16 @@
                             t-att-disabled="state.saving or !canSave">
                         <i class="fa fa-save me-1"/>Save
                     </button>
-                    <button type="button" class="btn btn-success btn-sm" t-on-click="publish"
-                            t-if="state.payload and state.payload.state !== 'published'">
-                        <i class="fa fa-rocket me-1"/>Publish
-                    </button>
-                    <button type="button" class="btn btn-outline-secondary btn-sm" t-on-click="unpublish"
-                            t-if="state.payload and state.payload.state === 'published'">
-                        Unpublish
-                    </button>
                 </div>
             </header>
 
             <nav class="o_ds_modes">
                 <button type="button" t-att-class="state.studioMode === 'setup' ? 'active' : ''"
                         t-on-click="() => this.setStudioMode('setup')">Dashboard</button>
-                <button type="button" t-att-class="state.studioMode === 'layout' ? 'active' : ''"
-                        t-on-click="() => this.setStudioMode('layout')">Layout</button>
                 <button type="button" t-att-class="state.studioMode === 'content' ? 'active' : ''"
                         t-on-click="() => this.setStudioMode('content')">Content</button>
+                <button type="button" t-att-class="state.studioMode === 'layout' ? 'active' : ''"
+                        t-on-click="() => this.setStudioMode('layout')">Layout</button>
             </nav>
 
             <nav class="o_ds_zones d-none" t-if="state.studioMode === 'content'" aria-hidden="true">
@@ -572,8 +571,8 @@
                             </div>
                         </div>
                         <div class="o_ds_card_mid">
-                            <div t-att-class="'o_ds_card_zone o_ds_primary_zone' + (state.zone === 'primary' ? ' is-active' : '')"
-                                 t-on-click="() => this.selectZone(hasGraphVariants ? 'config' : 'primary')" role="button">
+                            <div t-att-class="'o_ds_card_zone o_ds_primary_zone' + (state.zone === 'primary' || state.zone === 'config' ? ' is-active' : '')"
+                                 t-on-click="() => this.selectZone('primary')" role="button">
                                 <div class="small text-muted mb-1" t-esc="previewGraphCaption"/>
                                 <div class="o_ds_chart_wrap" t-if="state.preview and state.preview.graph_json and !previewGraphNeedsSave">
                                     <canvas t-ref="previewChart"/>
@@ -586,7 +585,8 @@
                                 <div class="small text-warning" t-if="previewGraphNeedsSave">
                                     Save to refresh chart data (measure / group by).
                                 </div>
-                                <div class="o_ds_primary_btn" t-esc="previewPrimaryLabel"/>
+                                <div t-att-class="'o_ds_primary_btn' + (state.zone === 'primary' || state.zone === 'config' ? ' is-active' : '')"
+                                     t-esc="previewPrimaryLabel"/>
                             </div>
                             <div t-att-class="'o_ds_card_zone o_ds_kpi_zone' + (state.zone === 'kpis' ? ' is-active' : '')"
                                  t-on-click="() => this.selectZone('kpis')" role="button">
@@ -765,7 +765,7 @@
                                                 </div>
                                             </div>
                                             <button type="button" class="btn btn-sm btn-primary flex-shrink-0"
-                                                    t-on-click="addItem" t-att-disabled="state.saving" title="Add item">
+                                                    t-on-click="() => this.addItem()" t-att-disabled="state.saving" title="Add item">
                                                 <i class="fa fa-plus"/>
                                                 <span>Add</span>
                                             </button>
@@ -915,8 +915,9 @@
                                         <div>
                                             <h3 class="o_ds_studio_section_title">Graph Configuration</h3>
                                             <p class="o_ds_studio_section_help">
-                                                Build the chart. Chart Model Options, Group By, Measures, and Data to Include
-                                                change the chart only — not KPIs, bottom buttons, views, or reports.
+                                                Build the chart on each Chart Model Option (model, Group By, Measure,
+                                                and which Data to Include ticks start on). Changes the chart only —
+                                                not KPIs, bottom buttons, views, or reports.
                                             </p>
                                         </div>
                                     </div>
@@ -945,8 +946,10 @@
                                     <div>
                                         <h4 class="o_ds_studio_group_title mb-0">Chart Model Options</h4>
                                         <p class="o_ds_studio_group_help mb-0">
-                                            Each row is one chart choice (model, link, and primary button).
-                                            Mark one Default for new users; live gear lets each user pick their own.
+                                            Drag or use arrows to set picker order (#). Mark one Default for the chart
+                                            new users see. Expand a row for numbered defaults: 1 Chart, 2 Data to
+                                            Include, 3 Filters (date fields + Custom Filter). Live gear lets each
+                                            user pick their own chart model.
                                         </p>
                                     </div>
                                     <button type="button" class="btn btn-sm btn-primary flex-shrink-0"
@@ -957,7 +960,9 @@
                                 </div>
                                 <div class="o_ds_variant_list" t-if="(state.payload.graph_variants or []).length">
                                     <div class="o_ds_variant_row o_ds_variant_header">
+                                        <span class="o_ds_variant_col_fold" aria-hidden="true"/>
                                         <span class="o_ds_variant_col_handle" aria-hidden="true"/>
+                                        <span class="o_ds_variant_col_index">#</span>
                                         <span class="o_ds_variant_col_default">Default</span>
                                         <span>Chart Model</span>
                                         <span>Link to Host</span>
@@ -966,11 +971,20 @@
                                         <span aria-hidden="true"/>
                                     </div>
                                     <t t-foreach="state.payload.graph_variants or []" t-as="variant" t-key="variant.id">
+                                        <div t-att-class="'o_ds_variant_card' + (variant.is_default ? ' is-default' : '') + (variantDefaultsOpen(variant.id) ? ' is-open' : '')">
                                         <div class="o_ds_variant_row"
                                              draggable="true"
                                              t-on-dragstart="(ev) => this.onDragStartGraphVariant(variant.id, ev)"
                                              t-on-dragover="onDragOver"
                                              t-on-drop="(ev) => this.onDropGraphVariant(variant.id, ev)">
+                                            <button type="button"
+                                                    class="btn btn-link btn-sm p-0 text-muted o_ds_variant_col_fold"
+                                                    t-on-click.stop="() => this.toggleVariantDefaults(variant.id)"
+                                                    t-on-mousedown.stop=""
+                                                    t-att-aria-expanded="variantDefaultsOpen(variant.id) ? 'true' : 'false'"
+                                                    t-att-title="variantDefaultsOpen(variant.id) ? 'Collapse' : 'Expand'">
+                                                <i t-att-class="'fa fa-fw ' + (variantDefaultsOpen(variant.id) ? 'fa-caret-down' : 'fa-caret-right')"/>
+                                            </button>
                                             <div class="o_ds_scope_handle_col o_ds_variant_col_handle">
                                                 <i class="fa fa-bars text-muted" title="Drag to reorder"/>
                                                 <button type="button" class="btn btn-link btn-sm p-0 text-muted"
@@ -982,17 +996,25 @@
                                                     <i class="fa fa-chevron-down"/>
                                                 </button>
                                             </div>
-                                            <label class="o_ds_check o_ds_variant_col_default" title="Blueprint default">
-                                                <input type="radio" name="o_ds_graph_variant_default"
+                                            <span class="o_ds_variant_col_index"
+                                                  t-att-title="'Picker order: ' + (variant_index + 1)"
+                                                  t-esc="variant_index + 1"/>
+                                            <label class="o_ds_variant_col_default"
+                                                   title="Default chart for new users (separate from picker order)">
+                                                <input type="radio" class="form-check-input m-0"
+                                                       name="o_ds_graph_variant_default"
                                                        t-att-checked="variant.is_default"
                                                        t-on-change="() => this.setDefaultGraphVariant(variant.id)"/>
                                             </label>
                                             <div class="o_ds_variant_picker"
                                                  t-att-data-variant-id="variant.id"
                                                  data-kind="model">
-                                                <div class="form-control form-control-sm bg-light o_ds_variant_picker_value"
+                                                <div class="form-control form-control-sm bg-light o_ds_variant_picker_value d-flex align-items-center gap-1"
                                                      t-att-title="(variant.graph_model_label or '') + ' (' + (variant.graph_model or '') + ')'">
-                                                    <t t-esc="variant.graph_model_label or variant.graph_model or '—'"/>
+                                                    <span class="text-truncate"
+                                                          t-esc="variant.graph_model_label or variant.graph_model or '—'"/>
+                                                    <span t-if="variant.is_default"
+                                                          class="badge text-bg-light border flex-shrink-0">Default</span>
                                                 </div>
                                                 <input type="text" class="form-control form-control-sm mt-1"
                                                        placeholder="Search models…"
@@ -1075,14 +1097,12 @@
                                                        t-on-input="(ev) => this.onVariantActionSearch(variant.id, variant.graph_model, ev)"
                                                        t-on-focus="(ev) => this.onVariantActionSearch(variant.id, variant.graph_model, ev)"
                                                        t-on-blur="(ev) => this.onVariantPickerBlur(variant.id, 'action', ev)"/>
-                                                <div class="d-flex justify-content-between align-items-center mt-1"
+                                                <div class="d-flex justify-content-end align-items-center mt-1"
                                                      t-if="variantPickerQuery(variant.id, 'action') or variantPickerResults(variant.id, 'action').length">
-                                                    <small class="text-muted text-truncate"
-                                                           t-esc="variantPickerScopeLabel(variant.id)"/>
-                                                    <button type="button" class="btn btn-link btn-sm p-0 flex-shrink-0"
+                                                    <button type="button" class="btn btn-link btn-sm p-0"
                                                             t-on-mousedown.prevent="() => this.toggleVariantActionsShowAll(variant.id, variant.graph_model)">
-                                                        <t t-if="variantPickerShowAll(variant.id)">Scoped</t>
-                                                        <t t-else="">All</t>
+                                                        <t t-if="variantPickerShowAll(variant.id)">Show scoped only</t>
+                                                        <t t-else="">Show all models</t>
                                                     </button>
                                                 </div>
                                                 <div t-if="variantPickerResults(variant.id, 'action').length"
@@ -1103,82 +1123,284 @@
                                                 <i class="fa fa-trash-o"/>
                                             </button>
                                         </div>
+                                        <div t-if="variant.graph_model and variantDefaultsOpen(variant.id)"
+                                             class="o_ds_variant_defaults">
+                                            <div class="o_ds_variant_defaults_body">
+                                                <!-- 1) Chart -->
+                                                <div class="o_ds_variant_step">
+                                                    <div class="o_ds_variant_step_head">
+                                                        <span class="o_ds_studio_step">1</span>
+                                                        <div>
+                                                            <h5 class="o_ds_variant_step_title">Chart</h5>
+                                                            <p class="o_ds_variant_step_help">
+                                                                Default Group By, Measure, and Measured As for this chart model.
+                                                            </p>
+                                                        </div>
+                                                    </div>
+                                                    <div class="o_ds_variant_metrics_row">
+                                                        <label class="o_ds_field mb-0 o_ds_variant_metric_groupby">
+                                                            <span>Group By</span>
+                                                            <div class="o_ds_groupby_chips mb-1"
+                                                                 t-if="variantGroupByChips(variant).length">
+                                                                <t t-foreach="variantGroupByChips(variant)" t-as="chip" t-key="chip.id">
+                                                                    <span class="badge text-bg-light border o_ds_groupby_chip">
+                                                                        <button type="button" class="btn btn-link btn-sm p-0 text-muted"
+                                                                                t-att-disabled="chip.index === 0"
+                                                                                t-on-click="() => this.moveVariantGroupBy(variant.id, chip.id, -1)"
+                                                                                title="Move up">
+                                                                            <i class="fa fa-chevron-up"/>
+                                                                        </button>
+                                                                        <button type="button" class="btn btn-link btn-sm p-0 text-muted"
+                                                                                t-att-disabled="chip.index === variantGroupByChips(variant).length - 1"
+                                                                                t-on-click="() => this.moveVariantGroupBy(variant.id, chip.id, 1)"
+                                                                                title="Move down">
+                                                                            <i class="fa fa-chevron-down"/>
+                                                                        </button>
+                                                                        <t t-esc="chip.label"/>
+                                                                        <button type="button" class="btn-close btn-close-sm ms-1"
+                                                                                t-on-click="() => this.removeVariantGroupBy(variant.id, chip.id)"/>
+                                                                    </span>
+                                                                </t>
+                                                            </div>
+                                                            <select class="form-select form-select-sm"
+                                                                    t-on-change="(ev) => this.onVariantGroupByPick(variant.id, ev)">
+                                                                <option value="">+ Add group by field…</option>
+                                                                <t t-foreach="variantGroupByCatalog(variant.id)" t-as="f" t-key="f.id">
+                                                                    <option t-att-value="f.id"
+                                                                            t-att-disabled="(variant.default_groupby_field_ids || []).includes(f.id)"
+                                                                            t-esc="f.string + ' (' + f.name + ')'"/>
+                                                                </t>
+                                                            </select>
+                                                        </label>
+                                                        <label class="o_ds_field mb-0 o_ds_variant_metric_measure">
+                                                            <span>Measure</span>
+                                                            <select class="form-select form-select-sm"
+                                                                    t-on-change="(ev) => this.onVariantMeasureChange(variant.id, ev)">
+                                                                <option value=""
+                                                                        t-att-selected="!variant.default_measure_field_id">
+                                                                    Count
+                                                                </option>
+                                                                <t t-foreach="variantMeasureCatalog(variant.id)" t-as="mf" t-key="mf.id">
+                                                                    <option t-att-value="mf.id"
+                                                                            t-att-selected="variant.default_measure_field_id === mf.id"
+                                                                            t-esc="mf.string + ' (' + mf.name + ')'"/>
+                                                                </t>
+                                                            </select>
+                                                        </label>
+                                                        <label class="o_ds_field mb-0 o_ds_variant_metric_agg">
+                                                            <span>Measured As</span>
+                                                            <select class="form-select form-select-sm"
+                                                                    t-att-disabled="!variant.default_measure_field_id"
+                                                                    t-on-change="(ev) => this.onVariantMeasureAggregatorChange(variant.id, ev)">
+                                                                <t t-foreach="MEASURE_AGGREGATORS" t-as="agg" t-key="agg.value">
+                                                                    <option t-att-value="agg.value"
+                                                                            t-att-selected="(variant.default_measure_aggregator || 'sum') === agg.value"
+                                                                            t-esc="agg.label"/>
+                                                                </t>
+                                                            </select>
+                                                        </label>
+                                                    </div>
+                                                </div>
+
+                                                <!-- 2) Data to Include (+ Scope Warning) -->
+                                                <div class="o_ds_variant_step o_ds_variant_includes">
+                                                    <div class="o_ds_variant_step_head">
+                                                        <span class="o_ds_studio_step">2</span>
+                                                        <div class="flex-grow-1">
+                                                            <div class="d-flex justify-content-between align-items-start gap-2">
+                                                                <div>
+                                                                    <h5 class="o_ds_variant_step_title">Data to Include</h5>
+                                                                    <p class="o_ds_variant_step_help">
+                                                                        Tick boxes for this chart model in the live gear.
+                                                                        Scope Warning shows when all Include boxes are off.
+                                                                    </p>
+                                                                </div>
+                                                                <button type="button" class="btn btn-link btn-sm p-0 flex-shrink-0"
+                                                                        t-on-click="() => this.addIncludeScopeForVariant(variant.id)"
+                                                                        t-att-disabled="state.saving">
+                                                                    + Add
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <div class="o_ds_variant_include_list"
+                                                         t-if="variantIncludeScopes(variant).length">
+                                                        <t t-foreach="variantIncludeScopes(variant)" t-as="scope" t-key="scope.id">
+                                                            <div class="o_ds_variant_include_row">
+                                                                <label class="o_ds_check mb-0"
+                                                                       title="On by default for this chart model">
+                                                                    <input type="checkbox"
+                                                                           t-att-checked="(variant.default_scope_ids || []).includes(scope.id)"
+                                                                           t-on-change="(ev) => this.onVariantDefaultScopeToggle(variant.id, scope.id, ev)"/>
+                                                                </label>
+                                                                <input type="text" class="form-control form-control-sm"
+                                                                       t-att-value="scope.name"
+                                                                       t-att-title="scope.name"
+                                                                       placeholder="Name"
+                                                                       t-on-blur="(ev) => this.onScopeFieldBlur(scope.id, 'name', ev)"/>
+                                                                <button type="button" class="btn btn-link btn-sm p-0 text-muted"
+                                                                        t-on-click="() => this.openScopeDomainEditor(scope.id, variant.graph_model)"
+                                                                        t-att-title="(scope.domain and scope.domain !== '[]') ? scope.domain : 'Set filter'">
+                                                                    <i class="fa fa-filter"/>
+                                                                    <span class="ms-1"
+                                                                          t-esc="(scope.domain and scope.domain !== '[]') ? 'Filter' : 'Set filter'"/>
+                                                                </button>
+                                                                <button type="button" class="btn-close btn-close-sm"
+                                                                        t-on-click="() => this.removeScope(scope.id)"
+                                                                        title="Remove"/>
+                                                            </div>
+                                                        </t>
+                                                    </div>
+                                                    <p t-else="" class="form-text mb-0">No include boxes yet for this chart model.</p>
+                                                    <label class="o_ds_field mt-2 mb-0">
+                                                        <span>Scope Warning</span>
+                                                        <input type="text" class="form-control form-control-sm"
+                                                               t-att-value="variant.scope_warning or ''"
+                                                               t-on-blur="(ev) => this.onGraphVariantFieldBlur(variant.id, 'scope_warning', ev)"
+                                                               placeholder="e.g. At least one of 'Pipeline' or 'Leads' must stay on."/>
+                                                        <div class="form-text mb-0">
+                                                            Shown in the live ⚙️ popup when all Include boxes for this
+                                                            chart model are unticked. Leave empty for no warning.
+                                                        </div>
+                                                    </label>
+                                                </div>
+
+                                                <!-- 3) Filters: date fields + Custom Filter -->
+                                                <div class="o_ds_variant_step o_ds_variant_date_filters">
+                                                    <div class="o_ds_variant_step_head">
+                                                        <span class="o_ds_studio_step">3</span>
+                                                        <div>
+                                                            <h5 class="o_ds_variant_step_title">Filters</h5>
+                                                            <p class="o_ds_variant_step_help">
+                                                                Date fields and optional Custom Filter for this chart
+                                                                model only (e.g. Creation Date and Closed Date on
+                                                                Pipeline; Order Date only on Sales Orders).
+                                                            </p>
+                                                        </div>
+                                                    </div>
+                                                    <div class="o_ds_variant_step_block">
+                                                        <div class="o_ds_variant_step_subtitle">Date Fields</div>
+                                                        <p class="o_ds_variant_step_help mb-1">
+                                                            Pick which date fields appear in the live gear, then set
+                                                            optional default months/quarters/years for new users.
+                                                        </p>
+                                                        <div class="o_ds_variant_include_list"
+                                                             t-if="variantDateFilters(variant).length">
+                                                            <t t-foreach="variantDateFilters(variant)" t-as="df" t-key="df.id">
+                                                                <div class="o_ds_variant_date_filter_card">
+                                                                    <div class="o_ds_variant_include_row">
+                                                                        <input type="text" class="form-control form-control-sm"
+                                                                               t-att-value="df.label"
+                                                                               title="Name shown in the live gear"
+                                                                               placeholder="Gear label"
+                                                                               t-on-blur="(ev) => this.onDateFilterLabelBlur(df.id, ev)"/>
+                                                                        <span class="badge text-bg-light border text-truncate o_ds_variant_date_field"
+                                                                              t-att-title="df.field_label or df.field_name"
+                                                                              t-esc="df.field_name or df.field_label"/>
+                                                                        <button type="button" class="btn-close btn-close-sm"
+                                                                                t-on-mousedown="(ev) => this.removeDateFilter(df.id, ev)"
+                                                                                title="Remove"/>
+                                                                    </div>
+                                                                    <div class="o_ds_variant_date_defaults">
+                                                                        <div class="o_ds_variant_date_defaults_row">
+                                                                            <div class="o_ds_variant_date_defaults_main">
+                                                                                <div class="o_ds_variant_date_defaults_label">Default Months / Quarters</div>
+                                                                                <div class="o_ds_period_chips">
+                                                                                    <t t-foreach="periodMqCatalog" t-as="p" t-key="p.id">
+                                                                                        <div class="form-check form-check-inline o_ds_period_chip">
+                                                                                            <input type="checkbox"
+                                                                                                   class="form-check-input"
+                                                                                                   t-att-id="'ds_period_mq_' + df.id + '_' + p.id"
+                                                                                                   t-att-checked="(df.default_period_mq_ids || []).includes(p.id)"
+                                                                                                   t-on-change="(ev) => this.onDateFilterDefaultPeriodToggle(df.id, 'default_period_mq_ids', p.id, ev)"/>
+                                                                                            <label class="form-check-label"
+                                                                                                   t-att-for="'ds_period_mq_' + df.id + '_' + p.id"
+                                                                                                   t-esc="p.label"/>
+                                                                                        </div>
+                                                                                    </t>
+                                                                                </div>
+                                                                            </div>
+                                                                            <p class="o_ds_variant_step_help">
+                                                                                Pre-ticked in the live gear the first time a user
+                                                                                has no months/quarters pick for this date field.
+                                                                                After that, their own pick always wins.
+                                                                            </p>
+                                                                        </div>
+                                                                        <div class="o_ds_variant_date_defaults_row">
+                                                                            <div class="o_ds_variant_date_defaults_main">
+                                                                                <div class="o_ds_variant_date_defaults_label">Default Years</div>
+                                                                                <div class="o_ds_period_chips">
+                                                                                    <t t-foreach="periodYearCatalog" t-as="p" t-key="p.id">
+                                                                                        <div class="form-check form-check-inline o_ds_period_chip">
+                                                                                            <input type="checkbox"
+                                                                                                   class="form-check-input"
+                                                                                                   t-att-id="'ds_period_year_' + df.id + '_' + p.id"
+                                                                                                   t-att-checked="(df.default_period_year_ids || []).includes(p.id)"
+                                                                                                   t-on-change="(ev) => this.onDateFilterDefaultPeriodToggle(df.id, 'default_period_year_ids', p.id, ev)"/>
+                                                                                            <label class="form-check-label"
+                                                                                                   t-att-for="'ds_period_year_' + df.id + '_' + p.id"
+                                                                                                   t-esc="p.label"/>
+                                                                                        </div>
+                                                                                    </t>
+                                                                                </div>
+                                                                            </div>
+                                                                            <p class="o_ds_variant_step_help">
+                                                                                Pre-ticked years in the live gear until the user
+                                                                                sets their own years for this date field.
+                                                                            </p>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            </t>
+                                                        </div>
+                                                        <p t-else="" class="form-text mb-0">No date filters yet for this chart model.</p>
+                                                        <select class="form-select form-select-sm mt-1"
+                                                                t-on-change="(ev) => this.onVariantDateFilterPick(variant.id, ev)">
+                                                            <option value="">+ Add date field…</option>
+                                                            <t t-foreach="variantDateFieldCatalog(variant.id)" t-as="f" t-key="f.id">
+                                                                <option t-att-value="f.id"
+                                                                        t-att-disabled="variantDateFilterFieldIds(variant).includes(f.id)"
+                                                                        t-esc="f.string + ' (' + f.name + ')'"/>
+                                                            </t>
+                                                        </select>
+                                                    </div>
+                                                    <div class="o_ds_variant_step_block">
+                                                        <div class="o_ds_variant_step_subtitle">Custom Filter</div>
+                                                        <p class="o_ds_variant_step_help mb-1">
+                                                            Optional domain on this chart model only. Not shared with
+                                                            other Chart Model Options.
+                                                        </p>
+                                                        <div class="input-group">
+                                                            <input type="text" class="form-control form-control-sm font-monospace"
+                                                                   t-att-value="variant.graph_domain or '[]'"
+                                                                   t-on-blur="(ev) => this.onGraphVariantFieldBlur(variant.id, 'graph_domain', ev)"/>
+                                                            <button type="button"
+                                                                    class="btn btn-outline-secondary btn-sm"
+                                                                    t-on-click="() => this.openVariantGraphDomainEditor(variant.id)"
+                                                                    t-att-disabled="!variant.graph_model">
+                                                                <i class="fa fa-filter"/> Edit
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        </div>
                                     </t>
                                 </div>
                                 <div t-else="" class="text-muted small mb-0">
-                                    No options yet. Click <strong>Add Option</strong> — the first row becomes the Default chart model.
+                                    No options yet. Click <strong>Add Option</strong> — the first row becomes the Default
+                                    chart model (Group By / Measure / Data to Include are set on that row).
                                 </div>
-                                </div>
-                                <label class="o_ds_field">
-                                    <span>Group By</span>
-                                    <div class="o_ds_groupby_chips mb-2" t-if="graphGroupBySelectedChips.length">
-                                        <t t-foreach="graphGroupBySelectedChips" t-as="chip" t-key="chip.id">
-                                            <span class="badge text-bg-light border o_ds_groupby_chip">
-                                                <button type="button" class="btn btn-link btn-sm p-0 text-muted"
-                                                        t-att-disabled="chip.index === 0"
-                                                        t-on-click="() => this.moveGroupByField(chip.id, -1)"
-                                                        title="Move up">
-                                                    <i class="fa fa-chevron-up"/>
-                                                </button>
-                                                <button type="button" class="btn btn-link btn-sm p-0 text-muted"
-                                                        t-att-disabled="chip.index === graphGroupBySelectedChips.length - 1"
-                                                        t-on-click="() => this.moveGroupByField(chip.id, 1)"
-                                                        title="Move down">
-                                                    <i class="fa fa-chevron-down"/>
-                                                </button>
-                                                <t t-esc="chip.label"/>
-                                                <button type="button" class="btn-close btn-close-sm ms-1"
-                                                        t-on-click="() => this.removeGroupByField(chip.id)"/>
-                                            </span>
-                                        </t>
-                                    </div>
-                                    <select class="form-select" t-on-change="onGroupByPick">
-                                        <option value="">+ Add group by field…</option>
-                                        <t t-foreach="graphGroupByCatalog" t-as="f" t-key="f.id">
-                                            <option t-att-value="f.id"
-                                                    t-att-disabled="state.editor.graph_groupby_field_ids.includes(f.id)"
-                                                    t-esc="f.string + ' (' + f.name + ')'"/>
-                                        </t>
-                                    </select>
-                                    <p class="form-text mb-0">First tag is the top level. Order matches Advanced.</p>
-                                </label>
-                                <div class="row g-2">
-                                    <div t-att-class="showMeasureAggregator ? 'col-md-7' : 'col-12'">
-                                        <label class="o_ds_field mb-0">
-                                            <span>Measure</span>
-                                            <select class="form-select" t-on-change="onMeasureFieldChange">
-                                                <option value="__count"
-                                                        t-att-selected="!state.editor.graph_measure_field_id">Count</option>
-                                                <t t-foreach="state.catalogs.graphMeasureFields" t-as="mf" t-key="mf.id">
-                                                    <option t-att-value="mf.id"
-                                                            t-att-selected="state.editor.graph_measure_field_id === mf.id"
-                                                            t-esc="mf.string + ' (' + mf.name + ')'"/>
-                                                </t>
-                                            </select>
-                                        </label>
-                                    </div>
-                                    <div class="col-md-5" t-if="showMeasureAggregator">
-                                        <label class="o_ds_field mb-0">
-                                            <span>Measured As</span>
-                                            <select class="form-select" t-on-change="onMeasureAggregatorChange">
-                                                <t t-foreach="MEASURE_AGGREGATORS" t-as="agg" t-key="agg.value">
-                                                    <option t-att-value="agg.value"
-                                                            t-att-selected="state.editor.graph_measure_aggregator === agg.value"
-                                                            t-esc="agg.label"/>
-                                                </t>
-                                            </select>
-                                        </label>
-                                    </div>
                                 </div>
 
-                                </div>
-
-                                <div class="o_ds_studio_group">
+                                <!-- No Chart Model Options yet: classic shared Include list -->
+                                <div class="o_ds_studio_group" t-if="!hasGraphVariants">
                                     <div class="d-flex justify-content-between align-items-start gap-2 mb-2">
                                         <div>
                                             <h4 class="o_ds_studio_group_title mb-0">Data to Include</h4>
                                             <p class="o_ds_studio_group_help mb-0">
-                                                Each line becomes a tick box under Data to Include in the live ⚙️ popup (chart only).
+                                                Each line becomes a tick box under Data to Include in the live ⚙️ popup.
                                             </p>
                                         </div>
                                         <button type="button" class="btn btn-sm btn-primary flex-shrink-0"
@@ -1246,90 +1468,24 @@
                                     </t>
                                     </div>
                                     <div t-else="" class="text-muted small mb-0">No items yet. Click <strong>Add</strong>.</div>
-                                    <label class="o_ds_field mt-3 mb-0">
-                                        <span>Scope Warning</span>
-                                        <input type="text" class="form-control"
-                                               t-att-value="state.payload.scope_warning or ''"
-                                               t-on-change="(ev) => this.updateConfigBlueprint('scope_warning', ev.target.value)"
-                                               placeholder="e.g. At least one of 'Pipeline' or 'Leads' must stay on."/>
-                                        <div class="form-text">
-                                            Shown in the live ⚙️ popup when all Include scopes are unticked.
-                                            Leave empty for no warning.
-                                        </div>
-                                    </label>
+                                </div>
+
+                                <label class="o_ds_field mt-3 mb-0" t-if="!hasGraphVariants">
+                                    <span>Scope Warning</span>
+                                    <input type="text" class="form-control"
+                                           t-att-value="state.payload.scope_warning or ''"
+                                           t-on-change="(ev) => this.updateConfigBlueprint('scope_warning', ev.target.value)"
+                                           placeholder="e.g. At least one of 'Pipeline' or 'Leads' must stay on."/>
+                                    <div class="form-text">
+                                        Shown in the live ⚙️ popup when all Include scopes are unticked.
+                                        Leave empty for no warning. When Chart Model Options exist, set this
+                                        on each option instead.
+                                    </div>
+                                </label>
                                 </div>
                                 </div>
                             </section>
 
-                            <section class="o_ds_studio_section">
-                                <header class="o_ds_studio_section_head">
-                                    <div class="o_ds_studio_section_head_main">
-                                        <div>
-                                            <h3 class="o_ds_studio_section_title">Filters</h3>
-                                            <p class="o_ds_studio_section_help">
-                                                Narrow data further. Date pickers and Custom Filter apply to the chart,
-                                                KPIs, bottom buttons, views, and reports.
-                                            </p>
-                                        </div>
-                                    </div>
-                                </header>
-                                <div class="o_ds_studio_section_body">
-                                <label class="o_ds_field">
-                                    <span>Creation Date</span>
-                                    <t t-if="state.catalogs.graphDateFields.length">
-                                        <select class="form-select"
-                                                t-on-change="(ev) => this.onEditorInput('period_field_id', ev)">
-                                            <option value="">—</option>
-                                            <t t-foreach="state.catalogs.graphDateFields" t-as="df" t-key="df.id">
-                                                <option t-att-value="df.id"
-                                                        t-att-selected="state.editor.period_field_id === df.id"
-                                                        t-esc="df.string + ' (' + df.name + ')'"/>
-                                            </t>
-                                        </select>
-                                    </t>
-                                    <t t-else="">
-                                        <input type="number" class="form-control"
-                                               t-att-value="state.editor.period_field_id or ''"
-                                               t-on-input="(ev) => this.onEditorInput('period_field_id', ev)"
-                                               placeholder="ir.model.fields id"/>
-                                        <p class="form-text mb-0">No date field catalog — enter a field record id.</p>
-                                    </t>
-                                </label>
-                                <label class="o_ds_field">
-                                    <span>Closed Date</span>
-                                    <t t-if="state.catalogs.graphDateFields.length">
-                                        <select class="form-select"
-                                                t-on-change="(ev) => this.onEditorInput('closed_period_field_id', ev)">
-                                            <option value="">—</option>
-                                            <t t-foreach="state.catalogs.graphDateFields" t-as="df" t-key="'c'+df.id">
-                                                <option t-att-value="df.id"
-                                                        t-att-selected="state.editor.closed_period_field_id === df.id"
-                                                        t-esc="df.string + ' (' + df.name + ')'"/>
-                                            </t>
-                                        </select>
-                                    </t>
-                                    <t t-else="">
-                                        <input type="number" class="form-control"
-                                               t-att-value="state.editor.closed_period_field_id or ''"
-                                               t-on-input="(ev) => this.onEditorInput('closed_period_field_id', ev)"
-                                               placeholder="ir.model.fields id"/>
-                                    </t>
-                                </label>
-                                <label class="o_ds_field">
-                                    <span>Custom Filter</span>
-                                    <div class="input-group">
-                                        <input type="text" class="form-control font-monospace"
-                                               t-att-value="state.editor.graph_domain"
-                                               t-on-input="(ev) => this.onEditorInput('graph_domain', ev)"/>
-                                        <button type="button" class="btn btn-outline-secondary" t-on-click="openGraphDomainEditor"
-                                                t-if="state.payload.graph_model or state.payload.host_model">
-                                            <i class="fa fa-filter"/> Edit
-                                        </button>
-                                    </div>
-                                    <p class="form-text mb-0">Python domain list on the graph model (same as Advanced).</p>
-                                </label>
-                                </div>
-                            </section>
                             </div>
                         </t>
 
@@ -1409,8 +1565,7 @@
                                             <span>Search Actions</span>
                                             <input type="text" class="form-control" t-att-value="state.actionQuery"
                                                    t-on-input="onActionQueryInput" placeholder="Type to search…"/>
-                                            <div class="d-flex justify-content-between align-items-center mt-1">
-                                                <small class="text-muted" t-esc="state.actionScopeLabel"/>
+                                            <div class="d-flex justify-content-end align-items-center mt-1">
                                                 <button type="button" class="btn btn-link btn-sm p-0"
                                                         t-on-click="toggleActionsShowAll">
                                                     <t t-if="state.actionsShowAll">Show scoped only</t>
@@ -1433,65 +1588,200 @@
                                         <div class="o_ds_studio_section_head_main">
                                             <span class="o_ds_studio_step">3</span>
                                             <div>
-                                                <h3 class="o_ds_studio_section_title">Action Defaults</h3>
+                                                <h3 class="o_ds_studio_section_title">When Opened</h3>
                                                 <p class="o_ds_studio_section_help">
-                                                    Values passed when this action opens. Use fixed values,
-                                                    this card’s id, or group rules (first matching group wins).
+                                                    Optional. What should happen when the user opens this action.
+                                                    Most dashboards need nothing here.
                                                 </p>
                                             </div>
                                         </div>
                                     </header>
-                                    <div class="o_ds_studio_section_body">
+                                    <div class="o_ds_studio_section_body o_ds_action_defaults">
+                                        <div class="o_ds_context_presets">
+                                            <div class="o_ds_context_presets_label">Add a setting</div>
+                                            <div class="o_ds_context_preset_chips">
+                                                <t t-foreach="CONTEXT_PRESETS" t-as="preset" t-key="preset.id">
+                                                    <button type="button"
+                                                            class="btn btn-sm btn-outline-secondary"
+                                                            t-att-title="preset.help"
+                                                            t-on-click="() => this.addContextPreset(preset.id)">
+                                                        <t t-esc="preset.label"/>
+                                                    </button>
+                                                </t>
+                                            </div>
+                                        </div>
+                                        <p t-if="!state.editor.contextRows.length"
+                                           class="form-text mb-0">
+                                            Nothing configured — the action opens as usual.
+                                        </p>
                                         <t t-foreach="state.editor.contextRows" t-as="row" t-key="row_index">
-                                            <div class="o_ds_context_row border rounded p-2 mb-2">
-                                                <div class="d-flex gap-2 mb-1 align-items-start">
-                                                    <input type="text" class="form-control form-control-sm"
-                                                           placeholder="Key (e.g. default_type)"
-                                                           t-att-value="row.key"
-                                                           t-on-change="(ev) => this.onContextKeyInput(row_index, ev)"/>
-                                                    <select class="form-select form-select-sm"
-                                                            t-on-change="(ev) => this.onContextTypeChange(row_index, ev)">
-                                                        <t t-foreach="CONTEXT_VALUE_TYPES" t-as="vt" t-key="vt.value">
-                                                            <option t-att-value="vt.value"
-                                                                    t-att-selected="row.valueType === vt.value"
-                                                                    t-esc="vt.label"/>
-                                                        </t>
-                                                    </select>
-                                                    <button type="button" class="btn btn-link text-danger p-0"
+                                            <div class="o_ds_context_row">
+                                                <div class="o_ds_context_row_head">
+                                                    <div class="o_ds_context_row_title flex-grow-1"
+                                                         t-esc="contextRowTitle(row)"/>
+                                                    <button type="button" class="btn btn-link text-danger p-0 o_ds_context_row_remove"
                                                             title="Remove"
                                                             t-on-click="() => this.removeContextRow(row_index)">
                                                         <i class="fa fa-trash-o"/>
                                                     </button>
                                                 </div>
-                                                <t t-if="row.valueType === 'fixed'">
-                                                    <input type="text" class="form-control form-control-sm"
-                                                           placeholder="Value"
-                                                           t-att-value="row.fixedValue"
-                                                           t-on-change="(ev) => this.onContextFixedInput(row_index, ev)"/>
-                                                </t>
-                                                <t t-elif="row.valueType === 'record_id'">
-                                                    <label class="form-check mb-0">
-                                                        <input type="checkbox" class="form-check-input"
+
+                                                <t t-if="contextRowPurpose(row) === 'card_record'">
+                                                    <label class="o_ds_field mb-0">
+                                                        <span>Use this card</span>
+                                                        <select class="form-select form-select-sm"
+                                                                t-on-change="(ev) => this.onContextCardPassTarget(row_index, ev)">
+                                                            <t t-foreach="CARD_PASS_TARGETS" t-as="target" t-key="target.key">
+                                                                <option t-att-value="target.key"
+                                                                        t-att-selected="row.key === target.key"
+                                                                        t-esc="target.label"/>
+                                                            </t>
+                                                            <option t-if="!isKnownCardPassTarget(row.key)"
+                                                                    t-att-value="row.key"
+                                                                    selected="selected"
+                                                                    t-esc="row.key"/>
+                                                        </select>
+                                                    </label>
+                                                    <label class="o_ds_check mb-0">
+                                                        <input type="checkbox"
                                                                t-att-checked="row.asList"
                                                                t-on-change="(ev) => this.onContextAsListChange(row_index, ev)"/>
-                                                        <span class="form-check-label">Pass as a list</span>
+                                                        <span>Allow selecting several records</span>
                                                     </label>
                                                 </t>
-                                                <t t-else="">
-                                                    <p class="text-muted small mb-2">
-                                                        Rules run top to bottom. First matching group wins.
+
+                                                <t t-elif="contextRowPurpose(row) === 'search_filter'">
+                                                    <label class="o_ds_field mb-0">
+                                                        <span>Filter name</span>
+                                                        <select t-if="contextFilterOptions().length"
+                                                                class="form-select form-select-sm"
+                                                                t-on-change="(ev) => this.onContextSearchFilterName(row_index, ev)">
+                                                            <option value="">Choose a filter…</option>
+                                                            <t t-foreach="contextFilterOptions()" t-as="filt" t-key="filt.name">
+                                                                <option t-att-value="filt.name"
+                                                                        t-att-selected="searchFilterShortName(row) === filt.name"
+                                                                        t-esc="filt.string"/>
+                                                            </t>
+                                                            <option t-if="searchFilterShortName(row) and !isKnownFilterName(searchFilterShortName(row))"
+                                                                    t-att-value="searchFilterShortName(row)"
+                                                                    selected="selected"
+                                                                    t-esc="searchFilterShortName(row)"/>
+                                                        </select>
+                                                        <input t-else="" type="text" class="form-control form-control-sm"
+                                                               placeholder="e.g. my_pipeline, assigned_to_me"
+                                                               t-att-value="searchFilterShortName(row)"
+                                                               t-on-change="(ev) => this.onContextSearchFilterName(row_index, ev)"/>
+                                                        <span class="form-text">
+                                                            Name of the filter on the list that should start on.
+                                                        </span>
+                                                    </label>
+                                                </t>
+
+                                                <t t-elif="contextRowPurpose(row) === 'form_default'">
+                                                    <label class="o_ds_field mb-0">
+                                                        <span>Form field</span>
+                                                        <select t-if="contextFieldOptions().length"
+                                                                class="form-select form-select-sm"
+                                                                t-on-change="(ev) => this.onContextFormFieldName(row_index, ev)">
+                                                            <option value="">Choose a field…</option>
+                                                            <t t-foreach="contextFieldOptions()" t-as="fld" t-key="fld.name">
+                                                                <option t-att-value="fld.name"
+                                                                        t-att-selected="formDefaultShortName(row) === fld.name"
+                                                                        t-esc="fld.string"/>
+                                                            </t>
+                                                            <option t-if="formDefaultShortName(row) and !isKnownFieldName(formDefaultShortName(row))"
+                                                                    t-att-value="formDefaultShortName(row)"
+                                                                    selected="selected"
+                                                                    t-esc="formDefaultShortName(row)"/>
+                                                        </select>
+                                                        <input t-else="" type="text" class="form-control form-control-sm"
+                                                               placeholder="e.g. partner_id, type"
+                                                               t-att-value="formDefaultShortName(row)"
+                                                               t-on-change="(ev) => this.onContextFormFieldName(row_index, ev)"/>
+                                                    </label>
+                                                    <t t-set="fieldMeta" t-value="contextFieldFor(row)"/>
+                                                    <label class="o_ds_field mb-0" t-if="fieldMeta and fieldMeta.ttype === 'boolean'">
+                                                        <span>Prefill with</span>
+                                                        <select class="form-select form-select-sm"
+                                                                t-on-change="(ev) => this.onContextFixedInput(row_index, ev)">
+                                                            <option value="true" t-att-selected="String(row.fixedValue) === 'true'">Yes</option>
+                                                            <option value="false" t-att-selected="String(row.fixedValue) !== 'true'">No</option>
+                                                        </select>
+                                                    </label>
+                                                    <label class="o_ds_field mb-0" t-elif="fieldMeta and fieldMeta.ttype === 'selection'">
+                                                        <span>Prefill with</span>
+                                                        <select class="form-select form-select-sm"
+                                                                t-on-change="(ev) => this.onContextFixedInput(row_index, ev)">
+                                                            <option value="">Choose a value…</option>
+                                                            <t t-foreach="fieldMeta.selection" t-as="opt" t-key="opt[0]">
+                                                                <option t-att-value="opt[0]"
+                                                                        t-att-selected="String(row.fixedValue) === opt[0]"
+                                                                        t-esc="opt[1]"/>
+                                                            </t>
+                                                        </select>
+                                                    </label>
+                                                    <label class="o_ds_field mb-0" t-elif="fieldMeta and ['many2one', 'many2many'].includes(fieldMeta.ttype)">
+                                                        <span>Prefill with</span>
+                                                        <input type="text" class="form-control form-control-sm"
+                                                               placeholder="Search a record…"
+                                                               t-att-value="contextRecordDisplay(row_index, row)"
+                                                               t-on-input="(ev) => this.onContextRecordSearchInput(row_index, ev)"/>
+                                                        <div t-if="getContextRecordHits(row_index).length"
+                                                             class="list-group mb-1 shadow-sm">
+                                                            <button type="button" class="list-group-item list-group-item-action py-1"
+                                                                    t-foreach="getContextRecordHits(row_index)"
+                                                                    t-as="hit" t-key="hit.id"
+                                                                    t-on-mousedown.prevent="() => this.pickContextRecord(row_index, hit)">
+                                                                <t t-esc="hit.name"/>
+                                                            </button>
+                                                        </div>
+                                                    </label>
+                                                    <label class="o_ds_field mb-0" t-else="">
+                                                        <span>Prefill with</span>
+                                                        <input type="text" class="form-control form-control-sm"
+                                                               placeholder="Value shown on the new form"
+                                                               t-att-value="row.fixedValue"
+                                                               t-on-change="(ev) => this.onContextFixedInput(row_index, ev)"/>
+                                                    </label>
+                                                </t>
+
+                                                <t t-elif="contextRowPurpose(row) === 'group_setting'">
+                                                    <label class="o_ds_field mb-0">
+                                                        <span>Field name</span>
+                                                        <select t-if="contextFieldOptions().length"
+                                                                class="form-select form-select-sm"
+                                                                t-on-change="(ev) => this.onContextGroupSettingName(row_index, ev)">
+                                                            <option value="">Choose a field…</option>
+                                                            <t t-foreach="contextFieldOptions()" t-as="fld" t-key="fld.name">
+                                                                <option t-att-value="fld.name"
+                                                                        t-att-selected="formDefaultShortName(row) === fld.name"
+                                                                        t-esc="fld.string"/>
+                                                            </t>
+                                                            <option t-if="formDefaultShortName(row) and !isKnownFieldName(formDefaultShortName(row))"
+                                                                    t-att-value="formDefaultShortName(row)"
+                                                                    selected="selected"
+                                                                    t-esc="formDefaultShortName(row)"/>
+                                                        </select>
+                                                        <input t-else="" type="text" class="form-control form-control-sm"
+                                                               placeholder="e.g. type"
+                                                               t-att-value="formDefaultShortName(row)"
+                                                               t-on-change="(ev) => this.onContextGroupSettingName(row_index, ev)"/>
+                                                    </label>
+                                                    <p class="form-text mb-0">
+                                                        First matching role wins. Everyone else gets the fallback.
                                                     </p>
+                                                    <t t-set="groupFieldMeta" t-value="contextFieldFor(row)"/>
                                                     <t t-foreach="row.groupRules" t-as="rule" t-key="rule_index">
-                                                        <div class="o_ds_context_rule mb-2 p-2 rounded">
+                                                        <div class="o_ds_context_rule">
                                                             <div class="d-flex justify-content-between align-items-center mb-1">
-                                                                <span class="small fw-bold">Group rule <t t-esc="rule_index + 1"/></span>
+                                                                <span class="small fw-bold">If the user has this role</span>
                                                                 <button type="button" class="btn btn-link btn-sm text-danger p-0"
                                                                         t-on-click="() => this.removeContextGroupRule(row_index, rule_index)">
                                                                     Remove
                                                                 </button>
                                                             </div>
                                                             <input type="text" class="form-control form-control-sm mb-1"
-                                                                   placeholder="Search user group…"
+                                                                   placeholder="Search role / group…"
                                                                    t-att-value="rule.groupLabel or rule.groupXmlid"
                                                                    t-on-input="(ev) => this.onContextGroupSearchInput(row_index, rule_index, ev)"/>
                                                             <div t-if="getContextGroupHits(row_index, rule_index).length"
@@ -1503,27 +1793,88 @@
                                                                     <t t-esc="hit.name"/>
                                                                 </button>
                                                             </div>
-                                                            <input type="text" class="form-control form-control-sm"
-                                                                   placeholder="Value when in that group"
-                                                                   t-att-value="rule.value"
-                                                                   t-on-change="(ev) => this.onContextRuleValueInput(row_index, rule_index, ev)"/>
+                                                            <label class="o_ds_field mb-0" t-if="groupFieldMeta and groupFieldMeta.ttype === 'boolean'">
+                                                                <span>Use this value</span>
+                                                                <select class="form-select form-select-sm"
+                                                                        t-on-change="(ev) => this.onContextRuleValueInput(row_index, rule_index, ev)">
+                                                                    <option value="true" t-att-selected="String(rule.value) === 'true'">Yes</option>
+                                                                    <option value="false" t-att-selected="String(rule.value) !== 'true'">No</option>
+                                                                </select>
+                                                            </label>
+                                                            <label class="o_ds_field mb-0" t-elif="groupFieldMeta and groupFieldMeta.ttype === 'selection'">
+                                                                <span>Use this value</span>
+                                                                <select class="form-select form-select-sm"
+                                                                        t-on-change="(ev) => this.onContextRuleValueInput(row_index, rule_index, ev)">
+                                                                    <option value="">Choose a value…</option>
+                                                                    <t t-foreach="groupFieldMeta.selection" t-as="opt" t-key="opt[0]">
+                                                                        <option t-att-value="opt[0]"
+                                                                                t-att-selected="String(rule.value) === opt[0]"
+                                                                                t-esc="opt[1]"/>
+                                                                    </t>
+                                                                </select>
+                                                            </label>
+                                                            <label class="o_ds_field mb-0" t-else="">
+                                                                <span>Use this value</span>
+                                                                <input type="text" class="form-control form-control-sm"
+                                                                       placeholder="e.g. lead"
+                                                                       t-att-value="rule.value"
+                                                                       t-on-change="(ev) => this.onContextRuleValueInput(row_index, rule_index, ev)"/>
+                                                            </label>
                                                         </div>
                                                     </t>
-                                                    <button type="button" class="btn btn-link btn-sm px-0 mb-2"
+                                                    <button type="button" class="btn btn-link btn-sm px-0"
                                                             t-on-click="() => this.addContextGroupRule(row_index)">
-                                                        Add another group rule
+                                                        Add another role
                                                     </button>
-                                                    <input type="text" class="form-control form-control-sm"
-                                                           placeholder="Otherwise use"
-                                                           t-att-value="row.elseValue"
-                                                           t-on-change="(ev) => this.onContextElseValueInput(row_index, ev)"/>
+                                                    <label class="o_ds_field mb-0" t-if="groupFieldMeta and groupFieldMeta.ttype === 'boolean'">
+                                                        <span>Otherwise use</span>
+                                                        <select class="form-select form-select-sm"
+                                                                t-on-change="(ev) => this.onContextElseValueInput(row_index, ev)">
+                                                            <option value="true" t-att-selected="String(row.elseValue) === 'true'">Yes</option>
+                                                            <option value="false" t-att-selected="String(row.elseValue) !== 'true'">No</option>
+                                                        </select>
+                                                    </label>
+                                                    <label class="o_ds_field mb-0" t-elif="groupFieldMeta and groupFieldMeta.ttype === 'selection'">
+                                                        <span>Otherwise use</span>
+                                                        <select class="form-select form-select-sm"
+                                                                t-on-change="(ev) => this.onContextElseValueInput(row_index, ev)">
+                                                            <option value="">Choose a value…</option>
+                                                            <t t-foreach="groupFieldMeta.selection" t-as="opt" t-key="opt[0]">
+                                                                <option t-att-value="opt[0]"
+                                                                        t-att-selected="String(row.elseValue) === opt[0]"
+                                                                        t-esc="opt[1]"/>
+                                                            </t>
+                                                        </select>
+                                                    </label>
+                                                    <label class="o_ds_field mb-0" t-else="">
+                                                        <span>Otherwise use</span>
+                                                        <input type="text" class="form-control form-control-sm"
+                                                               placeholder="e.g. opportunity"
+                                                               t-att-value="row.elseValue"
+                                                               t-on-change="(ev) => this.onContextElseValueInput(row_index, ev)"/>
+                                                    </label>
+                                                </t>
+
+                                                <t t-else="">
+                                                    <p class="form-text mb-0">
+                                                        Custom setting from an older config. Edit carefully or remove and
+                                                        re-add with a button above.
+                                                    </p>
+                                                    <label class="o_ds_field mb-0">
+                                                        <span>Name</span>
+                                                        <input type="text" class="form-control form-control-sm"
+                                                               t-att-value="row.key"
+                                                               t-on-change="(ev) => this.onContextKeyInput(row_index, ev)"/>
+                                                    </label>
+                                                    <label class="o_ds_field mb-0">
+                                                        <span>Value</span>
+                                                        <input type="text" class="form-control form-control-sm"
+                                                               t-att-value="row.fixedValue"
+                                                               t-on-change="(ev) => this.onContextFixedInput(row_index, ev)"/>
+                                                    </label>
                                                 </t>
                                             </div>
                                         </t>
-                                        <button type="button" class="btn btn-link btn-sm px-0"
-                                                t-on-click="() => this.addContextRow()">
-                                            Add context key
-                                        </button>
                                     </div>
                                 </section>
                             </div>
@@ -1594,7 +1945,7 @@
                                             </div>
                                         </div>
                                         <button type="button" class="btn btn-sm btn-primary flex-shrink-0"
-                                                t-on-click="addItem" t-att-disabled="state.saving" title="Add header line">
+                                                t-on-click="() => this.addItem()" t-att-disabled="state.saving" title="Add header line">
                                             <i class="fa fa-plus"/>
                                             <span>Add</span>
                                         </button>
@@ -1739,7 +2090,7 @@
                                                            t-on-input="(ev) => this.onEditorInput('label', ev)"/>
                                                 </label>
                                             </div>
-                                            <div class="col-md-6" t-if="state.zone === 'kpis' or state.zone === 'shortcuts'">
+                                            <div class="col-md-6" t-if="slotEditorHasFigureStep">
                                                 <label class="o_ds_field">
                                                     <span>Plural Label</span>
                                                     <input type="text" class="form-control" t-att-value="state.editor.label_plural"
@@ -1805,8 +2156,8 @@
                                     </div>
                                 </section>
 
-                                <!-- 2. Figure (KPIs / Shortcuts) -->
-                                <t t-if="state.zone === 'kpis' or state.zone === 'shortcuts'">
+                                <!-- 2. Figure (KPIs / Totals / Shortcuts) — Shows picker is KPI-only -->
+                                <t t-if="slotEditorHasFigureStep">
                                     <section class="o_ds_slot_section">
                                         <header class="o_ds_slot_section_head">
                                             <span class="o_ds_slot_step">2</span>
@@ -1816,7 +2167,7 @@
                                             </div>
                                         </header>
                                         <div class="o_ds_slot_section_body">
-                                            <label class="o_ds_field">
+                                            <label t-if="state.zone === 'kpis'" class="o_ds_field">
                                                 <span>Shows</span>
                                                 <select class="form-select"
                                                         t-att-disabled="!selectedSlotOwned"
@@ -1833,16 +2184,20 @@
                                                 </select>
                                                 <div class="form-text" t-esc="slotValueModeHelp"/>
                                             </label>
+                                            <p t-else="" class="form-text mb-3">
+                                                Always shows count and amount when each source is set.
+                                            </p>
 
                                             <div class="o_ds_slot_group">
-                                                <h4 class="o_ds_slot_group_title">Source records</h4>
+                                                <h4 class="o_ds_slot_group_title">Source Records</h4>
                                                 <p class="o_ds_slot_group_help">
                                                     Related model that is counted or totaled, and its link back to this card.
+                                                    Clear Source Model to read fields from this card instead.
                                                 </p>
                                                 <div class="row g-2">
                                                     <div class="col-md-6">
                                                         <label class="o_ds_field">
-                                                            <span>Count Model</span>
+                                                            <span>Source Model</span>
                                                             <div t-att-class="'o_ds_variant_picker' + (selectedSlotOwned ? '' : ' pe-none opacity-75')">
                                                                 <div class="d-flex gap-2 align-items-center mb-1">
                                                                     <div class="form-control form-control-sm bg-light flex-grow-1 o_ds_variant_picker_value"
@@ -1925,10 +2280,10 @@
                                                 </div>
                                             </div>
 
-                                            <div t-if="slotShowsAmount" class="o_ds_slot_group">
+                                            <div t-if="state.editor.compute_model and slotShowsAmount" class="o_ds_slot_group">
                                                 <h4 class="o_ds_slot_group_title">Amount</h4>
                                                 <p class="o_ds_slot_group_help">
-                                                    Only for Amount total / Count and amount. Field on the record model above.
+                                                    Field on the Source Model above (optional if you only need a count).
                                                 </p>
                                                 <div class="row g-2">
                                                     <div class="col-md-7">
@@ -1963,7 +2318,7 @@
                                                 </div>
                                             </div>
 
-                                            <div class="o_ds_slot_group">
+                                            <div t-if="state.editor.compute_model" class="o_ds_slot_group">
                                                 <h4 class="o_ds_slot_group_title">Filters</h4>
                                                 <p class="o_ds_slot_group_help">
                                                     Narrow the source records for
@@ -2022,47 +2377,37 @@
                                                     </div>
                                                 </div>
                                             </div>
-                                        </div>
-                                    </section>
-                                </t>
 
-                                <!-- 2. Host fields (Totals) -->
-                                <t t-if="state.zone === 'totals'">
-                                    <section class="o_ds_slot_section">
-                                        <header class="o_ds_slot_section_head">
-                                            <span class="o_ds_slot_step">2</span>
-                                            <div>
-                                                <h3 class="o_ds_slot_section_title">Host Fields</h3>
-                                                <p class="o_ds_slot_section_help" t-esc="slotHostFieldsHelp"/>
-                                            </div>
-                                        </header>
-                                        <div class="o_ds_slot_section_body">
-                                            <div class="row g-2">
-                                                <div class="col-md-6">
-                                                    <label class="o_ds_field">
-                                                        <span>Amount Field</span>
-                                                        <select class="form-select" t-att-disabled="!selectedSlotOwned"
-                                                                t-on-change="(ev) => this.onEditorInput('amount_field', ev)">
-                                                            <option value="">—</option>
-                                                            <t t-foreach="state.catalogs.hostFields.filter(f => ['monetary','float','integer'].includes(f.ttype))" t-as="f" t-key="'a'+f.name">
-                                                                <option t-att-value="f.name" t-att-selected="state.editor.amount_field === f.name"
-                                                                        t-esc="f.string"/>
-                                                            </t>
-                                                        </select>
-                                                    </label>
-                                                </div>
-                                                <div class="col-md-6">
-                                                    <label class="o_ds_field">
-                                                        <span>Count Field</span>
-                                                        <select class="form-select" t-att-disabled="!selectedSlotOwned"
-                                                                t-on-change="(ev) => this.onEditorInput('count_field', ev)">
-                                                            <option value="">—</option>
-                                                            <t t-foreach="state.catalogs.hostFields.filter(f => ['integer','float','monetary'].includes(f.ttype) or f.name === 'id')" t-as="f" t-key="'c'+f.name">
-                                                                <option t-att-value="f.name" t-att-selected="state.editor.count_field === f.name"
-                                                                        t-esc="f.string"/>
-                                                            </t>
-                                                        </select>
-                                                    </label>
+                                            <div t-if="!state.editor.compute_model" class="o_ds_slot_group">
+                                                <h4 class="o_ds_slot_group_title">Host Fields</h4>
+                                                <p class="o_ds_slot_group_help" t-esc="slotHostFieldsHelp"/>
+                                                <div class="row g-2">
+                                                    <div class="col-md-6">
+                                                        <label class="o_ds_field">
+                                                            <span>Count Field</span>
+                                                            <select class="form-select" t-att-disabled="!selectedSlotOwned"
+                                                                    t-on-change="(ev) => this.onEditorInput('count_field', ev)">
+                                                                <option value="">—</option>
+                                                                <t t-foreach="state.catalogs.hostFields.filter(f => ['integer','float','monetary'].includes(f.ttype) or f.name === 'id')" t-as="f" t-key="'c'+f.name">
+                                                                    <option t-att-value="f.name" t-att-selected="state.editor.count_field === f.name"
+                                                                            t-esc="f.string"/>
+                                                                </t>
+                                                            </select>
+                                                        </label>
+                                                    </div>
+                                                    <div class="col-md-6">
+                                                        <label class="o_ds_field">
+                                                            <span>Amount Field</span>
+                                                            <select class="form-select" t-att-disabled="!selectedSlotOwned"
+                                                                    t-on-change="(ev) => this.onEditorInput('amount_field', ev)">
+                                                                <option value="">—</option>
+                                                                <t t-foreach="state.catalogs.hostFields.filter(f => ['monetary','float','integer'].includes(f.ttype))" t-as="f" t-key="'a'+f.name">
+                                                                    <option t-att-value="f.name" t-att-selected="state.editor.amount_field === f.name"
+                                                                            t-esc="f.string"/>
+                                                                </t>
+                                                            </select>
+                                                        </label>
+                                                    </div>
                                                 </div>
                                             </div>
                                         </div>
@@ -2095,9 +2440,8 @@
                                            t-on-input="onActionQueryInput"
                                            t-on-focus="onActionQueryInput"
                                            placeholder="Search actions…"/>
-                                    <div class="d-flex justify-content-between align-items-center mt-1">
-                                        <small class="text-muted text-truncate" t-esc="state.actionScopeLabel"/>
-                                        <button type="button" class="btn btn-link btn-sm p-0 flex-shrink-0"
+                                    <div class="d-flex justify-content-end align-items-center mt-1">
+                                        <button type="button" class="btn btn-link btn-sm p-0"
                                                 t-on-click="toggleActionsShowAll">
                                             <t t-if="state.actionsShowAll">Show scoped only</t>
                                             <t t-else="">Show all models</t>
@@ -2132,62 +2476,213 @@
                                     </label>
                                 </details>
                                 <div class="o_ds_slot_group o_ds_action_defaults">
-                                    <h4 class="o_ds_slot_group_title">Action Defaults</h4>
+                                    <h4 class="o_ds_slot_group_title">When Opened</h4>
                                     <p class="o_ds_slot_group_help">
-                                        Values passed when this action opens. Use fixed values,
-                                        this card’s id, or group rules (first matching group wins).
+                                        Optional. What should happen when the user opens this action.
+                                        Most items need nothing here.
+                                    </p>
+                                    <div class="o_ds_context_presets">
+                                        <div class="o_ds_context_presets_label">Add a setting</div>
+                                        <div class="o_ds_context_preset_chips">
+                                            <t t-foreach="CONTEXT_PRESETS" t-as="preset" t-key="preset.id">
+                                                <button type="button"
+                                                        class="btn btn-sm btn-outline-secondary"
+                                                        t-att-title="preset.help"
+                                                        t-att-disabled="!selectedSlotOwned"
+                                                        t-on-click="() => this.addContextPreset(preset.id)">
+                                                    <t t-esc="preset.label"/>
+                                                </button>
+                                            </t>
+                                        </div>
+                                    </div>
+                                    <p t-if="!state.editor.contextRows.length"
+                                       class="form-text mb-0">
+                                        Nothing configured — the action opens as usual.
                                     </p>
                                     <t t-foreach="state.editor.contextRows" t-as="row" t-key="row_index">
-                                        <div class="o_ds_context_row border rounded p-2 mb-2">
-                                            <div class="d-flex gap-2 mb-1 align-items-start">
-                                                <input type="text" class="form-control form-control-sm"
-                                                       placeholder="Key (e.g. default_type)"
-                                                       t-att-value="row.key"
-                                                       t-on-change="(ev) => this.onContextKeyInput(row_index, ev)"/>
-                                                <select class="form-select form-select-sm"
-                                                        t-on-change="(ev) => this.onContextTypeChange(row_index, ev)">
-                                                    <t t-foreach="CONTEXT_VALUE_TYPES" t-as="vt" t-key="vt.value">
-                                                        <option t-att-value="vt.value"
-                                                                t-att-selected="row.valueType === vt.value"
-                                                                t-esc="vt.label"/>
-                                                    </t>
-                                                </select>
-                                                <button type="button" class="btn btn-link text-danger p-0"
+                                        <div class="o_ds_context_row">
+                                            <div class="o_ds_context_row_head">
+                                                <div class="o_ds_context_row_title flex-grow-1"
+                                                     t-esc="contextRowTitle(row)"/>
+                                                <button t-if="selectedSlotOwned"
+                                                        type="button" class="btn btn-link text-danger p-0 o_ds_context_row_remove"
                                                         title="Remove"
                                                         t-on-click="() => this.removeContextRow(row_index)">
                                                     <i class="fa fa-trash-o"/>
                                                 </button>
                                             </div>
-                                            <t t-if="row.valueType === 'fixed'">
-                                                <input type="text" class="form-control form-control-sm"
-                                                       placeholder="Value"
-                                                       t-att-value="row.fixedValue"
-                                                       t-on-change="(ev) => this.onContextFixedInput(row_index, ev)"/>
-                                            </t>
-                                            <t t-elif="row.valueType === 'record_id'">
-                                                <label class="form-check mb-0">
-                                                    <input type="checkbox" class="form-check-input"
+
+                                            <t t-if="contextRowPurpose(row) === 'card_record'">
+                                                <label class="o_ds_field mb-0">
+                                                    <span>Use this card</span>
+                                                    <select class="form-select form-select-sm"
+                                                            t-att-disabled="!selectedSlotOwned"
+                                                            t-on-change="(ev) => this.onContextCardPassTarget(row_index, ev)">
+                                                        <t t-foreach="CARD_PASS_TARGETS" t-as="target" t-key="target.key">
+                                                            <option t-att-value="target.key"
+                                                                    t-att-selected="row.key === target.key"
+                                                                    t-esc="target.label"/>
+                                                        </t>
+                                                        <option t-if="!isKnownCardPassTarget(row.key)"
+                                                                t-att-value="row.key"
+                                                                selected="selected"
+                                                                t-esc="row.key"/>
+                                                    </select>
+                                                </label>
+                                                <label class="o_ds_check mb-0">
+                                                    <input type="checkbox"
                                                            t-att-checked="row.asList"
+                                                           t-att-disabled="!selectedSlotOwned"
                                                            t-on-change="(ev) => this.onContextAsListChange(row_index, ev)"/>
-                                                    <span class="form-check-label">Pass as a list</span>
+                                                    <span>Allow selecting several records</span>
                                                 </label>
                                             </t>
-                                            <t t-else="">
-                                                <p class="text-muted small mb-2">
-                                                    Rules run top to bottom. First matching group wins.
+
+                                            <t t-elif="contextRowPurpose(row) === 'search_filter'">
+                                                <label class="o_ds_field mb-0">
+                                                    <span>Filter name</span>
+                                                    <select t-if="contextFilterOptions().length"
+                                                            class="form-select form-select-sm"
+                                                            t-att-disabled="!selectedSlotOwned"
+                                                            t-on-change="(ev) => this.onContextSearchFilterName(row_index, ev)">
+                                                        <option value="">Choose a filter…</option>
+                                                        <t t-foreach="contextFilterOptions()" t-as="filt" t-key="filt.name">
+                                                            <option t-att-value="filt.name"
+                                                                    t-att-selected="searchFilterShortName(row) === filt.name"
+                                                                    t-esc="filt.string"/>
+                                                        </t>
+                                                        <option t-if="searchFilterShortName(row) and !isKnownFilterName(searchFilterShortName(row))"
+                                                                t-att-value="searchFilterShortName(row)"
+                                                                selected="selected"
+                                                                t-esc="searchFilterShortName(row)"/>
+                                                    </select>
+                                                    <input t-else="" type="text" class="form-control form-control-sm"
+                                                           placeholder="e.g. my_pipeline, assigned_to_me"
+                                                           t-att-value="searchFilterShortName(row)"
+                                                           t-att-readonly="!selectedSlotOwned"
+                                                           t-on-change="(ev) => this.onContextSearchFilterName(row_index, ev)"/>
+                                                    <span class="form-text">
+                                                        Name of the filter on the list that should start on.
+                                                    </span>
+                                                </label>
+                                            </t>
+
+                                            <t t-elif="contextRowPurpose(row) === 'form_default'">
+                                                <label class="o_ds_field mb-0">
+                                                    <span>Form field</span>
+                                                    <select t-if="contextFieldOptions().length"
+                                                            class="form-select form-select-sm"
+                                                            t-att-disabled="!selectedSlotOwned"
+                                                            t-on-change="(ev) => this.onContextFormFieldName(row_index, ev)">
+                                                        <option value="">Choose a field…</option>
+                                                        <t t-foreach="contextFieldOptions()" t-as="fld" t-key="fld.name">
+                                                            <option t-att-value="fld.name"
+                                                                    t-att-selected="formDefaultShortName(row) === fld.name"
+                                                                    t-esc="fld.string"/>
+                                                        </t>
+                                                        <option t-if="formDefaultShortName(row) and !isKnownFieldName(formDefaultShortName(row))"
+                                                                t-att-value="formDefaultShortName(row)"
+                                                                selected="selected"
+                                                                t-esc="formDefaultShortName(row)"/>
+                                                    </select>
+                                                    <input t-else="" type="text" class="form-control form-control-sm"
+                                                           placeholder="e.g. partner_id, type"
+                                                           t-att-value="formDefaultShortName(row)"
+                                                           t-att-readonly="!selectedSlotOwned"
+                                                           t-on-change="(ev) => this.onContextFormFieldName(row_index, ev)"/>
+                                                </label>
+                                                <t t-set="fieldMeta" t-value="contextFieldFor(row)"/>
+                                                <label class="o_ds_field mb-0" t-if="fieldMeta and fieldMeta.ttype === 'boolean'">
+                                                    <span>Prefill with</span>
+                                                    <select class="form-select form-select-sm"
+                                                            t-att-disabled="!selectedSlotOwned"
+                                                            t-on-change="(ev) => this.onContextFixedInput(row_index, ev)">
+                                                        <option value="true" t-att-selected="String(row.fixedValue) === 'true'">Yes</option>
+                                                        <option value="false" t-att-selected="String(row.fixedValue) !== 'true'">No</option>
+                                                    </select>
+                                                </label>
+                                                <label class="o_ds_field mb-0" t-elif="fieldMeta and fieldMeta.ttype === 'selection'">
+                                                    <span>Prefill with</span>
+                                                    <select class="form-select form-select-sm"
+                                                            t-att-disabled="!selectedSlotOwned"
+                                                            t-on-change="(ev) => this.onContextFixedInput(row_index, ev)">
+                                                        <option value="">Choose a value…</option>
+                                                        <t t-foreach="fieldMeta.selection" t-as="opt" t-key="opt[0]">
+                                                            <option t-att-value="opt[0]"
+                                                                    t-att-selected="String(row.fixedValue) === opt[0]"
+                                                                    t-esc="opt[1]"/>
+                                                        </t>
+                                                    </select>
+                                                </label>
+                                                <label class="o_ds_field mb-0" t-elif="fieldMeta and ['many2one', 'many2many'].includes(fieldMeta.ttype)">
+                                                    <span>Prefill with</span>
+                                                    <input type="text" class="form-control form-control-sm"
+                                                           placeholder="Search a record…"
+                                                           t-att-value="contextRecordDisplay(row_index, row)"
+                                                           t-att-readonly="!selectedSlotOwned"
+                                                           t-on-input="(ev) => this.onContextRecordSearchInput(row_index, ev)"/>
+                                                    <div t-if="getContextRecordHits(row_index).length"
+                                                         class="list-group mb-1 shadow-sm">
+                                                        <button type="button" class="list-group-item list-group-item-action py-1"
+                                                                t-foreach="getContextRecordHits(row_index)"
+                                                                t-as="hit" t-key="hit.id"
+                                                                t-on-mousedown.prevent="() => this.pickContextRecord(row_index, hit)">
+                                                            <t t-esc="hit.name"/>
+                                                        </button>
+                                                    </div>
+                                                </label>
+                                                <label class="o_ds_field mb-0" t-else="">
+                                                    <span>Prefill with</span>
+                                                    <input type="text" class="form-control form-control-sm"
+                                                           placeholder="Value shown on the new form"
+                                                           t-att-value="row.fixedValue"
+                                                           t-att-readonly="!selectedSlotOwned"
+                                                           t-on-change="(ev) => this.onContextFixedInput(row_index, ev)"/>
+                                                </label>
+                                            </t>
+
+                                            <t t-elif="contextRowPurpose(row) === 'group_setting'">
+                                                <label class="o_ds_field mb-0">
+                                                    <span>Field name</span>
+                                                    <select t-if="contextFieldOptions().length"
+                                                            class="form-select form-select-sm"
+                                                            t-att-disabled="!selectedSlotOwned"
+                                                            t-on-change="(ev) => this.onContextGroupSettingName(row_index, ev)">
+                                                        <option value="">Choose a field…</option>
+                                                        <t t-foreach="contextFieldOptions()" t-as="fld" t-key="fld.name">
+                                                            <option t-att-value="fld.name"
+                                                                    t-att-selected="formDefaultShortName(row) === fld.name"
+                                                                    t-esc="fld.string"/>
+                                                        </t>
+                                                        <option t-if="formDefaultShortName(row) and !isKnownFieldName(formDefaultShortName(row))"
+                                                                t-att-value="formDefaultShortName(row)"
+                                                                selected="selected"
+                                                                t-esc="formDefaultShortName(row)"/>
+                                                    </select>
+                                                    <input t-else="" type="text" class="form-control form-control-sm"
+                                                           placeholder="e.g. type"
+                                                           t-att-value="formDefaultShortName(row)"
+                                                           t-att-readonly="!selectedSlotOwned"
+                                                           t-on-change="(ev) => this.onContextGroupSettingName(row_index, ev)"/>
+                                                </label>
+                                                <p class="form-text mb-0">
+                                                    First matching role wins. Everyone else gets the fallback.
                                                 </p>
+                                                <t t-set="groupFieldMeta" t-value="contextFieldFor(row)"/>
                                                 <t t-foreach="row.groupRules" t-as="rule" t-key="rule_index">
-                                                    <div class="o_ds_context_rule mb-2 p-2 rounded">
+                                                    <div class="o_ds_context_rule">
                                                         <div class="d-flex justify-content-between align-items-center mb-1">
-                                                            <span class="small fw-bold">Group rule <t t-esc="rule_index + 1"/></span>
-                                                            <button type="button" class="btn btn-link btn-sm text-danger p-0"
+                                                            <span class="small fw-bold">If the user has this role</span>
+                                                            <button t-if="selectedSlotOwned"
+                                                                    type="button" class="btn btn-link btn-sm text-danger p-0"
                                                                     t-on-click="() => this.removeContextGroupRule(row_index, rule_index)">
                                                                 Remove
                                                             </button>
                                                         </div>
                                                         <input type="text" class="form-control form-control-sm mb-1"
-                                                               placeholder="Search user group…"
+                                                               placeholder="Search role / group…"
                                                                t-att-value="rule.groupLabel or rule.groupXmlid"
+                                                               t-att-readonly="!selectedSlotOwned"
                                                                t-on-input="(ev) => this.onContextGroupSearchInput(row_index, rule_index, ev)"/>
                                                         <div t-if="getContextGroupHits(row_index, rule_index).length"
                                                              class="list-group mb-1 shadow-sm">
@@ -2198,27 +2693,97 @@
                                                                 <t t-esc="hit.name"/>
                                                             </button>
                                                         </div>
-                                                        <input type="text" class="form-control form-control-sm"
-                                                               placeholder="Value when in that group"
-                                                               t-att-value="rule.value"
-                                                               t-on-change="(ev) => this.onContextRuleValueInput(row_index, rule_index, ev)"/>
+                                                        <label class="o_ds_field mb-0" t-if="groupFieldMeta and groupFieldMeta.ttype === 'boolean'">
+                                                            <span>Use this value</span>
+                                                            <select class="form-select form-select-sm"
+                                                                    t-att-disabled="!selectedSlotOwned"
+                                                                    t-on-change="(ev) => this.onContextRuleValueInput(row_index, rule_index, ev)">
+                                                                <option value="true" t-att-selected="String(rule.value) === 'true'">Yes</option>
+                                                                <option value="false" t-att-selected="String(rule.value) !== 'true'">No</option>
+                                                            </select>
+                                                        </label>
+                                                        <label class="o_ds_field mb-0" t-elif="groupFieldMeta and groupFieldMeta.ttype === 'selection'">
+                                                            <span>Use this value</span>
+                                                            <select class="form-select form-select-sm"
+                                                                    t-att-disabled="!selectedSlotOwned"
+                                                                    t-on-change="(ev) => this.onContextRuleValueInput(row_index, rule_index, ev)">
+                                                                <option value="">Choose a value…</option>
+                                                                <t t-foreach="groupFieldMeta.selection" t-as="opt" t-key="opt[0]">
+                                                                    <option t-att-value="opt[0]"
+                                                                            t-att-selected="String(rule.value) === opt[0]"
+                                                                            t-esc="opt[1]"/>
+                                                                </t>
+                                                            </select>
+                                                        </label>
+                                                        <label class="o_ds_field mb-0" t-else="">
+                                                            <span>Use this value</span>
+                                                            <input type="text" class="form-control form-control-sm"
+                                                                   placeholder="e.g. lead"
+                                                                   t-att-value="rule.value"
+                                                                   t-att-readonly="!selectedSlotOwned"
+                                                                   t-on-change="(ev) => this.onContextRuleValueInput(row_index, rule_index, ev)"/>
+                                                        </label>
                                                     </div>
                                                 </t>
-                                                <button type="button" class="btn btn-link btn-sm px-0 mb-2"
+                                                <button t-if="selectedSlotOwned"
+                                                        type="button" class="btn btn-link btn-sm px-0"
                                                         t-on-click="() => this.addContextGroupRule(row_index)">
-                                                    Add another group rule
+                                                    Add another role
                                                 </button>
-                                                <input type="text" class="form-control form-control-sm"
-                                                       placeholder="Otherwise use"
-                                                       t-att-value="row.elseValue"
-                                                       t-on-change="(ev) => this.onContextElseValueInput(row_index, ev)"/>
+                                                <label class="o_ds_field mb-0" t-if="groupFieldMeta and groupFieldMeta.ttype === 'boolean'">
+                                                    <span>Otherwise use</span>
+                                                    <select class="form-select form-select-sm"
+                                                            t-att-disabled="!selectedSlotOwned"
+                                                            t-on-change="(ev) => this.onContextElseValueInput(row_index, ev)">
+                                                        <option value="true" t-att-selected="String(row.elseValue) === 'true'">Yes</option>
+                                                        <option value="false" t-att-selected="String(row.elseValue) !== 'true'">No</option>
+                                                    </select>
+                                                </label>
+                                                <label class="o_ds_field mb-0" t-elif="groupFieldMeta and groupFieldMeta.ttype === 'selection'">
+                                                    <span>Otherwise use</span>
+                                                    <select class="form-select form-select-sm"
+                                                            t-att-disabled="!selectedSlotOwned"
+                                                            t-on-change="(ev) => this.onContextElseValueInput(row_index, ev)">
+                                                        <option value="">Choose a value…</option>
+                                                        <t t-foreach="groupFieldMeta.selection" t-as="opt" t-key="opt[0]">
+                                                            <option t-att-value="opt[0]"
+                                                                    t-att-selected="String(row.elseValue) === opt[0]"
+                                                                    t-esc="opt[1]"/>
+                                                        </t>
+                                                    </select>
+                                                </label>
+                                                <label class="o_ds_field mb-0" t-else="">
+                                                    <span>Otherwise use</span>
+                                                    <input type="text" class="form-control form-control-sm"
+                                                           placeholder="e.g. opportunity"
+                                                           t-att-value="row.elseValue"
+                                                           t-att-readonly="!selectedSlotOwned"
+                                                           t-on-change="(ev) => this.onContextElseValueInput(row_index, ev)"/>
+                                                </label>
+                                            </t>
+
+                                            <t t-else="">
+                                                <p class="form-text mb-0">
+                                                    Custom setting from an older config. Edit carefully or remove and
+                                                    re-add with a button above.
+                                                </p>
+                                                <label class="o_ds_field mb-0">
+                                                    <span>Name</span>
+                                                    <input type="text" class="form-control form-control-sm"
+                                                           t-att-value="row.key"
+                                                           t-att-readonly="!selectedSlotOwned"
+                                                           t-on-change="(ev) => this.onContextKeyInput(row_index, ev)"/>
+                                                </label>
+                                                <label class="o_ds_field mb-0">
+                                                    <span>Value</span>
+                                                    <input type="text" class="form-control form-control-sm"
+                                                           t-att-value="row.fixedValue"
+                                                           t-att-readonly="!selectedSlotOwned"
+                                                           t-on-change="(ev) => this.onContextFixedInput(row_index, ev)"/>
+                                                </label>
                                             </t>
                                         </div>
                                     </t>
-                                    <button type="button" class="btn btn-link btn-sm px-0"
-                                            t-on-click="() => this.addContextRow()">
-                                        Add context key
-                                    </button>
                                 </div>
                                     </div>
                                 </section>

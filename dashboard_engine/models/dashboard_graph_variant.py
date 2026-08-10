@@ -4,10 +4,18 @@
 from odoo import _, api, fields, models
 from odoo.exceptions import UserError, ValidationError
 
+from ..tools.many2many_utils import compute_many2many_order
 from ..tools.relation_path import (
     validate_path as validate_relation_path,
     validate_path_chain as validate_relation_path_chain,
 )
+
+VARIANT_AGGREGATORS = [
+    ("sum", "Total"),
+    ("avg", "Average"),
+    ("max", "Maximum"),
+    ("min", "Minimum"),
+]
 
 
 class DashboardBlueprintGraphVariant(models.Model):
@@ -49,6 +57,9 @@ class DashboardBlueprintGraphVariant(models.Model):
         compute="_compute_primary_action_id",
         inverse="_inverse_primary_action_id",
         readonly=False,
+        domain=(
+            "['|', ('res_model', '=', graph_model), ('res_model', '=', False)]"
+        ),
     )
     primary_action_context = fields.Char(default="{}")
     is_default = fields.Boolean(
@@ -59,6 +70,73 @@ class DashboardBlueprintGraphVariant(models.Model):
     is_available = fields.Boolean(
         compute="_compute_is_available",
         help="True when the model is installed and the link + action are usable.",
+    )
+    # Optional defaults for this chart model (empty = inherit blueprint defaults).
+    graph_groupby_allowed_field_ids = fields.Many2many(
+        "ir.model.fields",
+        compute="_compute_graph_groupby_allowed_field_ids",
+    )
+    default_groupby_ids = fields.Many2many(
+        "ir.model.fields",
+        "dashboard_graph_variant_groupby_rel",
+        "variant_id",
+        "field_id",
+        string="Default Group By",
+        domain="[('id', 'in', graph_groupby_allowed_field_ids)]",
+    )
+    default_ordered_groupby_ids = fields.Char(
+        string="Default Group By Order",
+        help="Comma-separated ir.model.fields ids preserving tag order.",
+    )
+    default_measure_field_id = fields.Many2one(
+        "ir.model.fields",
+        string="Default Measure",
+        ondelete="set null",
+        domain=(
+            "[('model_id', '=', graph_model_id), "
+            "('ttype', 'in', ['integer', 'float', 'monetary']), "
+            "('store', '=', True)]"
+        ),
+    )
+    default_measure_aggregator = fields.Selection(
+        VARIANT_AGGREGATORS,
+        string="Default Measured As",
+    )
+    default_scope_ids = fields.Many2many(
+        "dashboard.blueprint.scope",
+        "dashboard_graph_variant_scope_rel",
+        "variant_id",
+        "scope_id",
+        string="Default Data to Include",
+        domain="[('id', 'in', applicable_include_scope_ids)]",
+        help="Include scopes whose domain matches this chart model. "
+        "Ticked ones start on in the live gear for this option.",
+    )
+    scope_warning = fields.Char(
+        string="Scope Warning",
+        translate=True,
+        help="Message shown in the live settings popup when all 'Include' "
+        "scopes for this chart model are unticked. Leave empty for no warning.",
+    )
+    applicable_include_scope_ids = fields.Many2many(
+        "dashboard.blueprint.scope",
+        compute="_compute_applicable_include_scope_ids",
+        help="Include scopes whose domain fields exist on this chart model.",
+    )
+    date_filter_ids = fields.One2many(
+        "dashboard.blueprint.graph.variant.date.filter",
+        "variant_id",
+        string="Date Filters",
+        copy=True,
+        help="Date fields offered in the live gear for this chart model "
+        "(e.g. Creation Date, Closed Date). Each option has its own list "
+        "since date field names are not portable across models.",
+    )
+    graph_domain = fields.Char(
+        string="Custom Filter",
+        default="[]",
+        help="Optional domain on this chart model (Python list). "
+        "Not shared across Chart Model Options — field names differ by model.",
     )
 
     @api.model_create_multi
@@ -77,6 +155,14 @@ class DashboardBlueprintGraphVariant(models.Model):
     def write(self, vals):
         vals = dict(vals)
         res = super().write(vals)
+        if "graph_model" in vals or "graph_model_id" in vals:
+            self._clear_stale_default_fields()
+        if "default_groupby_ids" in vals and "default_ordered_groupby_ids" not in vals:
+            for rec in self:
+                rec.default_ordered_groupby_ids = compute_many2many_order(
+                    rec.default_groupby_ids.ids,
+                    rec.default_ordered_groupby_ids,
+                )
         if self.env.context.get("skip_graph_variant_default"):
             return res
         if vals.get("is_default"):
@@ -90,6 +176,13 @@ class DashboardBlueprintGraphVariant(models.Model):
                 "primary_button_label",
                 "primary_action_xmlid",
                 "primary_action_context",
+                "default_groupby_ids",
+                "default_ordered_groupby_ids",
+                "default_measure_field_id",
+                "default_measure_aggregator",
+                "default_scope_ids",
+                "scope_warning",
+                "graph_domain",
             )
         ):
             for bp in self.filtered("is_default").mapped("blueprint_id"):
@@ -126,6 +219,184 @@ class DashboardBlueprintGraphVariant(models.Model):
     def _inverse_graph_model_id(self):
         for rec in self:
             rec.graph_model = rec.graph_model_id.model or False
+
+    @api.depends("graph_model", "graph_model_id")
+    def _compute_graph_groupby_allowed_field_ids(self):
+        Fields = self.env["ir.model.fields"]
+        for rec in self:
+            model = rec.graph_model or (
+                rec.graph_model_id.model if rec.graph_model_id else False
+            )
+            rec.graph_groupby_allowed_field_ids = (
+                Fields.dashboard_groupby_allowed_fields(model)
+            )
+
+    @api.depends(
+        "graph_model",
+        "blueprint_id.scope_ids",
+        "blueprint_id.scope_ids.mode",
+        "blueprint_id.scope_ids.domain",
+    )
+    def _compute_applicable_include_scope_ids(self):
+        for rec in self:
+            rec.applicable_include_scope_ids = rec.blueprint_id.scope_ids.filtered(
+                lambda s, m=rec.graph_model: s.mode == "include"
+                and s._domain_applies_to_model(m)
+            )
+
+    @api.onchange("default_groupby_ids")
+    def _onchange_default_groupby_ids(self):
+        for rec in self:
+            rec.default_ordered_groupby_ids = compute_many2many_order(
+                rec.default_groupby_ids.ids,
+                rec.default_ordered_groupby_ids,
+            )
+
+    def _clear_stale_default_fields(self):
+        """Drop Group By / Measure / Include defaults that do not fit the model."""
+        for rec in self:
+            model = rec.graph_model
+            if not model or model not in self.env:
+                continue
+            Model = self.env[model]
+            vals = {}
+            if (
+                rec.default_measure_field_id
+                and rec.default_measure_field_id.name not in Model._fields
+            ):
+                vals["default_measure_field_id"] = False
+                vals["default_measure_aggregator"] = False
+            stale_gb = rec.default_groupby_ids.filtered(lambda f: f.model != model)
+            if stale_gb:
+                keep = rec.default_groupby_ids - stale_gb
+                vals["default_groupby_ids"] = [(6, 0, keep.ids)]
+                vals["default_ordered_groupby_ids"] = (
+                    ",".join(str(i) for i in keep.ids) or False
+                )
+            bad_scopes = rec.default_scope_ids.filtered(
+                lambda s: not s._domain_applies_to_model(model)
+            )
+            if bad_scopes:
+                keep_scopes = rec.default_scope_ids - bad_scopes
+                vals["default_scope_ids"] = [(6, 0, keep_scopes.ids)]
+            if vals:
+                rec.with_context(skip_graph_variant_default=True).write(vals)
+            stale_dates = rec.date_filter_ids.filtered(
+                lambda d: d.field_name and d.field_name not in Model._fields
+            )
+            if stale_dates:
+                stale_dates.unlink()
+
+    def _ordered_default_groupby_fields(self):
+        """Default Group By tags in configured order."""
+        self.ensure_one()
+        if not self.default_groupby_ids:
+            return self.env["ir.model.fields"]
+        return self.env["ir.model.fields"].browse(
+            [
+                f.id
+                for f in self.blueprint_id._parse_ordered_field_ids(
+                    self.default_ordered_groupby_ids, self.default_groupby_ids
+                )
+            ]
+        )
+
+    def _suggested_option_defaults_vals(self):
+        """Pack-style Group By / Measure when an option row is still empty.
+
+        Used once by ``_ensure_option_graph_defaults`` so the gear can reseed
+        when the user switches Chart Model (e.g. Sales Orders on CRM Customers).
+        """
+        self.ensure_one()
+        specs = {
+            "sale.order": {
+                "groupby_names": ["x_date_order_month"],
+                "measure_name": "amount_untaxed",
+                "aggregator": "sum",
+            },
+            "sale.report": {
+                "groupby_names": ["x_date_month"],
+                "measure_name": "price_subtotal",
+                "aggregator": "sum",
+            },
+        }
+        spec = specs.get(self.graph_model)
+        if not spec or self.graph_model not in self.env:
+            return {}
+        Fields = self.env["ir.model.fields"]
+        Fields.ensure_date_period_fields(self.graph_model)
+        vals = {}
+        if not self.default_groupby_ids and spec.get("groupby_names"):
+            ordered = Fields.browse()
+            for name in spec["groupby_names"]:
+                field = Fields.search(
+                    [("model", "=", self.graph_model), ("name", "=", name)],
+                    limit=1,
+                )
+                if field:
+                    ordered |= field
+            if ordered:
+                vals["default_groupby_ids"] = [(6, 0, ordered.ids)]
+                vals["default_ordered_groupby_ids"] = ",".join(
+                    str(f.id) for f in ordered
+                )
+        if not self.default_measure_field_id and spec.get("measure_name"):
+            measure = Fields.search(
+                [
+                    ("model", "=", self.graph_model),
+                    ("name", "=", spec["measure_name"]),
+                    ("store", "=", True),
+                ],
+                limit=1,
+            )
+            if measure:
+                vals["default_measure_field_id"] = measure.id
+                vals["default_measure_aggregator"] = (
+                    spec.get("aggregator") or "sum"
+                )
+        return vals
+
+    def _pref_defaults_for_gear(self):
+        """Group By / Measure / Include to apply when this option is selected.
+
+        Uses the option row first; if Group By / Measure are still empty, uses
+        pack-style suggestions (same rules as ``_ensure_option_graph_defaults``)
+        without writing — safe for gear onchange.
+        """
+        self.ensure_one()
+        ordered = list(self._ordered_default_groupby_fields())
+        measure = self.default_measure_field_id
+        agg = (self.default_measure_aggregator or "sum") if measure else False
+        # Empty option Include = no include ticks (options-only UX).
+        include = self.default_scope_ids
+        if not ordered or not measure:
+            suggested = self._suggested_option_defaults_vals()
+            if not ordered and suggested.get("default_groupby_ids"):
+                ids = suggested["default_groupby_ids"][0][2]
+                ordered = list(self.env["ir.model.fields"].browse(ids))
+            if not measure and suggested.get("default_measure_field_id"):
+                measure = self.env["ir.model.fields"].browse(
+                    suggested["default_measure_field_id"]
+                )
+                agg = suggested.get("default_measure_aggregator") or "sum"
+        return ordered, measure, agg, include
+
+    def _groupby_all_specs(self):
+        """Ordered read_group specs from this variant's default Group By list."""
+        self.ensure_one()
+        return self.blueprint_id._groupby_specs_from_fields(
+            self._ordered_default_groupby_fields(),
+            period_hint="month",
+        )
+
+    def _measure_spec(self):
+        self.ensure_one()
+        if not self.default_measure_field_id:
+            return None
+        return "%s:%s" % (
+            self.default_measure_field_id.name,
+            self.default_measure_aggregator or "sum",
+        )
 
     @api.depends("primary_action_xmlid")
     def _compute_primary_action_id(self):
@@ -195,10 +466,27 @@ class DashboardBlueprintGraphVariant(models.Model):
 
     @api.model
     def name_search(self, name="", domain=None, operator="ilike", limit=100):
-        """Hide variants whose model/action is not usable on this database."""
+        """List usable Chart Model Options for the gear picker.
+
+        Hide unfinished options (missing link/action). If the typed label only
+        matches an unusable row, still return other valid options for the same
+        domain — otherwise the dropdown shows only an empty "Chart Model" box.
+        """
         rows = super().name_search(
             name=name, domain=domain, operator=operator, limit=None
         )
+        available = self._name_search_available_rows(rows, limit)
+        if available or not name:
+            return available
+        # Typed label matched only invalid options (or nothing usable) — show
+        # every valid option in the caller's domain so the picker is never blank.
+        fallback = super().name_search(
+            name="", domain=domain, operator="ilike", limit=None
+        )
+        return self._name_search_available_rows(fallback, limit)
+
+    @api.model
+    def _name_search_available_rows(self, rows, limit=100):
         available = []
         for variant_id, label in rows:
             variant = self.browse(variant_id)
@@ -263,7 +551,7 @@ class DashboardBlueprintGraphPicker(models.Model):
         self._sync_blueprint_from_default_variant()
 
     def _sync_blueprint_from_default_variant(self):
-        """Keep blueprint graph_model / primary fields = Default option."""
+        """Keep blueprint chart fields = Default Chart Model Option."""
         self.ensure_one()
         if self.env.context.get("skip_graph_variant_sync"):
             return
@@ -301,8 +589,197 @@ class DashboardBlueprintGraphPicker(models.Model):
         ctx = variant.primary_action_context or "{}"
         if ctx != (self.primary_action_context or "{}"):
             vals["primary_action_context"] = ctx
+        # Group By / Measure live on the option; mirror onto blueprint for packs
+        # and code paths that still read blueprint fields.
+        ordered = list(variant._ordered_default_groupby_fields())
+        bp_ordered = list(self._ordered_graph_groupby_fields())
+        if [f.id for f in ordered] != [f.id for f in bp_ordered]:
+            vals["graph_groupby_ids"] = [(6, 0, [f.id for f in ordered])]
+            vals["ordered_graph_groupby_ids"] = (
+                ",".join(str(f.id) for f in ordered) or False
+            )
+        measure = variant.default_measure_field_id
+        if (measure.id if measure else False) != (
+            self.graph_measure_field_id.id if self.graph_measure_field_id else False
+        ):
+            vals["graph_measure_field_id"] = measure.id if measure else False
+        agg = variant.default_measure_aggregator or False
+        if measure and agg != (self.graph_measure_aggregator or False):
+            vals["graph_measure_aggregator"] = agg
+        elif not measure and self.graph_measure_aggregator:
+            vals["graph_measure_aggregator"] = False
+        if not measure and (self.graph_measure or "") not in ("", "__count"):
+            vals["graph_measure"] = "__count"
+        # Translated Char: force a fresh read before mirroring.
+        variant.invalidate_recordset(["scope_warning"])
+        warn = (variant.scope_warning or "").strip() or False
+        bp_warn = (self.scope_warning or "").strip() or False
+        if warn != bp_warn:
+            vals["scope_warning"] = warn
+        v_domain = (variant.graph_domain or "[]").strip() or "[]"
+        bp_domain = (self.graph_domain or "[]").strip() or "[]"
+        if v_domain != bp_domain:
+            vals["graph_domain"] = v_domain
         if vals:
             self.with_context(skip_graph_variant_sync=True).write(vals)
+
+    def _ensure_default_graph_variant_row(self):
+        """Create one Chart Model Option from blueprint when none exist yet."""
+        self.ensure_one()
+        if self.graph_variant_ids or not self.graph_model:
+            return
+        xmlid = (self.primary_action_xmlid or "").strip()
+        if not xmlid:
+            Action = self.env["ir.actions.act_window"].sudo()
+            act = Action.search(
+                [("res_model", "=", self.graph_model)], order="id", limit=1
+            )
+            if act:
+                xmlid = act.get_external_id().get(act.id) or ""
+        if not xmlid:
+            return
+        self.env["dashboard.blueprint.graph.variant"].create(
+            {
+                "blueprint_id": self.id,
+                "sequence": 10,
+                "graph_model": self.graph_model,
+                "graph_data_field": self.graph_data_field or False,
+                "primary_button_label": self.primary_button_label
+                or _("Chart Model"),
+                "primary_action_xmlid": xmlid,
+                "primary_action_context": self.primary_action_context or "{}",
+                "is_default": True,
+                "scope_warning": self.scope_warning or False,
+                "graph_domain": (self.graph_domain or "[]").strip() or "[]",
+            }
+        )
+
+    def _seed_variant_date_filters_from_blueprint(self, variant):
+        """Copy blueprint Open/Closed date fields onto an empty option list.
+
+        Additive only — never overwrites builder-chosen date filters. Runtime
+        still uses blueprint period fields until the prefs migration (step 2).
+        """
+        self.ensure_one()
+        if not variant or variant.date_filter_ids:
+            return
+        model = variant.graph_model
+        if not model:
+            return
+        lines = []
+        seq = 10
+        seen = set()
+        for field in (self.period_field_id, self.closed_period_field_id):
+            if (
+                not field
+                or field.id in seen
+                or field.model != model
+                or field.ttype not in ("date", "datetime")
+            ):
+                continue
+            seen.add(field.id)
+            lines.append(
+                {
+                    "variant_id": variant.id,
+                    "sequence": seq,
+                    "label": field.field_description or field.name,
+                    "field_id": field.id,
+                }
+            )
+            seq += 10
+        if lines:
+            self.env["dashboard.blueprint.graph.variant.date.filter"].create(lines)
+
+    def _ensure_option_graph_defaults(self):
+        """Fill empty option Group By / Measure / Include from blueprint once.
+
+        Options-only UX: builders edit on the option row. Older packs still
+        store defaults on the blueprint — copy them onto matching options.
+        """
+        self.ensure_one()
+        for variant in self.graph_variant_ids:
+            vals = {}
+            same_model = variant.graph_model == (self.graph_model or "")
+            if not variant.default_groupby_ids and same_model and self.graph_groupby_ids:
+                ordered = [
+                    f
+                    for f in self._ordered_graph_groupby_fields()
+                    if f.model == variant.graph_model
+                ]
+                if ordered:
+                    vals["default_groupby_ids"] = [(6, 0, [f.id for f in ordered])]
+                    vals["default_ordered_groupby_ids"] = ",".join(
+                        str(f.id) for f in ordered
+                    )
+            if (
+                not variant.default_measure_field_id
+                and same_model
+                and self.graph_measure_field_id
+                and self.graph_measure_field_id.model == variant.graph_model
+            ):
+                vals["default_measure_field_id"] = self.graph_measure_field_id.id
+                vals["default_measure_aggregator"] = (
+                    self.graph_measure_aggregator or "sum"
+                )
+            if not variant.default_scope_ids:
+                applicable = self.scope_ids.filtered(
+                    lambda s, m=variant.graph_model: s.mode == "include"
+                    and s.default_on
+                    and s._domain_applies_to_model(m)
+                )
+                if applicable:
+                    vals["default_scope_ids"] = [(6, 0, applicable.ids)]
+            if same_model:
+                self._seed_variant_date_filters_from_blueprint(variant)
+            if same_model and (
+                not (variant.graph_domain or "").strip()
+                or (variant.graph_domain or "").strip() == "[]"
+            ):
+                bp_domain = (self.graph_domain or "").strip()
+                if bp_domain and bp_domain != "[]":
+                    vals["graph_domain"] = bp_domain
+            if not (variant.scope_warning or "").strip() and (
+                self.scope_warning or ""
+            ).strip():
+                vals["scope_warning"] = self.scope_warning
+            # Heal empty Link to Host so the gear picker can list the option.
+            if not (variant.graph_data_field or "").strip():
+                link = (self.graph_data_field or "").strip() or False
+                if link and variant.graph_model == (self.graph_model or ""):
+                    vals["graph_data_field"] = link
+                else:
+                    guessed = variant._default_link_to_host()
+                    if guessed:
+                        vals["graph_data_field"] = guessed
+            # Secondary chart models (e.g. Sales Orders) are not on the blueprint
+            # mirror — fill pack-style Group By / Measure when still empty.
+            if not variant.default_groupby_ids or not variant.default_measure_field_id:
+                # Merge after current vals so a same-model blueprint copy wins.
+                suggested = variant._suggested_option_defaults_vals()
+                for key, value in suggested.items():
+                    if key == "default_groupby_ids" and (
+                        vals.get("default_groupby_ids")
+                        or variant.default_groupby_ids
+                    ):
+                        continue
+                    if key == "default_measure_field_id" and (
+                        vals.get("default_measure_field_id")
+                        or variant.default_measure_field_id
+                    ):
+                        continue
+                    if key == "default_ordered_groupby_ids" and (
+                        vals.get("default_ordered_groupby_ids")
+                        or variant.default_ordered_groupby_ids
+                    ):
+                        continue
+                    if key == "default_measure_aggregator" and (
+                        vals.get("default_measure_aggregator")
+                        or variant.default_measure_aggregator
+                    ):
+                        continue
+                    vals[key] = value
+            if vals:
+                variant.with_context(skip_graph_variant_default=True).write(vals)
 
     def _effective_graph_variant(self):
         """User gear pick, else blueprint Default option."""
@@ -356,13 +833,29 @@ class DashboardBlueprintGraphPicker(models.Model):
             "primary_action_xmlid",
             "primary_action_context",
             "is_default",
+            "default_groupby_field_ids",
+            "default_measure_field_id",
+            "default_measure_aggregator",
+            "default_scope_ids",
+            "scope_warning",
+            "graph_domain",
         }
     )
 
     def get_studio_payload(self):
+        self._ensure_default_graph_variant_row()
+        self._ensure_option_graph_defaults()
+        # Heal writes skip the Default-option sync; run it once after fill.
+        if self.graph_variant_ids.filtered("is_default"):
+            self._sync_blueprint_from_default_variant()
         payload = super().get_studio_payload()
+        include_scopes = self.scope_ids.filtered(lambda s: s.mode == "include")
         variants = []
         for variant in self.graph_variant_ids.sorted("sequence"):
+            ordered_gb = variant._ordered_default_groupby_fields()
+            applicable = include_scopes.filtered(
+                lambda s, m=variant.graph_model: s._domain_applies_to_model(m)
+            )
             variants.append(
                 {
                     "id": variant.id,
@@ -386,12 +879,53 @@ class DashboardBlueprintGraphPicker(models.Model):
                     "primary_action_context": variant.primary_action_context or "{}",
                     "is_default": bool(variant.is_default),
                     "is_available": bool(variant.is_available),
+                    "default_groupby_field_ids": ordered_gb.ids,
+                    "default_groupby_field_names": [
+                        f.field_description or f.name for f in ordered_gb
+                    ],
+                    "default_measure_field_id": (
+                        variant.default_measure_field_id.id or False
+                    ),
+                    "default_measure_field_name": (
+                        variant.default_measure_field_id.field_description
+                        or variant.default_measure_field_id.name
+                        or ""
+                    ),
+                    "default_measure_aggregator": (
+                        variant.default_measure_aggregator or "sum"
+                    ),
+                    "default_scope_ids": variant.default_scope_ids.ids,
+                    "applicable_include_scope_ids": applicable.ids,
+                    "scope_warning": variant.scope_warning or "",
+                    "graph_domain": variant.graph_domain or "[]",
+                    "date_filters": [
+                        {
+                            "id": d.id,
+                            "label": d.label or "",
+                            "field_id": d.field_id.id or False,
+                            "field_name": d.field_name or "",
+                            "field_label": (
+                                d.field_id.field_description or d.field_name or ""
+                            ),
+                            "default_period_mq_ids": d.default_period_mq_ids.ids,
+                            "default_period_year_ids": d.default_period_year_ids.ids,
+                        }
+                        for d in variant.date_filter_ids.sorted("sequence")
+                    ],
                 }
             )
         payload["graph_variants"] = variants
         payload["default_graph_variant_id"] = (
             self.graph_variant_ids.filtered("is_default")[:1].id or False
         )
+        payload["period_mq_catalog"] = [
+            {"id": row.id, "name": row.name or "", "label": row.display_name or row.name or ""}
+            for row in self.env["period.month.quarter"].search([])
+        ]
+        payload["period_year_catalog"] = [
+            {"id": row.id, "name": row.name or "", "label": row.display_name or row.name or ""}
+            for row in self.env["period.year"].search([])
+        ]
         return payload
 
     def studio_set_default_graph_variant(self, variant_id):
@@ -464,8 +998,67 @@ class DashboardBlueprintGraphPicker(models.Model):
                 clean["primary_action_xmlid"] = xmlid
             elif key == "primary_action_context":
                 clean["primary_action_context"] = (value or "").strip() or "{}"
+            elif key == "default_groupby_field_ids":
+                ids = [int(i) for i in (value or []) if i]
+                allowed = set(variant.graph_groupby_allowed_field_ids.ids)
+                ids = [i for i in ids if i in allowed]
+                clean["default_groupby_ids"] = [(6, 0, ids)]
+                clean["default_ordered_groupby_ids"] = (
+                    ",".join(str(i) for i in ids) or False
+                )
+            elif key == "default_measure_field_id":
+                mid = int(value) if value else False
+                if mid:
+                    field = self.env["ir.model.fields"].browse(mid)
+                    if (
+                        not field.exists()
+                        or field.model != variant.graph_model
+                        or field.ttype not in ("integer", "float", "monetary")
+                        or not field.store
+                    ):
+                        raise UserError(
+                            _("Default Measure must be a stored numeric field "
+                              "on this chart model.")
+                        )
+                clean["default_measure_field_id"] = mid
+                if not mid:
+                    clean["default_measure_aggregator"] = False
+            elif key == "default_measure_aggregator":
+                agg = (value or "").strip() or False
+                if agg and agg not in dict(VARIANT_AGGREGATORS):
+                    raise UserError(_("Unknown Measured As value: %s") % agg)
+                clean["default_measure_aggregator"] = agg
+            elif key == "default_scope_ids":
+                ids = [int(i) for i in (value or []) if i]
+                model = clean.get("graph_model") or variant.graph_model
+                allowed = set(
+                    self.scope_ids.filtered(
+                        lambda s, m=model: s.mode == "include"
+                        and s._domain_applies_to_model(m)
+                    ).ids
+                )
+                ids = [i for i in ids if i in allowed]
+                clean["default_scope_ids"] = [(6, 0, ids)]
+            elif key == "scope_warning":
+                clean["scope_warning"] = (value or "").strip() or False
+            elif key == "graph_domain":
+                clean["graph_domain"] = self._studio_validate_graph_domain(value)
         if clean:
             variant.write(clean)
+            # Translated Char can leave a stale cache on the option row; push
+            # the Default option warning onto the blueprint from the written val.
+            if "scope_warning" in clean and variant.is_default:
+                warn = (clean.get("scope_warning") or "").strip() or False
+                if ((self.scope_warning or "").strip() or False) != warn:
+                    self.with_context(skip_graph_variant_sync=True).write(
+                        {"scope_warning": warn}
+                    )
+            if "graph_domain" in clean and variant.is_default:
+                domain = clean.get("graph_domain") or "[]"
+                if ((self.graph_domain or "[]").strip() or "[]") != domain:
+                    self.with_context(skip_graph_variant_sync=True).write(
+                        {"graph_domain": domain}
+                    )
         if set_default:
             self._studio_mark_default_graph_variant(variant)
         return self.get_studio_payload()
@@ -494,23 +1087,64 @@ class DashboardBlueprintGraphPicker(models.Model):
             )
         seq = max(self.graph_variant_ids.mapped("sequence") or [0]) + 10
         make_default = bool(vals.get("is_default")) or not self.graph_variant_ids
-        created = self.env["dashboard.blueprint.graph.variant"].create(
-            {
-                "blueprint_id": self.id,
-                "sequence": int(vals.get("sequence") or seq),
-                "graph_model": model,
-                "graph_data_field": (
-                    (vals.get("graph_data_field") or self.graph_data_field or "").strip()
-                    or False
-                ),
-                "primary_button_label": label,
-                "primary_action_xmlid": xmlid,
-                "primary_action_context": (
-                    (vals.get("primary_action_context") or "{}").strip() or "{}"
-                ),
-                "is_default": make_default,
-            }
-        )
+        create_vals = {
+            "blueprint_id": self.id,
+            "sequence": int(vals.get("sequence") or seq),
+            "graph_model": model,
+            "graph_data_field": (
+                (vals.get("graph_data_field") or self.graph_data_field or "").strip()
+                or False
+            ),
+            "primary_button_label": label,
+            "primary_action_xmlid": xmlid,
+            "primary_action_context": (
+                (vals.get("primary_action_context") or "{}").strip() or "{}"
+            ),
+            "is_default": make_default,
+            "scope_warning": (
+                (vals.get("scope_warning") or self.scope_warning or "").strip()
+                or False
+            ),
+            "graph_domain": "[]",
+        }
+        # Seed chart defaults from blueprint when this option matches the
+        # current blueprint chart model (first / default option).
+        if model == (self.graph_model or ""):
+            if "graph_domain" in vals:
+                create_vals["graph_domain"] = self._studio_validate_graph_domain(
+                    vals.get("graph_domain")
+                )
+            else:
+                create_vals["graph_domain"] = (
+                    (self.graph_domain or "[]").strip() or "[]"
+                )
+            ordered = [
+                f
+                for f in self._ordered_graph_groupby_fields()
+                if f.model == model
+            ]
+            if ordered:
+                create_vals["default_groupby_ids"] = [(6, 0, [f.id for f in ordered])]
+                create_vals["default_ordered_groupby_ids"] = ",".join(
+                    str(f.id) for f in ordered
+                )
+            if (
+                self.graph_measure_field_id
+                and self.graph_measure_field_id.model == model
+            ):
+                create_vals["default_measure_field_id"] = self.graph_measure_field_id.id
+                create_vals["default_measure_aggregator"] = (
+                    self.graph_measure_aggregator or "sum"
+                )
+            include = self.scope_ids.filtered(
+                lambda s: s.mode == "include"
+                and s.default_on
+                and s._domain_applies_to_model(model)
+            )
+            if include:
+                create_vals["default_scope_ids"] = [(6, 0, include.ids)]
+        created = self.env["dashboard.blueprint.graph.variant"].create(create_vals)
+        self._seed_variant_date_filters_from_blueprint(created)
         payload = self.get_studio_payload()
         payload["created_graph_variant_id"] = created.id
         return payload
@@ -532,6 +1166,95 @@ class DashboardBlueprintGraphPicker(models.Model):
             )
         for index, variant_id in enumerate(ordered_ids):
             by_id[variant_id].sequence = (index + 1) * 10
+        return self.get_studio_payload()
+
+    def _studio_find_graph_variant(self, variant_id):
+        variant = self.graph_variant_ids.filtered(lambda v: v.id == int(variant_id))[:1]
+        if not variant:
+            raise UserError(_("Unknown chart model option on this dashboard."))
+        return variant
+
+    def _studio_find_date_filter(self, row_id, *, required=True):
+        """Resolve a date-filter row that belongs to this blueprint."""
+        self.ensure_one()
+        try:
+            rid = int(row_id)
+        except (TypeError, ValueError):
+            rid = 0
+        row = self.env["dashboard.blueprint.graph.variant.date.filter"].browse(rid)
+        if row.exists() and row.variant_id.blueprint_id == self:
+            return row
+        if required:
+            raise UserError(_("Unknown date filter on this dashboard."))
+        return row.browse()
+
+    def studio_create_graph_variant_date_filter(self, variant_id, vals=None):
+        self.ensure_one()
+        variant = self._studio_find_graph_variant(variant_id)
+        if not variant.graph_model:
+            raise UserError(_("Set Chart Model first."))
+        vals = vals or {}
+        field_id = int(vals.get("field_id") or 0) or False
+        field = self.env["ir.model.fields"].browse(field_id) if field_id else None
+        if not field or not field.exists() or field.model != variant.graph_model:
+            raise UserError(_("Pick a date field on this chart model."))
+        if field.ttype not in ("date", "datetime"):
+            raise UserError(_("Date Filter fields must be Date or Datetime."))
+        if variant.date_filter_ids.filtered(lambda d: d.field_id == field or d.field_name == field.name):
+            raise UserError(_("That date field is already on this chart model."))
+        label = (vals.get("label") or "").strip() or field.field_description or field.name
+        seq = max(variant.date_filter_ids.mapped("sequence") or [0]) + 10
+        created = self.env["dashboard.blueprint.graph.variant.date.filter"].create(
+            {
+                "variant_id": variant.id,
+                "sequence": seq,
+                "label": label,
+                "field_id": field.id,
+            }
+        )
+        payload = self.get_studio_payload()
+        payload["created_graph_variant_date_filter_id"] = created.id
+        return payload
+
+    def studio_write_graph_variant_date_filter(self, row_id, vals):
+        self.ensure_one()
+        # Soft-miss: label blur can race with Remove (unlink wins first).
+        row = self._studio_find_date_filter(row_id, required=False)
+        if not row:
+            return self.get_studio_payload()
+        clean = {}
+        for key, value in (vals or {}).items():
+            if key == "label":
+                label = (value or "").strip()
+                if not label:
+                    raise UserError(_("Date Filter label is required."))
+                clean["label"] = label
+            elif key == "field_id":
+                field_id = int(value) if value else False
+                field = self.env["ir.model.fields"].browse(field_id) if field_id else None
+                if (
+                    not field
+                    or not field.exists()
+                    or field.model != row.variant_id.graph_model
+                    or field.ttype not in ("date", "datetime")
+                ):
+                    raise UserError(_("Pick a date field on this chart model."))
+                clean["field_id"] = field.id
+            elif key == "default_period_mq_ids":
+                ids = [int(i) for i in (value or []) if i]
+                clean["default_period_mq_ids"] = [(6, 0, ids)]
+            elif key == "default_period_year_ids":
+                ids = [int(i) for i in (value or []) if i]
+                clean["default_period_year_ids"] = [(6, 0, ids)]
+        if clean:
+            row.write(clean)
+        return self.get_studio_payload()
+
+    def studio_unlink_graph_variant_date_filter(self, row_id):
+        self.ensure_one()
+        row = self._studio_find_date_filter(row_id, required=False)
+        if row:
+            row.unlink()
         return self.get_studio_payload()
 
     def _seed_crm_graph_variant_defaults(self):
@@ -625,6 +1348,83 @@ class DashboardBlueprintGraphPicker(models.Model):
                 )
 
 
+class DashboardBlueprintGraphVariantDateFilter(models.Model):
+    """One date filter choice for a Chart Model Option.
+
+    A model-level date filter cannot work across options: ``crm.lead`` has
+    both a creation date and a closed date, while ``sale.order`` only has
+    one. Each option therefore keeps its own small list of date fields to
+    offer in the live gear, resolved through ``dashboard.mirror.mixin`` so
+    renames of the underlying field are caught instead of failing silently.
+    """
+
+    _name = "dashboard.blueprint.graph.variant.date.filter"
+    _inherit = ["dashboard.mirror.mixin"]
+    _description = "Dashboard Chart Model Option Date Filter"
+    _order = "sequence, id"
+    _rec_name = "label"
+
+    variant_id = fields.Many2one(
+        "dashboard.blueprint.graph.variant",
+        required=True,
+        ondelete="cascade",
+        index=True,
+    )
+    sequence = fields.Integer(default=10)
+    label = fields.Char(
+        required=True,
+        translate=True,
+        help="Shown to end users in the live date filter picker, e.g. Closed Date.",
+    )
+    field_name = fields.Char(
+        string="Date Field Name",
+        help="Technical date/datetime field on the chart model, e.g. date_closed.",
+    )
+    field_id = fields.Many2one(
+        "ir.model.fields",
+        string="Date Field",
+        compute="_compute_field_id",
+        inverse="_inverse_field_id",
+        store=True,
+        readonly=False,
+        ondelete="set null",
+        help="Convenience picker for Date Field Name.",
+    )
+    default_period_mq_ids = fields.Many2many(
+        "period.month.quarter",
+        "dashboard_graph_variant_date_filter_mq_rel",
+        "date_filter_id",
+        "period_mq_id",
+        string="Default Months / Quarters",
+        help="Seeded into the live gear the first time a user has no months "
+        "picked for this date row. Users can always change their own picks.",
+    )
+    default_period_year_ids = fields.Many2many(
+        "period.year",
+        "dashboard_graph_variant_date_filter_year_rel",
+        "date_filter_id",
+        "period_year_id",
+        string="Default Years",
+        help="Seeded into the live gear the first time a user has no years "
+        "picked for this date row. Users can always change their own picks.",
+    )
+
+    @api.depends("field_name", "variant_id.graph_model")
+    def _compute_field_id(self):
+        for rec in self:
+            rec.field_id = rec._mirror_field(rec.variant_id.graph_model, rec.field_name)
+
+    def _inverse_field_id(self):
+        for rec in self:
+            rec.field_name = rec.field_id.name or False
+
+    @api.constrains("field_id")
+    def _check_field_type(self):
+        for rec in self:
+            if rec.field_id and rec.field_id.ttype not in ("date", "datetime"):
+                raise ValidationError(_("Date Filter fields must be Date or Datetime."))
+
+
 class DashboardUserPrefGraphPicker(models.Model):
     _inherit = "dashboard.user.pref"
 
@@ -661,7 +1461,9 @@ class DashboardUserPrefGraphPicker(models.Model):
                 if pref.preferred_graph_variant_id
                 else False
             )
-            pref._clear_stale_graph_fields()
+            # Cache-only: never write() from onchange — the dialog UI would not
+            # refresh Group By / Measure / Data to Include otherwise.
+            pref._apply_variant_graph_defaults(cache_only=True)
 
     def write(self, vals):
         vals = dict(vals)
@@ -673,18 +1475,89 @@ class DashboardUserPrefGraphPicker(models.Model):
                 variant.graph_model if variant else False
             )
         res = super().write(vals)
-        if "preferred_graph_variant_id" in vals or "preferred_graph_model" in vals:
-            self._clear_stale_graph_fields()
+        if (
+            "preferred_graph_variant_id" in vals or "preferred_graph_model" in vals
+        ) and not self.env.context.get("skip_variant_graph_defaults"):
+            self._apply_variant_graph_defaults(cache_only=False)
         return res
+
+    def _resolve_pref_graph_variant(self):
+        """Preferred option, else blueprint Default option.
+
+        Prefer the selected row even when not yet ``is_available`` so the gear
+        onchange still reseeds from that option while the builder finishes it.
+        """
+        self.ensure_one()
+        if self.preferred_graph_variant_id:
+            return self.preferred_graph_variant_id
+        if self.blueprint_id:
+            return self.blueprint_id._default_graph_variant()
+        return self.env["dashboard.blueprint.graph.variant"]
+
+    def _apply_variant_graph_defaults(self, cache_only=False):
+        """Copy Chart Model Option defaults onto this preference.
+
+        Keeps My Data (restrict) ticks; replaces Include ticks, Group By,
+        Measure, and Measured As from the active option.
+        """
+        for pref in self:
+            variant = pref._resolve_pref_graph_variant()
+            if not variant:
+                pref._clear_stale_graph_fields()
+                pref._sync_pref_period_lines(cache_only=cache_only or not pref.ids)
+                continue
+            ordered, measure, agg, include = variant._pref_defaults_for_gear()
+            restrict = pref.scope_ids.filtered(lambda s: s.mode == "restrict")
+            order_char = ",".join(str(f.id) for f in ordered) or False
+            groupby_ids = [f.id for f in ordered]
+            scope_ids = (restrict | include).ids
+            if cache_only or not pref.ids:
+                # Always use (6, 0, ids) on the form cache — a bare record list
+                # corrupts many2many NewId caches and breaks later filtered().
+                pref.groupby_ids = [(6, 0, groupby_ids)]
+                pref.ordered_groupby_ids = order_char
+                pref.measure_field_id = measure.id if measure else False
+                pref.measure_aggregator = agg
+                pref.scope_ids = [(6, 0, scope_ids)]
+            else:
+                pref.with_context(skip_variant_graph_defaults=True).write(
+                    {
+                        "groupby_ids": [(6, 0, groupby_ids)],
+                        "ordered_groupby_ids": order_char,
+                        "measure_field_id": measure.id if measure else False,
+                        "measure_aggregator": agg,
+                        "scope_ids": [(6, 0, scope_ids)],
+                    }
+                )
+            pref._clear_stale_graph_fields()
+            # Date filter rows follow the active Chart Model Option list.
+            pref._sync_pref_period_lines(cache_only=cache_only or not pref.ids)
 
     def _clear_stale_graph_fields(self):
         for pref in self:
-            model = pref.preferred_graph_model or pref.blueprint_id.graph_model
+            model = (
+                (
+                    pref.preferred_graph_variant_id.graph_model
+                    if pref.preferred_graph_variant_id
+                    else False
+                )
+                or pref.preferred_graph_model
+                or pref.graph_model
+                or pref.blueprint_id.graph_model
+            )
             if not model or model not in self.env:
                 continue
             Model = self.env[model]
             if pref.measure_field_id and pref.measure_field_id.name not in Model._fields:
                 pref.measure_field_id = False
-            stale = pref.groupby_ids.filtered(lambda f: f.name not in Model._fields)
+                pref.measure_aggregator = False
+            # Resolve ids first — NewId m2m caches can be fragile mid-onchange.
+            groupby = pref.groupby_ids.exists()
+            stale = groupby.filtered(
+                lambda f: f.model != model
+                or (not f.is_date_period() and f.name not in Model._fields)
+            )
             if stale:
-                pref.groupby_ids = [(3, f.id) for f in stale]
+                keep = (groupby - stale).ids
+                pref.groupby_ids = [(6, 0, keep)]
+                pref.ordered_groupby_ids = ",".join(str(i) for i in keep) or False

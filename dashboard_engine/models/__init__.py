@@ -21,5 +21,6 @@ from . import dashboard_blueprint_group  # noqa F401
 from . import dashboard_blueprint  # noqa F401
 from . import dashboard_scope_target  # noqa F401
 from . import dashboard_graph_variant  # noqa F401
+from . import dashboard_user_pref_period  # noqa F401
 from . import dashboard_blueprint_create_wizard  # noqa F401
 from . import dashboard_blueprint_template  # noqa F401

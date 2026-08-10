@@ -41,15 +41,27 @@ export class DashboardScopeCheckboxesField extends Component {
         this.specialData = useSpecialData((orm, props) => {
             const { relation } = props.record.fields[props.name];
             const domain = getFieldDomain(props.record, props.name, props.domain);
-            return orm.searchRead(
-                relation,
-                domain,
-                ["display_label", "display_description", "sequence", "mode"],
-                {
-                    order: "sequence, id",
-                    context: this.props.context || {},
-                }
-            );
+            // Include preferred Chart Model + applicable ids so a Chart Model
+            // onchange reloads which Include boxes are listed (and their ticks).
+            const preferred =
+                props.record.data.preferred_graph_variant_id?.[0] ||
+                props.record.data.preferred_graph_variant_id ||
+                false;
+            const applicable =
+                props.record.data.applicable_include_scope_ids?.currentIds ||
+                props.record.data.applicable_include_scope_ids ||
+                [];
+            return orm
+                .searchRead(
+                    relation,
+                    domain,
+                    ["display_label", "display_description", "sequence", "mode"],
+                    {
+                        order: "sequence, id",
+                        context: props.context || {},
+                    }
+                )
+                .then((rows) => ({ rows, preferred, applicable }));
         });
         this.idsToAdd = new Set();
         this.idsToRemove = new Set();
@@ -62,13 +74,23 @@ export class DashboardScopeCheckboxesField extends Component {
             () => {
                 this._updateScopeWarning();
             },
-            () => [this.specialData.data]
+            () => [
+                this.specialData.data,
+                this.props.record.data.scope_warning,
+                this.props.record.data.preferred_graph_variant_id,
+                this.props.record.data.scope_ids,
+            ]
         );
         onWillUpdateProps(() => this._updateScopeWarning());
     }
 
     get items() {
-        return this.specialData.data || [];
+        const data = this.specialData.data;
+        if (!data) {
+            return [];
+        }
+        // New shape { rows, preferred, applicable } or legacy bare array.
+        return Array.isArray(data) ? data : data.rows || [];
     }
 
     /**

@@ -8,6 +8,8 @@ import re
 from ast import literal_eval
 from xml.sax.saxutils import escape as xml_escape
 
+from lxml import etree
+
 from odoo import api, fields, models, _
 from odoo.exceptions import UserError, ValidationError
 from odoo.tools.date_utils import get_timedelta
@@ -47,6 +49,9 @@ SLOT_VALUE_MODES = [
     ("count_amount", "Count + Amount"),
 ]
 
+# Totals + Shortcuts always expose Count + Amount (Shows picker is KPI-only).
+SLOT_LOCKED_COUNT_AMOUNT_SECTIONS = frozenset({"button_box", "bottom"})
+
 # Sections pooled across share_link_ids (V1 shared-kanban parity).
 # Header and left primary button are never shared.
 SHARED_SLOT_SECTIONS = frozenset(code for code, _label in SLOT_SECTIONS)
@@ -69,6 +74,9 @@ AGGREGATORS = [
     ("avg", "Average"),
     ("max", "Maximum"),
     ("min", "Minimum"),
+    # Distinct parents (e.g. order_id on sale.order.line) so a KPI that
+    # opens orders can show an order count, not a line count.
+    ("count_distinct", "Distinct count"),
 ]
 DATE_TYPES = ("date", "datetime")
 NUMERIC_TYPES = ("integer", "float", "monetary")
@@ -117,7 +125,7 @@ STUDIO_LAYOUT_CARD_WIDGETS = frozenset(
 class DashboardBlueprint(models.Model):
     _name = "dashboard.blueprint"
     _inherit = ["dashboard.mirror.mixin"]
-    _description = "Dashboard Blueprint"
+    _description = "Dashboard"
     _order = "sequence, name"
 
     name = fields.Char(required=True, translate=True)
@@ -150,7 +158,15 @@ class DashboardBlueprint(models.Model):
         string="Host Model",
         required=True,
         ondelete="cascade",
+        domain="[('transient', '=', False)]",
         help="Model shown as kanban cards (partner, product, warehouse, …).",
+    )
+    host_link_model_ids = fields.Many2many(
+        "ir.model",
+        compute="_compute_host_link_model_ids",
+        string="Models Linked to Host",
+        help="Non-transient models with a stored many2one to the host. "
+        "Used to filter Chart / Count model pickers in Advanced.",
     )
     host_model_name = fields.Char(
         related="host_model_id.model",
@@ -286,8 +302,9 @@ class DashboardBlueprint(models.Model):
     graph_domain = fields.Char(
         string="Custom Filter",
         default="[]",
-        help="Optional domain on the graph model (Python list), same idea "
-        "as Custom Filter on a list or graph view.",
+        help="Mirror of the Default Chart Model Option Custom Filter. "
+        "Edit per option in Studio; this field seeds empty options that "
+        "share the blueprint chart model.",
     )
     graph_caption = fields.Char(translate=True, string="Graph Title")
 
@@ -438,6 +455,7 @@ class DashboardBlueprint(models.Model):
         store=True,
         readonly=False,
         ondelete="set null",
+        domain="[('id', 'in', host_link_model_ids)]",
         help="Records counted on the card graph, e.g. Leads for a customer card.",
     )
     graph_data_field_id = fields.Many2one(
@@ -517,6 +535,10 @@ class DashboardBlueprint(models.Model):
     primary_action_id = fields.Many2one(
         "ir.actions.act_window",
         string="Action",
+        domain=(
+            "['|', '|', ('res_model', '=', host_model_name), "
+            "('res_model', '=', graph_model), ('res_model', '=', False)]"
+        ),
         compute="_compute_primary_action_id",
         inverse="_inverse_primary_action_id",
         store=True,
@@ -525,6 +547,37 @@ class DashboardBlueprint(models.Model):
         help="Existing screen opened by the card's main button. Leave empty "
         "to build one from the graph settings.",
     )
+
+    @api.depends("host_model_name")
+    def _compute_host_link_model_ids(self):
+        for rec in self:
+            rec.host_link_model_ids = rec._ir_models_linked_to_host()
+
+    def _ir_models_linked_to_host(self):
+        """``ir.model`` rows with a stored many2one pointing at this host."""
+        self.ensure_one()
+        host = self.host_model_name
+        Model = self.env["ir.model"].sudo()
+        if not host:
+            return Model.browse()
+        linked = (
+            self.env["ir.model.fields"]
+            .sudo()
+            .search(
+                [
+                    ("ttype", "=", "many2one"),
+                    ("relation", "=", host),
+                    ("store", "=", True),
+                ]
+            )
+            .mapped("model")
+        )
+        linked = sorted({m for m in linked if m})
+        if not linked:
+            return Model.browse()
+        return Model.search(
+            [("model", "in", linked), ("transient", "=", False)]
+        )
 
     @api.depends("graph_model")
     def _compute_graph_model_id(self):
@@ -1071,7 +1124,7 @@ class DashboardBlueprint(models.Model):
             "type": "ir.actions.client",
             "tag": "display_notification",
             "params": {
-                "title": _("Blueprint health"),
+                "title": _("Dashboard health"),
                 "message": message,
                 "type": kind,
                 "sticky": bool(self.health_issue_count),
@@ -1181,9 +1234,9 @@ class DashboardBlueprint(models.Model):
     scope_warning = fields.Char(
         string="Scope Warning",
         translate=True,
-        help="Message shown in the live settings popup when all 'Include' scopes "
-        "are unticked. Leave empty for no warning. "
-        'Example: "At least one of \'Pipeline\' or \'Leads\' must stay on."',
+        help="Legacy / mirror of the Default Chart Model Option warning. "
+        "Prefer editing Scope Warning on each Chart Model Option. "
+        "Shown when all 'Include' scopes are unticked. Leave empty for none.",
     )
     pref_ids = fields.One2many(
         "dashboard.user.pref", "blueprint_id", string="User preferences"
@@ -1962,6 +2015,29 @@ class DashboardBlueprint(models.Model):
         self._safe_domain(domain_str, strict=True)
         return domain_str
 
+    def _studio_validate_scope_domain(self, domain_str, res_model=None):
+        """Validate scope domain syntax and, when set, fields on ``res_model``."""
+        domain_str = self._studio_validate_graph_domain(domain_str)
+        if not res_model:
+            return domain_str
+        if res_model not in self.env:
+            raise UserError(_("Unknown model for filter: %s") % res_model)
+        domain = self._safe_domain(domain_str)
+        Model = self.env[res_model]
+        for leaf in domain:
+            if not isinstance(leaf, (list, tuple)) or len(leaf) < 3:
+                continue
+            field_expr = leaf[0]
+            if not isinstance(field_expr, str):
+                continue
+            name = field_expr.split(".", 1)[0].split(":", 1)[0]
+            if name and name not in Model._fields:
+                raise UserError(
+                    _("Filter field “%s” is not on chart model %s.")
+                    % (name, res_model)
+                )
+        return domain_str
+
     def studio_write_blueprint(self, vals):
         """Write a whitelist of blueprint fields from Studio."""
         self.ensure_one()
@@ -2010,6 +2086,16 @@ class DashboardBlueprint(models.Model):
             self.write(clean)
             if mirror_groupby:
                 self._mirror_legacy_graph_groupby_from_unified()
+            # Options-only UX: keep Default option Scope Warning in sync when
+            # Studio still writes the legacy blueprint field (no options UI).
+            if "scope_warning" in clean and hasattr(
+                self, "_sync_blueprint_from_default_variant"
+            ):
+                default = self.graph_variant_ids.filtered("is_default")[:1]
+                if default:
+                    default.with_context(skip_graph_variant_default=True).write(
+                        {"scope_warning": clean.get("scope_warning") or False}
+                    )
         cleanup_count = 0
         if (
             "host_model_id" in clean
@@ -2045,7 +2131,7 @@ class DashboardBlueprint(models.Model):
 
     def studio_create_slot(self, section, vals=None):
         self.ensure_one()
-        if section not in dict(SLOT_SECTIONS):
+        if not isinstance(section, str) or section not in dict(SLOT_SECTIONS):
             raise UserError(_("Unknown card section: %s") % section)
         vals = dict(vals or {})
         clean = self._studio_prepare_slot_vals(vals)
@@ -2069,11 +2155,19 @@ class DashboardBlueprint(models.Model):
             "label": label,
             "show_if_zero": clean.get("show_if_zero", True),
             "style": clean.get("style") or "default",
-            "value_mode": clean.get("value_mode") or "count",
+            "value_mode": (
+                "count_amount"
+                if section in SLOT_LOCKED_COUNT_AMOUNT_SECTIONS
+                else (clean.get("value_mode") or "count")
+            ),
         }
-        # Sensible defaults so Publish does not create a dead KPI/shortcut.
-        if section in ("kpi", "bottom") and not clean.get("compute_model") and not clean.get(
-            "count_field"
+        # Sensible defaults so Publish does not create a dead figure slot.
+        # Same seed for KPIs / Totals / Shortcuts; clear Source Model to use host fields.
+        if (
+            section in ("kpi", "bottom", "button_box")
+            and not clean.get("compute_model")
+            and not clean.get("count_field")
+            and not clean.get("amount_field")
         ):
             host = self.host_model_name or "res.partner"
             slot_vals.update(
@@ -2085,13 +2179,9 @@ class DashboardBlueprint(models.Model):
                     "show_if_zero": True,
                 }
             )
-        if section == "button_box" and not clean.get("amount_field") and not clean.get(
-            "count_field"
-        ):
-            # Host identity count is a safe placeholder until the admin picks a field.
-            slot_vals["count_field"] = "id"
-            slot_vals["value_mode"] = "count"
         slot_vals.update(clean)
+        if section in SLOT_LOCKED_COUNT_AMOUNT_SECTIONS:
+            slot_vals["value_mode"] = "count_amount"
         created = self.env["dashboard.blueprint.slot"].create(slot_vals)
         payload = self.get_studio_payload()
         payload["created_slot_id"] = created.id
@@ -2177,7 +2267,12 @@ class DashboardBlueprint(models.Model):
             by_id[item_id].sequence = (index + 1) * 10
         return self.get_studio_payload()
 
-    def studio_write_scope(self, scope_id, vals):
+    def studio_write_scope(self, scope_id, vals, res_model=None):
+        """Write scope fields from Studio.
+
+        ``res_model`` (optional): when editing a Data to Include filter from a
+        Chart Model Option, validate domain leaves against that chart model.
+        """
         self.ensure_one()
         scope = self.scope_ids.filtered(lambda s: s.id == scope_id)[:1]
         if not scope:
@@ -2187,7 +2282,9 @@ class DashboardBlueprint(models.Model):
             if key not in self._STUDIO_SCOPE_WRITE_FIELDS:
                 continue
             if key == "domain":
-                clean["domain"] = self._studio_validate_graph_domain(value)
+                clean["domain"] = self._studio_validate_scope_domain(
+                    value, res_model=res_model
+                )
             elif key == "mode":
                 if value not in ("include", "restrict"):
                     raise UserError(_("Invalid scope mode."))
@@ -2282,7 +2379,6 @@ class DashboardBlueprint(models.Model):
             scoped_models = list({m for m in (host_model, graph_model) if m})
 
         base_domain = [("name", "ilike", term or "")]
-        fallback_used = False
 
         if not all_models and scoped_models:
             scoped_domain = base_domain + [
@@ -2291,9 +2387,6 @@ class DashboardBlueprint(models.Model):
                 ("res_model", "=", False),
             ]
             actions = Action.search(scoped_domain, limit=limit, order="name")
-            if not actions:
-                actions = Action.search(base_domain, limit=limit, order="name")
-                fallback_used = True
         else:
             actions = Action.search(base_domain, limit=limit, order="name")
 
@@ -2305,8 +2398,6 @@ class DashboardBlueprint(models.Model):
         )
         if all_models:
             scope_label = _("Showing all actions")
-        elif fallback_used:
-            scope_label = _("No matches for scoped models — showing all")
         elif focus_model:
             focus_label = (
                 self.env["ir.model"]
@@ -2336,7 +2427,7 @@ class DashboardBlueprint(models.Model):
             )
         return {
             "actions": result,
-            "scoped": not fallback_used and not all_models,
+            "scoped": bool(not all_models and scoped_models),
             "scope_label": scope_label,
         }
 
@@ -2385,22 +2476,14 @@ class DashboardBlueprint(models.Model):
             ]
         scoped = False
         if not all_models and host:
-            Field = self.env["ir.model.fields"].sudo()
-            linked = Field.search(
-                [
-                    ("ttype", "=", "many2one"),
-                    ("relation", "=", host),
-                    ("store", "=", True),
-                ]
-            ).mapped("model")
-            linked = sorted({m for m in linked if m})
-            if not linked:
+            linked_models = self._ir_models_linked_to_host()
+            if not linked_models:
                 return {
                     "models": [],
                     "scoped": True,
                     "scope_label": _("No models link to %s") % host_label,
                 }
-            domain = domain + [("model", "in", linked)]
+            domain = domain + [("id", "in", linked_models.ids)]
             scoped = True
         models = Model.search(domain, limit=limit, order="name")
         return {
@@ -2414,6 +2497,24 @@ class DashboardBlueprint(models.Model):
                 else _("Models with a link to %s") % host_label
             ),
         }
+
+    def studio_groupby_fields(self, model_name=None):
+        """Group By catalog — same rules as Advanced ``*_allowed_field_ids``."""
+        self.ensure_one()
+        model_name = model_name or self.graph_model or self.host_model_name
+        Fields = self.env["ir.model.fields"]
+        allowed = Fields.dashboard_groupby_allowed_fields(model_name)
+        return [
+            {
+                "id": field.id,
+                "name": field.name,
+                "string": field.field_description or field.name,
+                "field_description": field.field_description,
+                "ttype": field.ttype,
+                "store": field.store,
+            }
+            for field in allowed
+        ]
 
     def studio_search_menus(self, term="", limit=20):
         """Parent menu picker for Setup."""
@@ -2550,8 +2651,12 @@ class DashboardBlueprint(models.Model):
                 result[xmlid] = xmlid
         return result
 
-    def studio_model_fields(self, model_name=None, ttypes=None):
-        """Field catalog for host / graph / compute model pickers."""
+    def studio_model_fields(self, model_name=None, ttypes=None, stored_only=False):
+        """Field catalog for host / graph / compute model pickers.
+
+        ``stored_only=True`` matches Advanced measure domains (``store=True``).
+        Each row includes ``ir.model.fields`` ``id`` when available (Measure pickers).
+        """
         self.ensure_one()
         model_name = model_name or self.host_model_name
         if not model_name or model_name not in self.env:
@@ -2559,37 +2664,129 @@ class DashboardBlueprint(models.Model):
         Model = self.env[model_name]
         wanted = set(ttypes) if ttypes else None
         fields_meta = Model.fields_get()
-        rows = []
+        names = []
         for name, meta in fields_meta.items():
             if name.startswith("_"):
                 continue
             ttype = meta.get("type")
             if wanted and ttype not in wanted:
                 continue
+            if not wanted and ttype == "one2many":
+                # Can't hold a scalar default; explicit ttypes may still ask for it.
+                continue
             if meta.get("deprecated"):
                 continue
-            rows.append(
-                {
-                    "name": name,
-                    "string": meta.get("string") or name,
-                    "ttype": ttype,
-                    "relation": meta.get("relation") or False,
-                }
+            store = bool(meta.get("store"))
+            if stored_only and not store:
+                continue
+            names.append(name)
+        Field = self.env["ir.model.fields"].sudo()
+        id_by_name = {
+            f.name: f.id
+            for f in Field.search(
+                [("model", "=", model_name), ("name", "in", names)]
             )
+        }
+        rows = []
+        for name in names:
+            meta = fields_meta[name]
+            row = {
+                "id": id_by_name.get(name) or False,
+                "name": name,
+                "string": meta.get("string") or name,
+                "ttype": meta.get("type"),
+                "relation": meta.get("relation") or False,
+                "store": bool(meta.get("store")),
+            }
+            if meta.get("type") == "selection":
+                options = meta.get("selection") or []
+                row["selection"] = [
+                    [str(value), str(label)] for value, label in options if value is not False
+                ]
+            rows.append(row)
         rows.sort(key=lambda r: (r["string"] or "").lower())
         return rows
 
-    def studio_condition_catalog(self, model=None):
-        """Reusable conditions for Studio KPI/shortcut pickers.
+    def studio_resolve_action_model(self, action_xmlid=None):
+        """Resolve the ``res_model`` a window action opens, from its xmlid.
 
-        When ``model`` is set (slot compute model), only return matching
-        conditions — same filter Advanced uses on ``condition_ids``.
+        Powers "When Opened" selective pickers: once an Action is chosen,
+        filter/field dropdowns query this model instead of asking the admin
+        to type internal names.
         """
         self.ensure_one()
-        domain = []
-        if model:
-            domain = [("model", "=", model)]
-        conditions = self.env["dashboard.condition"].search(domain, order="name")
+        xmlid = (action_xmlid or "").strip()
+        if not xmlid or "." not in xmlid:
+            return {"res_model": False}
+        action = self.env.ref(xmlid, raise_if_not_found=False)
+        if not action:
+            return {"res_model": False}
+        return {"res_model": getattr(action, "res_model", False) or False}
+
+    def studio_action_search_filters(self, model_name=None):
+        """Real ``<filter>`` names from ``model_name``'s default search view.
+
+        Used by the "Turn on a list filter" picker so admins choose from
+        actual filters (e.g. ``assigned_to_me``) instead of typing them.
+        """
+        self.ensure_one()
+        model_name = (model_name or "").strip()
+        if not model_name or model_name not in self.env:
+            return []
+        try:
+            view = self.env[model_name].get_view(view_type="search")
+        except Exception:
+            return []
+        arch = view.get("arch") or ""
+        if not arch:
+            return []
+        try:
+            root = etree.fromstring(arch.encode() if isinstance(arch, str) else arch)
+        except Exception:
+            return []
+        seen = set()
+        rows = []
+        for node in root.iter("filter"):
+            name = node.get("name")
+            if not name or name in seen:
+                continue
+            # Group By filters share the <filter> tag but toggle a groupby,
+            # not a domain — keep this picker to real "turn on" filters only.
+            if "group_by" in (node.get("context") or ""):
+                continue
+            seen.add(name)
+            rows.append({"name": name, "string": node.get("string") or name})
+        rows.sort(key=lambda r: (r["string"] or "").lower())
+        return rows
+
+    def studio_search_records(self, model_name=None, term="", limit=8):
+        """Thin ``name_search`` wrapper for many2one-style fixed-value pickers."""
+        self.ensure_one()
+        model_name = (model_name or "").strip()
+        if not model_name or model_name not in self.env:
+            return []
+        limit = min(int(limit or 8), 20)
+        Model = self.env[model_name].sudo()
+        try:
+            hits = Model.name_search(term or "", limit=limit)
+        except Exception:
+            return []
+        return [{"id": rid, "name": name} for rid, name in hits]
+
+    def studio_condition_catalog(self, model=None):
+        """Reusable conditions for Studio KPI / Totals / Shortcut pickers.
+
+        When ``model`` is set (slot compute model), only return matching
+        conditions — same filter Advanced uses on ``condition_ids`` for
+        KPIs, Totals, and Shortcuts.
+        When ``model`` is empty, return no rows (avoid the full catalog).
+        """
+        self.ensure_one()
+        if not model:
+            return []
+        conditions = self.env["dashboard.condition"].search(
+            [("model", "=", model)], order="name"
+        )
         return [
             {"id": c.id, "name": c.name, "model": c.model or ""}
             for c in conditions
@@ -4113,20 +4310,47 @@ class DashboardBlueprint(models.Model):
             "ordered_groupby_ids": ",".join(str(f.id) for f in unique) or False,
         }
 
+    def _default_include_scopes(self, variant=None):
+        """Include scopes that should start ticked for ``variant`` (or default).
+
+        With a Chart Model Option, ticks come from that option. Empty option
+        list → no include ticks. Without options → each scope's ``default_on``.
+        """
+        self.ensure_one()
+        if variant is None:
+            variant = self._effective_graph_variant()
+        if variant:
+            return variant.default_scope_ids
+        return self.scope_ids.filtered("default_on")
+
     def _default_pref_values(self):
-        """A fresh preference row starts from what the blueprint declares.
+        """A fresh preference row starts from Chart Model Option / blueprint.
 
         Group By is seeded only on the unified tag list; legacy primary/extra
         columns are filled by ``dashboard.user.pref`` write's one-way mirror.
+        When a Chart Model Option exists, its Group By / Measure / Include
+        ticks are the source of truth.
         """
         self.ensure_one()
+        variant = self._effective_graph_variant()
+        include_scopes = self._default_include_scopes(variant)
+        if variant:
+            measure_field = variant.default_measure_field_id
+            measure_agg = (
+                (variant.default_measure_aggregator or "sum")
+                if measure_field
+                else False
+            )
+        else:
+            measure_field = self.graph_measure_field_id
+            measure_agg = self.graph_measure_aggregator
         vals = {
             "blueprint_id": self.id,
             "user_id": self.env.uid,
             "company_id": self.env.company.id,
-            "scope_ids": [(6, 0, self.scope_ids.filtered("default_on").ids)],
-            "measure_field_id": self.graph_measure_field_id.id,
-            "measure_aggregator": self.graph_measure_aggregator,
+            "scope_ids": [(6, 0, include_scopes.ids)],
+            "measure_field_id": measure_field.id if measure_field else False,
+            "measure_aggregator": measure_agg,
             "groupby_granularity": self.graph_groupby_granularity,
             "period_field_id": self.period_field_id.id
             or (
@@ -4136,7 +4360,21 @@ class DashboardBlueprint(models.Model):
             ),
             "period_closed_field_id": self.closed_period_field_id.id or False,
         }
-        vals.update(self._unified_groupby_pref_defaults())
+        if variant:
+            # Show the Default option in the gear picker (not an empty "blueprint
+            # default" placeholder) and seed chart fields from that option.
+            vals["preferred_graph_variant_id"] = variant.id
+            vals["preferred_graph_model"] = variant.graph_model
+            unique = list(variant._ordered_default_groupby_fields())
+            vals.update(
+                {
+                    "groupby_ids": [(6, 0, [f.id for f in unique])],
+                    "ordered_groupby_ids": ",".join(str(f.id) for f in unique)
+                    or False,
+                }
+            )
+        else:
+            vals.update(self._unified_groupby_pref_defaults())
         return vals
 
     def _get_or_create_pref(self):
@@ -4155,68 +4393,130 @@ class DashboardBlueprint(models.Model):
                 heal["period_field_id"] = self.period_field_id.id
             if not pref.period_closed_field_id and self.closed_period_field_id:
                 heal["period_closed_field_id"] = self.closed_period_field_id.id
+            # Show a usable Default option in the picker without reseeding
+            # personal Group By / Measure / Include (skip_variant_graph_defaults).
+            preferred = pref.preferred_graph_variant_id
+            needs_preferred = (not preferred) or (
+                preferred and not preferred._is_valid_candidate()
+            )
+            if needs_preferred and self.graph_variant_ids:
+                default = self._default_graph_variant()
+                if default and default._is_valid_candidate():
+                    heal["preferred_graph_variant_id"] = default.id
+                    heal["preferred_graph_model"] = default.graph_model
+                else:
+                    candidates = self._graph_model_candidates()
+                    if candidates:
+                        heal["preferred_graph_variant_id"] = candidates[0]["id"]
+                        heal["preferred_graph_model"] = candidates[0]["graph_model"]
             if heal:
-                pref.sudo().write(heal)
+                pref.sudo().with_context(skip_variant_graph_defaults=True).write(
+                    heal
+                )
             pref.sudo()._ensure_unified_groupby()
+            if not pref.period_line_ids:
+                # Keep existing Open/Closed month-year picks, then align rows
+                # to the active Chart Model Option date filter list.
+                if pref.period_field_id or pref.period_closed_field_id:
+                    pref.sudo()._lift_legacy_period_to_lines()
+                pref.sudo()._sync_pref_period_lines()
         return pref
 
     def _effective_graph_settings(self):
-        """Blueprint configuration with this user's choices applied on top."""
+        """Chart Model Option defaults → this user's choices on top.
+
+        When no option exists yet, fall back to blueprint Group By / Measure.
+        """
         self.ensure_one()
         # Chart-only graph-model picker: when a valid variant is chosen, use
         # that model for the chart payload. KPIs/bottoms stay on maps.
         variant = self._effective_graph_variant()
         graph_model = variant.graph_model if variant else self.graph_model
-        bp_specs = self._groupby_all_specs()
-        if bp_specs:
-            settings = {
-                "groupby": bp_specs[0],
-                "measure": self.graph_measure or "__count",
-                "domain": list(self._safe_domain(self.graph_domain)),
-                "groupbys": bp_specs,
-                "graph_model": graph_model,
-                "graph_data_field": (
-                    (variant.graph_data_field or self.graph_data_field)
-                    if variant
-                    else self.graph_data_field
-                ),
-            }
+        graph_data_field = (
+            (variant.graph_data_field or self.graph_data_field)
+            if variant
+            else self.graph_data_field
+        )
+        # Custom Filter is per Chart Model Option. Empty option → [].
+        # No option yet → blueprint field (legacy / single-model boards).
+        if variant:
+            domain = list(self._safe_domain(variant.graph_domain or "[]"))
+            v_specs = variant._groupby_all_specs()
+            if v_specs:
+                settings = {
+                    "groupby": v_specs[0],
+                    "groupbys": v_specs,
+                    "measure": variant._measure_spec() or "__count",
+                    "domain": domain,
+                    "graph_model": graph_model,
+                    "graph_data_field": graph_data_field,
+                }
+            else:
+                settings = {
+                    "groupby": "id",
+                    "groupbys": ["id"],
+                    "measure": variant._measure_spec() or "__count",
+                    "domain": domain,
+                    "graph_model": graph_model,
+                    "graph_data_field": graph_data_field,
+                }
         else:
-            settings = {
-                "groupby": self.graph_groupby or "id",
-                "measure": self.graph_measure or "__count",
-                "domain": list(self._safe_domain(self.graph_domain)),
-                "graph_model": graph_model,
-                "graph_data_field": (
-                    (variant.graph_data_field or self.graph_data_field)
-                    if variant
-                    else self.graph_data_field
-                ),
-            }
-            settings["groupbys"] = [settings["groupby"]] + self._groupby_extra_specs()
+            domain = list(self._safe_domain(self.graph_domain))
+            bp_specs = self._groupby_all_specs()
+            if bp_specs:
+                settings = {
+                    "groupby": bp_specs[0],
+                    "measure": self.graph_measure or "__count",
+                    "domain": domain,
+                    "groupbys": bp_specs,
+                    "graph_model": graph_model,
+                    "graph_data_field": graph_data_field,
+                }
+            else:
+                settings = {
+                    "groupby": self.graph_groupby or "id",
+                    "measure": self.graph_measure or "__count",
+                    "domain": domain,
+                    "graph_model": graph_model,
+                    "graph_data_field": graph_data_field,
+                }
+                settings["groupbys"] = (
+                    [settings["groupby"]] + self._groupby_extra_specs()
+                )
         pref = self._current_pref()
         if not pref:
-            defaults = self.scope_ids.filtered("default_on")
+            defaults = self._default_include_scopes(variant)
             if defaults:
                 settings["domain"] = self._merge_domains(
-                    settings["domain"], self._default_scope_domain(defaults)
+                    settings["domain"],
+                    self._default_scope_domain(defaults, graph_model=graph_model),
                 )
             return settings
         # Pref Group By is always the unified ordered list (legacy columns
-        # are mirrors only). Empty list → keep blueprint defaults above.
-        specs = pref._groupby_all_specs()
+        # are mirrors only). Empty list → keep option/blueprint defaults above.
+        # Ignore tags/measures that belong to another Chart Model (stale after
+        # switching Pipeline ↔ Sales Orders) — otherwise the primary button
+        # opens GraphView with fields[measure] undefined and crashes.
+        specs = [
+            spec
+            for spec in (pref._groupby_all_specs() or [])
+            if self._groupby_spec_valid_on(graph_model, spec)
+        ]
         if pref._ordered_groupby_fields() and specs:
             settings["groupby"] = specs[0]
             settings["groupbys"] = specs
-        settings["measure"] = pref._measure_spec() or settings["measure"]
+        pref_measure = pref._measure_spec()
+        if self._measure_spec_valid_on(graph_model, pref_measure):
+            settings["measure"] = pref_measure
         settings["domain"] = self._merge_domains(
             settings["domain"], pref._pref_domain()
         )
         return settings
 
-    def _default_scope_domain(self, scopes):
+    def _default_scope_domain(self, scopes, graph_model=None):
         self.ensure_one()
-        graph_model = self.graph_model
+        if graph_model is None:
+            graph_model = self.graph_model
         included = [
             s._scope_domain()
             for s in scopes
@@ -4234,6 +4534,10 @@ class DashboardBlueprint(models.Model):
     def action_open_settings(self):
         """Open this dashboard's settings for the current user."""
         self.ensure_one()
+        # Keep option Include / Group By / Measure ticks filled from Studio
+        # so the gear onchange has real defaults to apply.
+        if hasattr(self, "_ensure_option_graph_defaults"):
+            self._ensure_option_graph_defaults()
         pref = self._get_or_create_pref()
         return {
             "type": "ir.actions.act_window",
@@ -4348,7 +4652,12 @@ class DashboardBlueprint(models.Model):
             return []
         pref = self._current_pref()
         chosen = (pref.scope_ids & available) if pref else available.filtered("default_on")
-        graph_model = self.graph_model
+        variant = self._effective_graph_variant()
+        graph_model = (
+            (variant.graph_model if variant else False)
+            or (pref.graph_model if pref else False)
+            or self.graph_model
+        )
         parts = [
             part
             for part in (
@@ -4948,20 +5257,32 @@ class DashboardBlueprint(models.Model):
         ctx.update(
             self._eval_context_with_record(self.primary_action_context, record)
         )
-        # Only mirror graph groupbys/measure when the opened action uses the
-        # same model as the mini-chart. Otherwise SearchModel.createNewGroupBy
-        # receives fields that are not on the target search view and OWL
-        # crashes on `const { string } = field` (field undefined).
+        # Mirror graph groupbys/measure only when the opened action uses the
+        # active Chart Model (option), not the blueprint's stored model.
+        # Otherwise GraphView.computeReportMeasures crashes on
+        # ``fields[measure].string`` when measure is from another model.
+        chart_model = settings.get("graph_model") or self.graph_model
         if (
-            self.graph_model
-            and self.graph_model in self.env
-            and (not action_model or action_model == self.graph_model)
+            chart_model
+            and chart_model in self.env
+            and (not action_model or action_model == chart_model)
         ):
+            target = action_model or chart_model
             groupby = settings.get("groupby")
             # Blueprint stores ``field:aggregator`` for read_group; Odoo
             # Graph/Pivot context expects the bare field name.
             measure = self._odoo_view_measure_name(settings.get("measure"))
-            groupbys = settings.get("groupbys") or ([groupby] if groupby else [])
+            if measure and measure != "__count" and not self._field_path_exists_on(
+                target, measure
+            ):
+                measure = "__count"
+            groupbys = [
+                spec
+                for spec in (
+                    settings.get("groupbys") or ([groupby] if groupby else [])
+                )
+                if self._groupby_spec_valid_on(target, spec)
+            ]
             if groupbys:
                 ctx["graph_groupbys"] = groupbys
             if measure:
@@ -4992,6 +5313,24 @@ class DashboardBlueprint(models.Model):
         if measure == "__count" or ":" not in measure:
             return measure
         return measure.partition(":")[0]
+
+    @api.model
+    def _groupby_spec_valid_on(self, model_name, spec):
+        """True when a read_group / graph_groupbys spec fits ``model_name``."""
+        if not spec or not isinstance(spec, str):
+            return False
+        return self._field_path_exists_on(model_name, spec.split(":", 1)[0])
+
+    @api.model
+    def _measure_spec_valid_on(self, model_name, measure):
+        """True when a measure spec (``field`` or ``field:agg``) fits the model."""
+        if not measure:
+            return False
+        if measure == "__count":
+            return True
+        return self._field_path_exists_on(
+            model_name, self._odoo_view_measure_name(measure)
+        )
 
     def _resolved_primary_action_xmlid(self):
         """Primary action xmlid: graph-picker bundle, else module variant, else default."""
@@ -5205,7 +5544,7 @@ class DashboardBlueprintSlot(models.Model):
     # Value sources (host field OR remote compute)
     count_field = fields.Char(string="Count Field Name")
     amount_field = fields.Char(string="Amount Field Name")
-    compute_model = fields.Char(string="Count Model Name")
+    compute_model = fields.Char(string="Source Model Name")
     compute_domain = fields.Char(default="[]")
     compute_aggregator = fields.Char(default="__count")
     amount_aggregator = fields.Char(
@@ -5213,7 +5552,7 @@ class DashboardBlueprintSlot(models.Model):
     )
     relate_field = fields.Char(
         string="Link to Host",
-        help="Many2one path on the count model that points back to this "
+        help="Many2one path on the source model that points back to this "
         "host (same meaning as Link to Host on the graph). Leave empty "
         "to reuse the chart link field.",
     )
@@ -5261,13 +5600,13 @@ class DashboardBlueprintSlot(models.Model):
 
     compute_model_id = fields.Many2one(
         "ir.model",
-        string="Count Model",
+        string="Source Model",
         compute="_compute_compute_model_id",
         inverse="_inverse_compute_model_id",
         store=True,
         readonly=False,
         ondelete="set null",
-        help="Records this figure counts, e.g. Opportunities.",
+        help="Records this figure reads from, e.g. Opportunities.",
     )
     relate_field_id = fields.Many2one(
         "ir.model.fields",
@@ -5277,7 +5616,7 @@ class DashboardBlueprintSlot(models.Model):
         store=True,
         readonly=False,
         ondelete="set null",
-        help="Many2one on the count model that links rows to this host. "
+        help="Many2one on the source model that links rows to this host. "
         "Leave empty to reuse the graph Link to Host field.",
     )
     count_measure_field_id = fields.Many2one(
@@ -5344,6 +5683,13 @@ class DashboardBlueprintSlot(models.Model):
         store=True,
         readonly=False,
         ondelete="set null",
+        domain=(
+            "['|', '|', '|', "
+            "('res_model', '=', action_model), "
+            "('res_model', '=', compute_model), "
+            "('res_model', '=', host_model_name), "
+            "('res_model', '=', False)]"
+        ),
         help="Existing screen to open on click.",
     )
     action_model_id = fields.Many2one(
@@ -5387,7 +5733,7 @@ class DashboardBlueprintSlot(models.Model):
         for rec in self:
             related = bool(rec.compute_model)
             host = (not related) and bool(rec.count_field or rec.amount_field)
-            # Empty new row: default to related columns (builder starts with Count Model).
+            # Empty new row: default to related columns (builder starts with Source Model).
             if not related and not host:
                 related = True
             rec.ui_number_from_related = related
@@ -5567,16 +5913,38 @@ class DashboardBlueprintSlot(models.Model):
 
     @api.model_create_multi
     def create(self, vals_list):
-        prepared = [self._prepare_value_mode_vals(dict(vals)) for vals in vals_list]
+        prepared = []
+        for vals in vals_list:
+            vals = dict(vals)
+            if vals.get("section") in SLOT_LOCKED_COUNT_AMOUNT_SECTIONS:
+                vals["value_mode"] = "count_amount"
+            prepared.append(self._prepare_value_mode_vals(vals))
         records = super().create(prepared)
         for bp in records.mapped("blueprint_id").filtered(lambda b: b.state == "published"):
             bp._sync_generated_artifacts()
         return records
 
     def write(self, vals):
-        existing = self.value_mode if len(self) == 1 else None
-        vals = self._prepare_value_mode_vals(dict(vals), existing_mode=existing)
-        res = super().write(vals)
+        vals = dict(vals)
+        locked = self.filtered(
+            lambda s: (vals.get("section") or s.section)
+            in SLOT_LOCKED_COUNT_AMOUNT_SECTIONS
+        )
+        others = self - locked
+        res = True
+        if locked:
+            locked_vals = dict(vals)
+            locked_vals["value_mode"] = "count_amount"
+            locked_vals = self._prepare_value_mode_vals(
+                locked_vals, existing_mode="count_amount"
+            )
+            res = super(DashboardBlueprintSlot, locked).write(locked_vals) and res
+        if others:
+            existing = others.value_mode if len(others) == 1 else None
+            other_vals = self._prepare_value_mode_vals(
+                dict(vals), existing_mode=existing
+            )
+            res = super(DashboardBlueprintSlot, others).write(other_vals) and res
         for bp in self.mapped("blueprint_id").filtered(lambda b: b.state == "published"):
             bp._sync_generated_artifacts()
         return res
@@ -6210,6 +6578,9 @@ class DashboardBlueprintSlotActionVariant(models.Model):
     slot_id = fields.Many2one(
         "dashboard.blueprint.slot", required=True, ondelete="cascade", index=True
     )
+    action_model = fields.Char(related="slot_id.action_model", readonly=True)
+    compute_model = fields.Char(related="slot_id.compute_model", readonly=True)
+    host_model_name = fields.Char(related="slot_id.host_model_name", readonly=True)
     sequence = fields.Integer(default=10)
     name = fields.Char(translate=True)
     module_depends = fields.Char(
@@ -6232,6 +6603,13 @@ class DashboardBlueprintSlotActionVariant(models.Model):
         store=True,
         readonly=False,
         ondelete="set null",
+        domain=(
+            "['|', '|', '|', "
+            "('res_model', '=', action_model), "
+            "('res_model', '=', compute_model), "
+            "('res_model', '=', host_model_name), "
+            "('res_model', '=', False)]"
+        ),
     )
 
     @api.depends("module_depends")
@@ -6275,6 +6653,10 @@ class DashboardBlueprintActionVariant(models.Model):
     blueprint_id = fields.Many2one(
         "dashboard.blueprint", required=True, ondelete="cascade", index=True
     )
+    host_model_name = fields.Char(
+        related="blueprint_id.host_model_name", readonly=True
+    )
+    graph_model = fields.Char(related="blueprint_id.graph_model", readonly=True)
     sequence = fields.Integer(default=10)
     name = fields.Char(translate=True)
     module_depends = fields.Char(
@@ -6297,6 +6679,10 @@ class DashboardBlueprintActionVariant(models.Model):
         store=True,
         readonly=False,
         ondelete="set null",
+        domain=(
+            "['|', '|', ('res_model', '=', host_model_name), "
+            "('res_model', '=', graph_model), ('res_model', '=', False)]"
+        ),
     )
 
     @api.depends("module_depends")
@@ -6732,13 +7118,19 @@ class DashboardUserPref(models.Model):
     )
     prefs = fields.Json(default=dict)
 
-    graph_model = fields.Char(related="blueprint_id.graph_model", readonly=True)
+    graph_model = fields.Char(
+        compute="_compute_active_graph_model",
+        help="Active chart model: preferred Chart Model Option, else Default, "
+        "else blueprint.",
+    )
     graph_model_id = fields.Many2one(
-        related="blueprint_id.graph_model_id", readonly=True
+        "ir.model",
+        compute="_compute_active_graph_model",
+        help="ir.model for the active chart model (gear Measure domain).",
     )
     scope_warning = fields.Char(
-        related="blueprint_id.scope_warning",
-        readonly=True,
+        compute="_compute_scope_warning",
+        help="Warning for the active Chart Model Option (gear pick or Default).",
     )
     has_restrict_scope = fields.Boolean(
         compute="_compute_scope_block_flags",
@@ -6747,8 +7139,12 @@ class DashboardUserPref(models.Model):
     )
     has_include_scope = fields.Boolean(
         compute="_compute_scope_block_flags",
-        help="Whether this blueprint has any include scope "
-        "(Data to Include) for the Graph Configuration block.",
+        help="Whether any Include scope applies to the active chart model.",
+    )
+    applicable_include_scope_ids = fields.Many2many(
+        "dashboard.blueprint.scope",
+        compute="_compute_applicable_include_scope_ids",
+        help="Include scopes whose domain fits the active chart model.",
     )
 
     scope_ids = fields.Many2many(
@@ -6892,12 +7288,83 @@ class DashboardUserPref(models.Model):
         "ordered_groupby_extra_ids",
     )
 
-    @api.depends("blueprint_id.scope_ids.mode")
+    # One @api.depends only — a second decorator overwrites the first, which
+    # left graph_model stuck on the blueprint model when Chart Model changed.
+    @api.depends(
+        "preferred_graph_variant_id",
+        "preferred_graph_variant_id.graph_model",
+        "preferred_graph_model",
+        "blueprint_id.graph_model",
+        "blueprint_id.graph_model_id",
+        "blueprint_id.graph_variant_ids",
+        "blueprint_id.graph_variant_ids.is_default",
+        "blueprint_id.graph_variant_ids.graph_model",
+    )
+    def _compute_active_graph_model(self):
+        IrModel = self.env["ir.model"]
+        for pref in self:
+            model = False
+            if pref.preferred_graph_variant_id:
+                model = pref.preferred_graph_variant_id.graph_model
+            elif pref.preferred_graph_model:
+                model = pref.preferred_graph_model
+            elif pref.blueprint_id:
+                default = pref.blueprint_id._default_graph_variant()
+                model = (
+                    default.graph_model
+                    if default
+                    else pref.blueprint_id.graph_model
+                )
+            pref.graph_model = model or False
+            pref.graph_model_id = IrModel._get(model) if model else False
+
+    @api.depends(
+        "blueprint_id.scope_ids",
+        "blueprint_id.scope_ids.mode",
+        "blueprint_id.scope_ids.domain",
+        "graph_model",
+    )
     def _compute_scope_block_flags(self):
         for rec in self:
-            modes = set(rec.blueprint_id.scope_ids.mapped("mode"))
-            rec.has_restrict_scope = "restrict" in modes
-            rec.has_include_scope = "include" in modes
+            scopes = rec.blueprint_id.scope_ids
+            rec.has_restrict_scope = any(s.mode == "restrict" for s in scopes)
+            model = rec.graph_model or rec.blueprint_id.graph_model
+            rec.has_include_scope = any(
+                s.mode == "include" and s._domain_applies_to_model(model)
+                for s in scopes
+            )
+
+    @api.depends(
+        "blueprint_id.scope_ids",
+        "blueprint_id.scope_ids.mode",
+        "blueprint_id.scope_ids.domain",
+        "graph_model",
+    )
+    def _compute_applicable_include_scope_ids(self):
+        for pref in self:
+            model = pref.graph_model or pref.blueprint_id.graph_model
+            pref.applicable_include_scope_ids = pref.blueprint_id.scope_ids.filtered(
+                lambda s, m=model: s.mode == "include"
+                and s._domain_applies_to_model(m)
+            )
+
+    @api.depends(
+        "preferred_graph_variant_id",
+        "preferred_graph_variant_id.scope_warning",
+        "blueprint_id.scope_warning",
+        "blueprint_id.graph_variant_ids",
+        "blueprint_id.graph_variant_ids.is_default",
+        "blueprint_id.graph_variant_ids.scope_warning",
+    )
+    def _compute_scope_warning(self):
+        for pref in self:
+            variant = pref.preferred_graph_variant_id
+            if not variant and pref.blueprint_id:
+                variant = pref.blueprint_id._default_graph_variant()
+            warn = (variant.scope_warning or "").strip() if variant else ""
+            if not warn and pref.blueprint_id:
+                warn = (pref.blueprint_id.scope_warning or "").strip()
+            pref.scope_warning = warn or False
 
     @api.depends("groupby_ids", "ordered_groupby_ids")
     def _compute_groupby_is_date(self):
@@ -6914,7 +7381,12 @@ class DashboardUserPref(models.Model):
                 f.ttype in DATE_TYPES or f.is_date_period() for f in ordered
             )
 
-    @api.depends("graph_model", "graph_model_id", "blueprint_id.graph_model")
+    @api.depends(
+        "graph_model",
+        "graph_model_id",
+        "preferred_graph_variant_id",
+        "blueprint_id.graph_model",
+    )
     def _compute_groupby_allowed_field_ids(self):
         Fields = self.env["ir.model.fields"]
         for rec in self:
@@ -7232,34 +7704,13 @@ class DashboardUserPref(models.Model):
                 ranges.append(list(fields.Domain.AND(leaves)))
         return ranges
 
-    def _period_domain(self):
-        """Date ranges for the chosen months / quarters and years.
-
-        Dual date-row filters (H4): ranges from the primary row (e.g.
-        Creation Date) and the optional second row (e.g. Closed Date) are
-        pooled and combined by the single ``period_operator`` — exactly
-        like v1, where one filter-operator spans both date fields.
-        """
-        self.ensure_one()
-        ranges = self._period_ranges(
-            self.period_field_id, self.period_mq_ids, self.period_year_ids
-        )
-        ranges += self._period_ranges(
-            self.period_closed_field_id,
-            self.period_closed_mq_ids,
-            self.period_closed_year_ids,
-        )
-        if not ranges:
-            return []
-        combine = fields.Domain.AND if self.period_operator == "all" else fields.Domain.OR
-        return list(combine(ranges))
-
     def _scope_domains(self):
         """Included and restricting domains from the ticked boxes."""
         self.ensure_one()
         available = self.blueprint_id.scope_ids
         chosen = self.scope_ids & available
-        graph_model = self.blueprint_id.graph_model
+        # Prefer the active Chart Model Option (gear pick / Default).
+        graph_model = self.graph_model or self.blueprint_id.graph_model
         included = [
             s._scope_domain()
             for s in chosen
