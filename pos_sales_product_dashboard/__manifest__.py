@@ -2,7 +2,7 @@
 # Part of GritXi. See LICENSE file for full copyright and licensing details.
 {
     "name": "POS Sales Products Dashboard",
-    "version": "19.0.1.0.3",
+    "version": "19.0.1.0.4",
     "category": "Sales/Point Of Sale",
     "summary": "POS Products kanban dashboard preset for Dynamic Dashboard Engine",
     "author": "GritXi Technologies Pvt. Ltd.",

@@ -10,6 +10,7 @@
         <field name="primary_button_label">Pipeline Analysis</field>
         <field name="primary_action_xmlid">crm.crm_lead_action_pipeline</field>
         <field name="primary_action_context">{"default_type": {"__de__": "group_value", "default": "opportunity", "map": [{"groups": ["crm.group_use_lead"], "value": "lead"}]}}</field>
+        <field name="scope_warning">You cannot disable both 'Pipeline' and 'Leads' because at least one must stay on.</field>
     </record>
 
     <record id="graph_variant_sale_order" model="dashboard.blueprint.graph.variant">

@@ -26,19 +26,20 @@
         <field name="state">published</field>
         <field name="sequence">45</field>
     </record>
+    <!-- Distinct POS orders via lines so the KPI matches the orders list. -->
     <record id="slot_pos_prod_lines" model="dashboard.blueprint.slot">
         <field name="blueprint_id" ref="blueprint_pos_products"/>
         <field name="key">pos_lines</field>
-        <field name="name">POS Lines</field>
+        <field name="name">POS Orders</field>
         <field name="section">kpi</field>
         <field name="sequence">10</field>
-        <field name="label">POS Line</field>
-        <field name="label_plural">POS Lines</field>
+        <field name="label">POS Order</field>
+        <field name="label_plural">POS Orders</field>
         <field name="compute_model">pos.order.line</field>
         <field name="relate_field">product_id</field>
         <field name="compute_domain">[]</field>
-        <field name="compute_aggregator">__count</field>
-        <field name="action_model">pos.order</field>
+        <field name="compute_aggregator">order_id:count_distinct</field>
+        <field name="action_xmlid">point_of_sale.action_pos_pos_form</field>
         <field name="action_domain">[('lines.product_id', '=', '{{id}}')]</field>
         <field name="module_depends">point_of_sale,product</field>
         <field name="show_if_zero" eval="True"/>
@@ -55,7 +56,8 @@
         <field name="compute_model">pos.order.line</field>
         <field name="relate_field">product_id</field>
         <field name="compute_domain">[]</field>
-        <field name="action_model">pos.order</field>
+        <field name="compute_aggregator">order_id:count_distinct</field>
+        <field name="action_xmlid">point_of_sale.action_pos_pos_form</field>
         <field name="action_domain">[('lines.product_id', '=', '{{id}}')]</field>
         <field name="module_depends">point_of_sale,product</field>
     </record>

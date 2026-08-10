@@ -15,15 +15,15 @@
     <record id="slot_pos_prod_kpi_refunds" model="dashboard.blueprint.slot">
         <field name="blueprint_id" ref="blueprint_pos_products"/>
         <field name="key">pos_refund_lines</field>
-        <field name="name">Refund Lines</field>
+        <field name="name">Refunds</field>
         <field name="section">kpi</field>
         <field name="sequence">20</field>
-        <field name="label">Refund line</field>
-        <field name="label_plural">Refund lines</field>
+        <field name="label">Refund</field>
+        <field name="label_plural">Refunds</field>
         <field name="compute_model">pos.order.line</field>
         <field name="relate_field">product_id</field>
-        <field name="compute_domain">[('price_subtotal_incl', '&lt;', 0)]</field>
-        <field name="compute_aggregator">__count</field>
+        <field name="compute_domain">[('order_id.amount_total', '&lt;', 0)]</field>
+        <field name="compute_aggregator">order_id:count_distinct</field>
         <field name="action_xmlid">point_of_sale.action_pos_pos_form</field>
         <field name="action_domain">[('lines.product_id', '=', '{{id}}'), ('amount_total', '&lt;', 0)]</field>
         <field name="module_depends">point_of_sale,product</field>

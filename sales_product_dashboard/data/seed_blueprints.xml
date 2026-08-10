@@ -52,18 +52,22 @@
         <field name="default_on" eval="False"/>
     </record>
 
+    <!--
+      Host link stays on sale.order.line.product_id (M2O). Count distinct
+      order_id so the KPI matches the sale.order list opened by action_xmlid.
+    -->
     <record id="slot_sales_prod_quotations" model="dashboard.blueprint.slot">
         <field name="blueprint_id" ref="blueprint_sales_products"/>
         <field name="key">product_quotations</field>
         <field name="name">Quotations</field>
         <field name="section">kpi</field>
         <field name="sequence">10</field>
-        <field name="label">Quotation line</field>
-        <field name="label_plural">Quotation lines</field>
+        <field name="label">Quotation</field>
+        <field name="label_plural">Quotations</field>
         <field name="compute_model">sale.order.line</field>
         <field name="relate_field">product_id</field>
         <field name="compute_domain">[('state', 'in', ('draft', 'sent'))]</field>
-        <field name="compute_aggregator">__count</field>
+        <field name="compute_aggregator">order_id:count_distinct</field>
         <field name="action_xmlid">sale.action_quotations_with_onboarding</field>
         <field name="action_domain">[('order_line.product_id', '=', '{{id}}'), ('state', 'in', ('draft', 'sent'))]</field>
         <field name="module_depends">sale,product</field>
@@ -78,11 +82,11 @@
         <field name="label_plural">Orders to Deliver</field>
         <field name="compute_model">sale.order.line</field>
         <field name="relate_field">product_id</field>
-        <field name="compute_domain">[('state', '=', 'sale'), ('qty_to_deliver', '&gt;', 0)]</field>
-        <field name="compute_aggregator">__count</field>
+        <field name="compute_domain">[('state', '=', 'sale'), ('order_id.delivery_status', '!=', 'full')]</field>
+        <field name="compute_aggregator">order_id:count_distinct</field>
         <field name="action_xmlid">sale.action_orders</field>
-        <field name="action_domain">[('order_line.product_id', '=', '{{id}}'), ('state', '=', 'sale'), ('order_line.qty_to_deliver', '&gt;', 0)]</field>
-        <field name="module_depends">sale,product,stock</field>
+        <field name="action_domain">[('order_line.product_id', '=', '{{id}}'), ('state', '=', 'sale'), ('delivery_status', '!=', 'full')]</field>
+        <field name="module_depends">sale,product,sale_stock</field>
     </record>
     <record id="slot_sales_prod_to_invoice" model="dashboard.blueprint.slot">
         <field name="blueprint_id" ref="blueprint_sales_products"/>
@@ -90,12 +94,12 @@
         <field name="name">To Invoice</field>
         <field name="section">kpi</field>
         <field name="sequence">30</field>
-        <field name="label">Line to Invoice</field>
-        <field name="label_plural">Lines to Invoice</field>
+        <field name="label">Order to Invoice</field>
+        <field name="label_plural">Orders to Invoice</field>
         <field name="compute_model">sale.order.line</field>
         <field name="relate_field">product_id</field>
         <field name="compute_domain">[('invoice_status', '=', 'to invoice')]</field>
-        <field name="compute_aggregator">__count</field>
+        <field name="compute_aggregator">order_id:count_distinct</field>
         <field name="action_xmlid">sale.action_orders_to_invoice</field>
         <field name="action_domain">[('order_line.product_id', '=', '{{id}}'), ('invoice_status', '=', 'to invoice')]</field>
         <field name="module_depends">sale,product</field>
@@ -111,7 +115,7 @@
         <field name="compute_model">sale.order.line</field>
         <field name="relate_field">product_id</field>
         <field name="compute_domain">[('invoice_status', '=', 'upselling')]</field>
-        <field name="compute_aggregator">__count</field>
+        <field name="compute_aggregator">order_id:count_distinct</field>
         <field name="action_xmlid">sale.action_orders_upselling</field>
         <field name="action_domain">[('order_line.product_id', '=', '{{id}}'), ('invoice_status', '=', 'upselling')]</field>
         <field name="module_depends">sale,product</field>
@@ -128,6 +132,7 @@
         <field name="compute_model">sale.order.line</field>
         <field name="relate_field">product_id</field>
         <field name="compute_domain">[('state', '!=', 'cancel')]</field>
+        <field name="compute_aggregator">order_id:count_distinct</field>
         <field name="action_xmlid">sale.action_orders</field>
         <field name="action_domain">[('order_line.product_id', '=', '{{id}}')]</field>
         <field name="module_depends">sale,product</field>

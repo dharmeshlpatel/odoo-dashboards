@@ -19,12 +19,12 @@
         <field name="name">Quotations</field>
         <field name="section">kpi</field>
         <field name="sequence">20</field>
-        <field name="label">Quotation line</field>
-        <field name="label_plural">Quotation lines</field>
+        <field name="label">Quotation</field>
+        <field name="label_plural">Quotations</field>
         <field name="compute_model">sale.order.line</field>
         <field name="relate_field">product_id</field>
         <field name="compute_domain">[('order_id.website_id', '!=', False), ('state', 'in', ('draft', 'sent'))]</field>
-        <field name="compute_aggregator">__count</field>
+        <field name="compute_aggregator">order_id:count_distinct</field>
         <field name="action_xmlid">sale.action_quotations_with_onboarding</field>
         <field name="action_domain">[('order_line.product_id', '=', '{{id}}'), ('website_id', '!=', False), ('state', 'in', ('draft', 'sent'))]</field>
         <field name="module_depends">website_sale,product</field>
@@ -35,12 +35,12 @@
         <field name="name">To Invoice</field>
         <field name="section">kpi</field>
         <field name="sequence">30</field>
-        <field name="label">Line to Invoice</field>
-        <field name="label_plural">Lines to Invoice</field>
+        <field name="label">Order to Invoice</field>
+        <field name="label_plural">Orders to Invoice</field>
         <field name="compute_model">sale.order.line</field>
         <field name="relate_field">product_id</field>
         <field name="compute_domain">[('order_id.website_id', '!=', False), ('invoice_status', '=', 'to invoice')]</field>
-        <field name="compute_aggregator">__count</field>
+        <field name="compute_aggregator">order_id:count_distinct</field>
         <field name="action_xmlid">sale.action_orders_to_invoice</field>
         <field name="action_domain">[('order_line.product_id', '=', '{{id}}'), ('website_id', '!=', False), ('invoice_status', '=', 'to invoice')]</field>
         <field name="module_depends">website_sale,product</field>
@@ -92,8 +92,9 @@
         <field name="compute_model">sale.order.line</field>
         <field name="relate_field">product_id</field>
         <field name="compute_domain">[('order_id.website_id', '!=', False), ('state', 'in', ('sale', 'done'))]</field>
+        <field name="compute_aggregator">order_id:count_distinct</field>
         <field name="action_xmlid">sale.action_orders</field>
-        <field name="action_domain">[('order_line.product_id', '=', '{{id}}'), ('website_id', '!=', False)]</field>
+        <field name="action_domain">[('order_line.product_id', '=', '{{id}}'), ('website_id', '!=', False), ('state', 'in', ('sale', 'done'))]</field>
         <field name="module_depends">website_sale,product</field>
     </record>
 

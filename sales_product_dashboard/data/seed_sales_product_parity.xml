@@ -77,6 +77,7 @@
         <field name="compute_model">sale.order.line</field>
         <field name="relate_field">product_id</field>
         <field name="compute_domain">[('state', 'in', ('sale', 'done'))]</field>
+        <field name="compute_aggregator">order_id:count_distinct</field>
         <field name="action_xmlid">sale.action_orders</field>
         <field name="action_domain">[('order_line.product_id', '=', '{{id}}'), ('state', 'in', ('sale', 'done'))]</field>
         <field name="module_depends">sale,product</field>
@@ -110,6 +111,7 @@
         <field name="compute_model">account.move.line</field>
         <field name="relate_field">product_id</field>
         <field name="compute_domain">[('move_id.move_type', 'in', ('out_invoice', 'out_refund')), ('move_id.state', '!=', 'cancel')]</field>
+        <field name="compute_aggregator">move_id:count_distinct</field>
         <field name="action_xmlid">account.action_move_out_invoice_type</field>
         <field name="action_domain">[('invoice_line_ids.product_id', '=', '{{id}}'), ('move_type', 'in', ('out_invoice', 'out_refund'))]</field>
         <field name="module_depends">sale,account</field>

@@ -2,7 +2,7 @@
 # Part of GritXi. See LICENSE file for full copyright and licensing details.
 {
     "name": "Sales Products Dashboard",
-    "version": "19.0.1.0.4",
+    "version": "19.0.1.0.5",
     "category": "Sales",
     "summary": "Sales Products kanban dashboard preset for Dynamic Dashboard Engine",
     "author": "GritXi Technologies Pvt. Ltd.",
