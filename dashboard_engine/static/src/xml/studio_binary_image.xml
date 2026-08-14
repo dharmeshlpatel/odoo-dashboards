@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<templates xml:space="preserve">
+
+    <t t-name="dashboard_engine.StudioBinaryImage">
+        <div class="o_ds_studio_binary_image">
+            <Record
+                resModel="'dashboard.blueprint'"
+                fields="fields"
+                fieldNames="fieldNames"
+                values="values"
+                mode="'edit'"
+                hooks="hooks"
+                t-slot-scope="slot">
+                <ImageField
+                    name="props.fieldName"
+                    record="slot.record"
+                    width="props.width"
+                    height="props.height"
+                    readonly="false"/>
+            </Record>
+        </div>
+    </t>
+
+</templates>

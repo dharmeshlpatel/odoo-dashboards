@@ -35,4 +35,22 @@
         <field name="view_mode">form</field>
         <field name="target">new</field>
     </record>
+
+    <!-- List header (after import action exists — menus no longer expose this). -->
+    <record id="view_dashboard_blueprint_tree_import" model="ir.ui.view">
+        <field name="name">dashboard.blueprint.list.import</field>
+        <field name="model">dashboard.blueprint</field>
+        <field name="inherit_id" ref="view_dashboard_blueprint_tree"/>
+        <field name="arch" type="xml">
+            <xpath expr="//list" position="inside">
+                <header>
+                    <button name="%(action_dashboard_blueprint_import_wizard)d"
+                            type="action"
+                            string="Import Template"
+                            display="always"
+                            groups="dashboard_engine.group_dashboard_engine_manager"/>
+                </header>
+            </xpath>
+        </field>
+    </record>
 </odoo>

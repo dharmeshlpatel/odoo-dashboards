@@ -243,6 +243,19 @@ class TestDashboardStudio(TransactionCase):
             if row["ttype"] in ("date", "datetime"):
                 self.assertTrue(row["name"].startswith("x_"))
 
+        Fields = self.env["ir.model.fields"]
+        Fields.ensure_date_period_fields(bp.host_model_name)
+        period_names = set(Fields._dashboard_date_period_names(bp.host_model_name))
+        self.assertTrue(period_names)
+        self.assertTrue(any(row["name"] in period_names for row in groupby))
+        # Period tags must not appear in general field / domain catalogs.
+        general = bp.studio_model_fields(bp.host_model_name)
+        self.assertFalse(any(row["name"] in period_names for row in general))
+        partner_meta = self.env["res.partner"].fields_get(list(period_names))
+        for name in period_names:
+            if name in partner_meta:
+                self.assertFalse(partner_meta[name].get("searchable"))
+
         stored = bp.studio_model_fields(
             bp.host_model_name, ["integer", "float", "monetary"], True
         )
@@ -401,6 +414,52 @@ class TestDashboardStudio(TransactionCase):
         self.assertTrue(preview["ok"])
         keys = [k["key"] for k in preview["slots"]["kpis"]]
         self.assertIn("child_count", keys)
+
+    def test_studio_preview_primary_follows_default_not_pref(self):
+        """Left Studio card uses Default Chart Model Option, not gear pick."""
+        bp = self._studio_blueprint()
+        bp.write(
+            {
+                "primary_action_xmlid": "base.action_partner_form",
+                "graph_data_field": "parent_id",
+            }
+        )
+        first = bp.studio_create_graph_variant(
+            {
+                "graph_model": "res.partner",
+                "primary_button_label": "Default Label",
+                "primary_action_xmlid": "base.action_partner_form",
+                "graph_data_field": "parent_id",
+            }
+        )["created_graph_variant_id"]
+        second = bp.studio_create_graph_variant(
+            {
+                "graph_model": "res.partner",
+                "primary_button_label": "Gear Pick Label",
+                "primary_action_xmlid": "base.action_partner_form",
+                "graph_data_field": "commercial_partner_id",
+            }
+        )["created_graph_variant_id"]
+        bp.studio_set_default_graph_variant(first)
+        self.env["dashboard.user.pref"].create(
+            {
+                "blueprint_id": bp.id,
+                "user_id": self.env.user.id,
+                "preferred_graph_variant_id": second,
+            }
+        )
+        partner = self.env["res.partner"].create({"name": "Studio Default Co"})
+        # Studio left preview stays on Default even if gear prefers another.
+        preview = bp.studio_preview_payload(partner.id)
+        self.assertEqual(preview["primary_label"], "Default Label")
+        bp.studio_set_default_graph_variant(second)
+        preview = bp.studio_preview_payload(partner.id)
+        self.assertEqual(preview["primary_label"], "Gear Pick Label")
+        # Context flag forces Default resolution path used by Studio.
+        self.assertEqual(
+            bp.with_context(dashboard_studio_preview=True)._resolved_primary_label(),
+            "Gear Pick Label",
+        )
 
     def test_action_open_studio_for_key(self):
         bp = self._studio_blueprint()
@@ -737,9 +796,20 @@ class TestDashboardStudio(TransactionCase):
         self.assertEqual(scope.description, "Lead rows")
         self.assertTrue(scope.default_on)
         other = bp.studio_create_scope(
-            {"name": "Mine", "mode": "restrict", "domain": "[]"}
+            {
+                "name": "Mine",
+                "mode": "restrict",
+                "domain": "[]",
+                "restrict_kind": "mine",
+                "merge_noun": "opportunities",
+            }
         )
         oid = other["created_scope_id"]
+        mine = self.env["dashboard.blueprint.scope"].browse(oid)
+        self.assertEqual(mine.restrict_kind, "mine")
+        self.assertEqual(mine.merge_noun, "opportunities")
+        bp.studio_write_scope(oid, {"restrict_kind": "my_team"})
+        self.assertEqual(mine.restrict_kind, "my_team")
         bp.studio_reorder_scopes([oid, sid])
         names = bp.scope_ids.sorted("sequence").mapped("name")
         self.assertEqual(names[:2], ["Mine", "Leads"])

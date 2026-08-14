@@ -1,40 +1,46 @@
 .o_dashboard_studio {
-    /* Odoo Enterprise brand primary (purple) — same as btn-primary / --primary. */
-    --ds-accent: var(--primary, #714B67);
-    --ds-accent-soft: rgba(113, 75, 103, 0.12);
-    --ds-action: #017e84; /* Enterprise action / links only */
-    --ds-border: #e7e9ed;
-    --ds-border-strong: #d8dadd;
-    --ds-panel: #f9fafb;
-    --ds-card: #fff;
-    --ds-ink: #111827;
-    --ds-muted: #6b7280;
-    --ds-radius: 0.25rem;
     /*
-      Odoo form-like spacing (readable Studio).
-      Aligns with form inner-group gaps / label rhythm.
+      Native Odoo backend form rhythm (not website).
+      Tokens follow Enterprise form / Settings surfaces.
     */
+    --ds-accent: var(--primary, #714B67);
+    --ds-accent-soft: color-mix(in srgb, var(--primary, #714B67) 12%, transparent);
+    --ds-action: #017e84; /* Enterprise action / links only */
+    --ds-border: var(--border-color, #dee2e6);
+    --ds-border-strong: var(--border-color, #d8dadd);
+    --ds-panel: var(--o-view-background-color, #f8f9fa);
+    --ds-card: var(--o-view-background-color, #fff);
+    --ds-ink: var(--body-color, #212529);
+    --ds-muted: var(--secondary-color, var(--gray-600, #6c757d));
+    --ds-radius: var(--border-radius, 0.25rem);
     --ds-space-xs: 0.25rem;
     --ds-space-sm: 0.5rem;
     --ds-space-md: 0.75rem;
     --ds-space-lg: 1rem;
     --ds-space-xl: 1.25rem;
+    /* Match o_form_label: base size + bold */
     --ds-label-size: 0.875rem;
-    --ds-label-weight: 500;
-    --ds-help-size: 0.75rem;
+    --ds-label-weight: 700;
+    --ds-help-size: 0.8125rem;
     --ds-help-lh: 1.45;
-    --ds-title-size: 0.95rem;
-    --ds-field-gap: var(--ds-space-sm);
-    --ds-stack-gap: var(--ds-space-lg);
+    --ds-title-size: 1rem;
+    --ds-field-gap: 0.35rem;
+    --ds-stack-gap: var(--ds-space-md);
     --ds-section-pad: var(--ds-space-lg);
-    background: #f9fafb;
+    --ds-control-font: 0.875rem;
+    --ds-control-pad-y: 0.375rem;
+    --ds-control-pad-x: 0.75rem;
+    --ds-control-min-height: calc(1.5em + 0.75rem + 2px);
+    background: var(--ds-panel);
     color: var(--ds-ink);
     min-height: 100%;
+    font-size: var(--ds-control-font);
 
-    /* Form controls — match Enterprise boxed inputs (no focus glow). */
+    /* Form controls — same box as Odoo o_input / form fields. */
     .form-control,
     .form-select,
-    .input-group-text {
+    .input-group-text,
+    .o_input {
         border-radius: var(--ds-radius);
         border: 1px solid var(--ds-border);
         background-color: #fff;
@@ -42,17 +48,19 @@
         box-shadow: none;
     }
     .form-control,
-    .form-select {
-        min-height: calc(1.5em + 0.75rem + 2px);
-        padding: 0.375rem 0.75rem;
-        font-size: 0.875rem;
+    .form-select,
+    .o_input {
+        min-height: var(--ds-control-min-height);
+        padding: var(--ds-control-pad-y) var(--ds-control-pad-x);
+        font-size: var(--ds-control-font);
         line-height: 1.5;
     }
+    /* Studio often uses *-sm; bump to full form-field size (proposed look). */
     .form-control-sm,
     .form-select-sm {
-        min-height: calc(1.5em + 0.5rem + 2px);
-        padding: 0.25rem 0.5rem;
-        font-size: 0.8125rem;
+        min-height: var(--ds-control-min-height);
+        padding: var(--ds-control-pad-y) var(--ds-control-pad-x);
+        font-size: var(--ds-control-font);
     }
     .form-text {
         margin-top: var(--ds-space-xs);
@@ -121,9 +129,10 @@
         display: flex;
         align-items: center;
         min-width: 0;
-        .fa-magic {
-            color: var(--ds-accent);
-            font-size: 1.35rem;
+        /* Icon sits on the purple STUDIO badge — must be white, not accent */
+        .o_ds_studio_mark .fa {
+            color: #fff;
+            font-size: 0.9em;
         }
     }
     .o_ds_title {
@@ -167,14 +176,19 @@
         }
     }
     .o_ds_setup_mode {
-        max-width: 1200px;
-        margin-left: auto;
-        margin-right: auto;
+        width: 100%;
+        max-width: 100%;
+        min-width: 0;
+        overflow-x: hidden;
+        overflow-y: auto;
+        margin-left: 0;
+        margin-right: 0;
 
         .o_ds_setup_grid {
             display: grid;
-            grid-template-columns: 1fr 1fr;
+            grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
             gap: var(--ds-space-xl);
+            width: 100%;
             @media (max-width: 992px) {
                 grid-template-columns: 1fr;
             }
@@ -206,6 +220,12 @@
                 margin-top: var(--ds-space-xs);
             }
         }
+        .o_ds_setup_action_ref {
+            .o_ds_setup_action_type {
+                flex: 0 0 14rem;
+                max-width: 40%;
+            }
+        }
         .o_ds_setup_value,
         .o_ds_setup_card .form-control {
             min-height: 38px;
@@ -228,28 +248,36 @@
             max-height: 200px;
             overflow: auto;
         }
-        .o_ds_setup_chips {
-            min-height: 2rem;
-            display: flex;
-            flex-wrap: wrap;
-            align-items: center;
-            gap: 0.25rem;
-            .btn-close {
-                font-size: 0.55rem;
-                vertical-align: middle;
-            }
-        }
         .o_ds_setup_file {
             width: 100%;
-            min-height: 38px;
+            min-height: var(--ds-control-min-height);
         }
         .o_ds_setup_icon_preview {
             max-height: 48px;
             max-width: 48px;
             object-fit: contain;
         }
+        .o_ds_studio_binary_image {
+            .o_field_image img,
+            img {
+                border: 1px solid var(--ds-border, var(--o-input-border-color));
+                border-radius: var(--ds-radius, var(--border-radius));
+                background: var(--ds-panel, #f8f9fa);
+            }
+        }
+        /* Setup labels match .o_ds_field / Odoo form labels */
+        .o_ds_setup_field > .form-label {
+            font-size: var(--ds-label-size);
+            font-weight: var(--ds-label-weight);
+            color: var(--o-form-label-color, var(--ds-ink));
+            margin-bottom: var(--ds-field-gap);
+        }
     }
     .o_ds_layout_mode {
+        overflow-x: hidden;
+        overflow-y: auto;
+        min-width: 0;
+        max-width: 100%;
         .o_ds_layout_col {
             background: var(--ds-panel);
             min-height: 72px;
@@ -294,15 +322,6 @@
             &.o_ds_layout_tile_manage { background: #343a40; }
         }
     }
-    .o_ds_dev_options {
-        border: 1px dashed var(--ds-border);
-        border-radius: var(--ds-radius);
-        padding: 0.35rem 0.6rem;
-        summary {
-            cursor: pointer;
-            user-select: none;
-        }
-    }
     .o_ds_zones {
         display: flex;
         flex-wrap: wrap;
@@ -339,8 +358,14 @@
         gap: var(--ds-space-lg);
         padding: var(--ds-space-lg) var(--ds-space-xl) var(--ds-space-xl);
         min-height: 0;
+        min-width: 0;
+        /* Setup / Layout / Content workspace are full-width single panes. */
+        &:has(.o_ds_setup_mode),
+        &:has(.o_ds_layout_mode),
         &:has(.o_ds_workspace) {
             grid-template-columns: 1fr;
+        }
+        &:has(.o_ds_workspace) {
             padding: 0;
             gap: 0;
         }
@@ -357,9 +382,13 @@
         display: grid;
         grid-template-columns: 76px minmax(0, 40fr) minmax(0, 60fr);
         min-height: 0;
+        min-width: 0;
         height: 100%;
         background: #fff;
         border-top: 1px solid var(--ds-border);
+        > * {
+            min-width: 0;
+        }
     }
     @media (max-width: 1100px) {
         .o_ds_workspace {
@@ -422,6 +451,7 @@
         display: inline-flex;
         align-items: center;
         justify-content: center;
+        gap: 0.3rem;
         padding: 0.35rem 0.55rem;
         border-radius: var(--ds-radius);
         background: var(--ds-accent);
@@ -430,6 +460,9 @@
         font-weight: 800;
         letter-spacing: 0.04em;
         text-transform: uppercase;
+        .fa {
+            color: #fff;
+        }
     }
 
     .o_ds_properties_pane {
@@ -440,6 +473,8 @@
         display: flex;
         flex-direction: column;
         min-height: 0;
+        min-width: 0;
+        overflow: hidden;
         background: #fff;
     }
 
@@ -774,9 +809,12 @@
         font-weight: 700;
     }
     .o_ds_editor_scroll {
-        overflow: auto;
+        overflow-x: hidden;
+        overflow-y: auto;
         padding: 1rem 1.1rem 1.25rem;
         flex: 1;
+        min-width: 0;
+        max-width: 100%;
     }
     .o_ds_item_list {
         display: flex;
@@ -869,6 +907,8 @@
         display: flex;
         flex-direction: column;
         gap: var(--ds-stack-gap);
+        min-width: 0;
+        max-width: 100%;
     }
     .o_ds_studio_section,
     .o_ds_slot_section {
@@ -881,7 +921,7 @@
     .o_ds_slot_section_head {
         display: flex;
         align-items: flex-start;
-        justify-content: space-between;
+        justify-content: flex-start; /* number + title always left */
         gap: var(--ds-space-md);
         padding: var(--ds-space-md) var(--ds-section-pad);
         background: var(--ds-panel);
@@ -893,6 +933,11 @@
         gap: var(--ds-space-md);
         min-width: 0;
         flex: 1 1 auto;
+    }
+    /* Slot heads sometimes omit head_main — keep step + title as one left cluster */
+    .o_ds_slot_section_head > .o_ds_slot_step + div {
+        flex: 1 1 auto;
+        min-width: 0;
     }
     .o_ds_studio_step,
     .o_ds_slot_step {
@@ -929,6 +974,8 @@
         display: flex;
         flex-direction: column;
         gap: var(--ds-space-md);
+        min-width: 0;
+        max-width: 100%;
         /* Gap owns vertical rhythm; drop stacked field margins inside. */
         > .o_ds_field,
         > .o_ds_field_row,
@@ -941,12 +988,27 @@
     .o_ds_studio_group,
     .o_ds_slot_group {
         margin-top: var(--ds-space-md);
-        padding: var(--ds-space-md) var(--ds-space-md) var(--ds-space-lg);
+        padding: var(--ds-space-md) var(--ds-space-md) var(--ds-space-lg)
+            calc(var(--ds-space-md) + 0.15rem);
         border-left: 3px solid var(--ds-accent, #714b67);
         background: rgba(0, 0, 0, 0.02);
         border-radius: 0 var(--ds-radius) var(--ds-radius) 0;
+        min-width: 0;
+        max-width: 100%;
+        box-sizing: border-box;
         &:first-child {
             margin-top: 0;
+        }
+        /* Title + help + action button row: keep help readable */
+        > .d-flex {
+            gap: var(--ds-space-md);
+            > div:first-child {
+                flex: 1 1 auto;
+                min-width: 0;
+            }
+            > .btn {
+                flex: 0 0 auto;
+            }
         }
     }
     .o_ds_studio_group_title,
@@ -962,8 +1024,9 @@
     .o_ds_slot_group_help {
         margin: 0 0 var(--ds-space-md);
         font-size: var(--ds-help-size);
-        line-height: var(--ds-help-lh);
+        line-height: 1.45;
         color: var(--ds-muted);
+        max-width: 42rem;
     }
     .o_ds_fieldset {
         background: transparent;
@@ -1043,7 +1106,8 @@
         gap: 0.25rem;
         .o_ds_link_hop {
             width: auto;
-            min-width: 9rem;
+            min-width: 0;
+            flex: 1 1 5.5rem;
             max-width: 100%;
         }
         .o_ds_link_sep {
@@ -1052,17 +1116,11 @@
             user-select: none;
         }
     }
+    /* Legacy chip helpers — prefer MultiRecordSelector; keep for any leftover badges */
     .o_ds_groupby_chips {
         display: flex;
         flex-wrap: wrap;
         gap: 0.35rem;
-    }
-    .o_ds_groupby_chip {
-        display: inline-flex;
-        align-items: center;
-        gap: 0.15rem;
-        padding: 0.35rem 0.5rem;
-        font-weight: 500;
     }
     .o_ds_scope_list {
         display: flex;
@@ -1075,13 +1133,19 @@
         flex-direction: column;
         gap: var(--ds-space-sm);
         margin-bottom: var(--ds-space-md);
-        overflow-x: auto;
+        width: 100%;
+        min-width: 0;
+        max-width: 100%;
+        overflow-x: hidden;
     }
     .o_ds_variant_card {
         display: flex;
         flex-direction: column;
         gap: 0;
-        min-width: 48rem;
+        width: 100%;
+        min-width: 0;
+        max-width: 100%;
+        box-sizing: border-box;
         border: 1px solid var(--ds-border);
         border-radius: var(--ds-radius);
         background: #fff;
@@ -1089,18 +1153,201 @@
             border: none;
             border-radius: 0;
             min-width: 0;
+            width: 100%;
         }
         &.is-default {
             border-color: #b89aaf;
         }
         &.is-open {
             border-left: 3px solid var(--ds-accent);
+            /* Card already has the accent bar — no nested bar; pad text clear of it. */
+            > .o_ds_slot_group.o_ds_action_defaults,
+            > .o_ds_variant_advanced_rules {
+                width: 100%;
+                max-width: 100%;
+                box-sizing: border-box;
+                margin: 0;
+                padding: var(--ds-space-md) var(--ds-space-md) var(--ds-space-md)
+                    calc(var(--ds-space-md) + 0.25rem);
+                border-left: 0;
+                background: transparent;
+                border-radius: 0;
+            }
+            > .o_ds_slot_group.o_ds_action_defaults {
+                .o_ds_slot_group_title {
+                    margin-bottom: var(--ds-space-xs);
+                }
+                .o_ds_slot_group_help {
+                    max-width: 42rem;
+                    line-height: 1.45;
+                    margin-bottom: var(--ds-space-md);
+                }
+            }
+            > .o_ds_variant_advanced_rules {
+                padding-top: 0;
+            }
+        }
+        &.is-shared {
+            border-style: dashed;
+            background: var(--ds-panel);
+            .o_ds_variant_readonly {
+                pointer-events: none;
+                opacity: 0.92;
+            }
+            .o_ds_variant_shared_banner {
+                border-radius: 0 0 var(--ds-radius) var(--ds-radius);
+                margin: 0;
+                border-top: 1px dashed var(--ds-border);
+            }
+        }
+    }
+    .o_ds_variant_advanced_rules {
+        padding: 0 var(--ds-space-md);
+        width: 100%;
+        min-width: 0;
+        max-width: 100%;
+        box-sizing: border-box;
+    }
+    .o_ds_variant_dev_options {
+        border: 1px dashed var(--ds-border);
+        border-radius: var(--ds-radius);
+        padding: 0.35rem 0.6rem;
+        margin: 0.35rem 0 0;
+        summary.o_form_label,
+        summary {
+            cursor: pointer;
+            user-select: none;
+            list-style: none;
+            display: block;
+            margin: 0;
+            padding: 0.15rem 0;
+            font-size: var(--ds-label-size);
+            font-weight: var(--ds-label-weight);
+            color: var(--o-form-label-color, var(--bs-emphasis-color, var(--ds-ink)));
+            line-height: 1.3;
+            &::-webkit-details-marker {
+                display: none;
+            }
+            &::before {
+                content: "▸";
+                display: inline-block;
+                width: 0.9rem;
+                color: var(--ds-muted);
+                font-weight: 400;
+            }
+        }
+        &[open] > summary::before {
+            content: "▾";
+        }
+        .o_ds_variant_dev_options_body {
+            display: flex;
+            flex-direction: column;
+            gap: var(--ds-space-md);
+            padding: var(--ds-space-sm) 0 var(--ds-space-xs);
+            min-width: 0;
+        }
+        .o_ds_variant_step_block {
+            display: flex;
+            flex-direction: column;
+            gap: var(--ds-space-md);
+            margin: 0;
+            padding: var(--ds-space-md) 0 0;
+            border-top: 1px dashed rgba(0, 0, 0, 0.08);
+            min-width: 0;
+            &:first-of-type {
+                padding-top: var(--ds-space-sm);
+            }
+        }
+        .o_ds_variant_step_subtitle {
+            display: block;
+            margin: 0;
+            font-size: var(--ds-label-size);
+            font-weight: var(--ds-label-weight);
+            color: var(--o-form-label-color, var(--bs-emphasis-color, var(--ds-ink)));
+            line-height: 1.3;
+            min-width: 0;
+        }
+        .o_ds_variant_step_head_row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: var(--ds-space-md);
+            min-width: 0;
+            .o_ds_variant_step_subtitle {
+                flex: 1 1 auto;
+                min-width: 0;
+            }
+            > .btn {
+                flex: 0 0 auto;
+            }
+        }
+        .o_ds_variant_step_help {
+            margin: 0;
+            font-size: var(--ds-help-size);
+            line-height: var(--ds-help-lh);
+            color: var(--ds-muted);
+        }
+        .o_ds_variant_alt_action_list {
+            display: flex;
+            flex-direction: column;
+            gap: var(--ds-space-md);
+            margin-top: var(--ds-space-sm);
+            width: 100%;
+            min-width: 0;
+        }
+        .o_ds_variant_alt_action_card {
+            display: flex;
+            flex-direction: column;
+            gap: 0;
+            min-width: 0;
+            border: 1px solid var(--ds-border);
+            border-radius: var(--ds-radius);
+            background: #fff;
+            box-shadow: 0 1px 0 rgba(0, 0, 0, 0.04);
+            overflow: hidden;
+            .o_ds_variant_alt_action_head {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: var(--ds-space-sm);
+                padding: var(--ds-space-sm) var(--ds-space-md);
+                background: var(--ds-panel);
+                border-bottom: 1px solid var(--ds-border);
+                min-width: 0;
+            }
+            .o_ds_variant_alt_action_title {
+                font-size: var(--ds-label-size);
+                font-weight: var(--ds-label-weight);
+                color: var(--o-form-label-color, var(--bs-emphasis-color, var(--ds-ink)));
+                line-height: 1.3;
+                min-width: 0;
+            }
+            .o_ds_variant_alt_action_remove {
+                flex: 0 0 auto;
+                margin: 0;
+                line-height: 1;
+                opacity: 0.7;
+                &:hover {
+                    opacity: 1;
+                    color: var(--bs-danger, #dc3545) !important;
+                }
+            }
+            .o_ds_variant_alt_action_body {
+                display: flex;
+                flex-direction: column;
+                gap: var(--ds-space-md);
+                padding: var(--ds-space-md);
+                min-width: 0;
+            }
         }
     }
     .o_ds_variant_defaults {
         padding: 0 var(--ds-space-md) var(--ds-space-md);
         border-top: 1px dashed var(--ds-border);
         width: 100%;
+        min-width: 0;
+        max-width: 100%;
+        box-sizing: border-box;
         .o_ds_variant_defaults_body {
             display: flex;
             flex-direction: column;
@@ -1162,6 +1409,10 @@
             gap: var(--ds-space-md) var(--ds-space-lg);
             align-items: start;
             width: 100%;
+            min-width: 0;
+            @media (max-width: 900px) {
+                grid-template-columns: 1fr;
+            }
         }
         .o_ds_variant_metric_agg select:disabled {
             opacity: 0.55;
@@ -1227,27 +1478,23 @@
             flex-direction: column;
         }
         .o_ds_variant_date_defaults_row {
-            /* Breathing room above/below each ---- separator */
+            /* Label → help → chips (stacked, like Odoo form fields) */
+            display: flex;
+            flex-direction: column;
+            align-items: stretch;
+            gap: var(--ds-field-gap);
             padding: var(--ds-space-md) 0;
             border-top: 1px dashed rgba(0, 0, 0, 0.08);
             &:last-child {
                 padding-bottom: var(--ds-space-xs);
             }
+            .form-text,
             .o_ds_variant_step_help {
-                margin: var(--ds-space-sm) 0 0;
+                margin: 0;
             }
-        }
-        .o_ds_variant_date_defaults_main {
-            /* Title + period chips on one line */
-            display: flex;
-            flex-wrap: wrap;
-            align-items: center;
-            gap: var(--ds-space-sm) var(--ds-space-lg);
         }
         .o_ds_variant_date_defaults_label {
             /* Match Odoo form field labels (o_form_label) */
-            flex: 0 0 auto;
-            white-space: nowrap;
             font-size: var(--ds-label-size);
             font-weight: var(--ds-label-weight);
             color: var(--o-form-label-color, var(--ds-ink));
@@ -1257,7 +1504,6 @@
         .o_ds_period_chips {
             display: flex;
             flex-wrap: wrap;
-            flex: 1 1 12rem;
             gap: 0.15rem 0.65rem;
             align-items: center;
             min-width: 0;
@@ -1284,24 +1530,39 @@
         }
     }
     .o_ds_variant_row {
-        // fold | handle | # | Default | model | link | button | action | trash
-        --ds-variant-cols: 1.5rem 2.75rem 1.75rem 3.75rem minmax(9rem, 1.2fr) minmax(10rem, 1.45fr)
-            minmax(6.5rem, 0.95fr) minmax(9rem, 1.3fr) 2.25rem;
+        // fold | handle | # | model | link | button | action | Default | trash
+        // Flexible fr columns — no fixed min-width so the right Studio pane
+        // never gets a horizontal scrollbar for Chart Model Options.
+        --ds-variant-cols: 1.35rem 2.35rem 1.4rem minmax(0, 1.15fr) minmax(0, 1.35fr)
+            minmax(0, 0.9fr) minmax(0, 1.2fr) 3.25rem 2rem;
         display: grid;
         grid-template-columns: var(--ds-variant-cols);
-        gap: 0.4rem;
+        gap: 0.35rem;
         align-items: start;
         padding: 0.4rem 0.45rem;
         border: 1px solid var(--ds-border);
         border-radius: var(--ds-radius);
         background: #fff;
-        min-width: 48rem;
+        width: 100%;
+        min-width: 0;
+        max-width: 100%;
+        box-sizing: border-box;
         cursor: grab;
         > * {
             min-width: 0;
         }
+        .o_ds_record_selector,
+        .o_field_widget,
+        .o_input {
+            max-width: 100%;
+            min-width: 0;
+        }
         input.form-control {
             width: 100%;
+            max-width: 100%;
+        }
+        .form-select {
+            max-width: 100%;
         }
         > button.btn-outline-secondary {
             justify-self: end;
@@ -1317,7 +1578,6 @@
             border: none;
             background: transparent;
             padding: 0 0.45rem 0.35rem;
-            min-width: 48rem;
             cursor: default;
             align-items: center;
             > span {
@@ -1405,7 +1665,8 @@
             flex-wrap: wrap;
         }
         .o_ds_link_hop {
-            min-width: 6.5rem;
+            min-width: 0;
+            flex: 1 1 4.5rem;
             max-width: 100%;
             font-size: 0.75rem;
         }
@@ -1430,6 +1691,10 @@
         border-radius: var(--ds-radius);
         background: #fff;
         cursor: grab;
+        &.o_ds_scope_row--restrict {
+            // + Kind + Short name
+            grid-template-columns: 2.5rem 1fr 1fr minmax(6rem, 0.7fr) minmax(6rem, 0.8fr) minmax(8rem, 1.4fr) 2.5rem 2rem;
+        }
         &.o_ds_scope_row--no_default {
             // Default ticks live on each Chart Model Option
             grid-template-columns: 2.5rem 1fr 1fr minmax(8rem, 1.6fr) 2rem;
@@ -1535,14 +1800,7 @@
         width: 100%;
     }
     .o_ds_header_meta_field {
-        display: flex;
-        flex-direction: column;
-        gap: 0.2rem;
-        span {
-            font-size: 0.74rem;
-            font-weight: 600;
-            color: var(--ds-muted);
-        }
+        min-width: 0;
     }
     .o_ds_header_fields_col {
         min-width: 0;
@@ -1577,41 +1835,126 @@
         flex-direction: column;
         gap: var(--ds-field-gap);
         margin-bottom: var(--ds-space-md);
-        &:last-child {
+        &:last-child,
+        &.mb-0 {
             margin-bottom: 0;
         }
-        /* Match Odoo form field labels (o_form_label) */
-        > span {
+        /* Match Odoo form field labels (o_form_label) — force over browser <label> styles */
+        > span,
+        > .o_form_label {
+            display: inline-block;
+            margin: 0;
+            padding: 0;
             font-size: var(--ds-label-size);
             font-weight: var(--ds-label-weight);
-            color: var(--o-form-label-color, var(--ds-ink));
+            color: var(--o-form-label-color, var(--bs-emphasis-color, var(--ds-ink)));
             line-height: 1.3;
         }
         > .form-text,
         > .o_ds_variant_step_help {
             margin-top: 0;
+            font-size: var(--ds-help-size);
+            line-height: var(--ds-help-lh);
+            color: var(--ds-muted);
+        }
+        .o_field_many2many_tags,
+        .o_field_many2many_ordered_tags,
+        .o_field_widget,
+        .o_ds_record_selector {
+            width: 100%;
         }
     }
+    /* <label class="o_ds_field"> must stay a column stack (Odoo/Bootstrap label rules otherwise flatten it) */
+    label.o_ds_field {
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
+        width: 100%;
+        min-width: 0;
+    }
+
+    /*
+      Shared kit skin — RecordSelector / MultiRecordSelector everywhere
+      (Setup, Header, Graph, Slots, When Opened).
+
+      One outer shell only. Search types inside that shell (no second
+      bordered input — that made Chart Model look messy on hover).
+    */
+    .o_ds_record_selector {
+        width: 100%;
+        min-width: 0;
+        /* Same chevron as Bootstrap .form-select (not Odoo triangle caret) */
+        --ds-select-chevron: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%236c757d' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m2 5 6 6 6-6'/%3e%3c/svg%3e");
+        .o_record_selector,
+        .o_multi_record_selector {
+            position: relative;
+            display: flex;
+            flex-wrap: nowrap !important; /* stock uses flex-wrap; caret must stay on same line */
+            align-items: center;
+            gap: 0.25rem;
+            min-width: 0;
+            width: 100%;
+            min-height: var(--ds-control-min-height);
+            border: 1px solid var(--ds-border);
+            border-radius: var(--ds-radius);
+            padding: 0.25rem 2rem 0.25rem 0.75rem;
+            background-color: #fff;
+            background-image: var(--ds-select-chevron);
+            background-repeat: no-repeat;
+            background-position: right 0.75rem center;
+            background-size: 12px 12px;
+            font-size: var(--ds-control-font);
+            overflow: hidden;
+            .o-autocomplete {
+                flex: 1 1 auto;
+                min-width: 0;
+                width: auto !important;
+                max-width: 100%;
+            }
+            .o_input,
+            .o-autocomplete--input {
+                border: 0 !important;
+                background: transparent !important;
+                box-shadow: none !important;
+                outline: none;
+                padding: 0;
+                min-height: 0;
+                width: 100%;
+                font-size: inherit;
+                line-height: 1.4;
+            }
+            /* Hide stock triangle caret (o-caret-down) — shell uses form-select chevron */
+            .o_dropdown_button {
+                display: none !important;
+            }
+            .o_record_autocomplete_with_caret::after {
+                display: none !important;
+                content: none !important;
+            }
+        }
+    }
+    .o_tag.badge,
+    .o_badge.badge,
+    .o_field_many2many_tags .badge,
+    .o_field_many2many_ordered_tags .badge,
+    .o_multi_record_selector .o_tag.badge {
+        border-radius: 50rem !important;
+        font-weight: 500;
+        font-size: var(--ds-control-font);
+        line-height: 1.5;
+    }
+    /* Prefer stock CheckBox; keep .o_ds_check only as layout helper */
     .o_ds_check {
         display: flex;
         align-items: flex-start;
         gap: var(--ds-space-sm);
         margin-bottom: var(--ds-space-sm);
-        font-size: 0.8125rem;
+        font-size: var(--ds-control-font);
         font-weight: var(--ds-label-weight);
         color: var(--ds-ink);
         line-height: 1.35;
         &:last-child {
             margin-bottom: 0;
-        }
-        input[type="checkbox"] {
-            margin-top: 0.2rem;
-            flex: 0 0 auto;
-            width: 1rem;
-            height: 1rem;
-            border: 1px solid var(--ds-border-strong);
-            border-radius: 0.15rem;
-            accent-color: var(--ds-accent);
         }
     }
     .o_ds_action_defaults {
@@ -1629,6 +1972,29 @@
             display: flex;
             flex-wrap: wrap;
             gap: var(--ds-space-sm);
+            /* Clear “click me” chips — faint outline-secondary was hard to see */
+            .btn {
+                color: var(--ds-ink);
+                background: #fff;
+                border: 1px solid var(--ds-border-strong, #adb5bd);
+                font-weight: 500;
+                box-shadow: 0 1px 0 rgba(0, 0, 0, 0.04);
+                &:hover:not(:disabled),
+                &:focus-visible:not(:disabled) {
+                    color: #fff;
+                    background: var(--ds-action, #017e84);
+                    border-color: var(--ds-action, #017e84);
+                    box-shadow: none;
+                }
+                &:active:not(:disabled) {
+                    color: #fff;
+                    background: color-mix(in srgb, var(--ds-action, #017e84) 85%, #000);
+                    border-color: transparent;
+                }
+                &:disabled {
+                    opacity: 0.55;
+                }
+            }
         }
         .o_ds_context_row {
             display: flex;
