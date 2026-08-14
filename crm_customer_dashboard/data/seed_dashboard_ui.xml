@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_kanban_crm_customers" model="ir.ui.view">
+        <field name="name">dashboard.engine.kanban.crm_customers</field>
+        <field name="model">res.partner</field>
+        <field name="type">kanban</field>
+        <field name="priority">99</field>
+        <field name="arch" type="xml">
+            <kanban create="false" can_open="0" js_class="analytic_dashboard_config_settings_kanban">
+                <templates>
+                    <t t-name="card">
+                        <field name="display_name"/>
+                    </t>
+                </templates>
+            </kanban>
+        </field>
+    </record>
+    <record id="view_search_crm_customers" model="ir.ui.view">
+        <field name="name">dashboard.engine.search.crm_customers</field>
+        <field name="model">res.partner</field>
+        <field name="inherit_id" ref="base.view_res_partner_filter"/>
+        <field name="mode">primary</field>
+        <field name="priority">99</field>
+        <field name="arch" type="xml">
+            <data>
+                <xpath expr="//search" position="inside">
+                    <filter name="dashboard_my_data" string="My Partners" domain="[('dashboard_my_data', '=', True)]" invisible="not context.get('show_dashboard_my_filter')"/>
+                </xpath>
+            </data>
+        </field>
+    </record>
+    <record id="action_crm_customers" model="ir.actions.act_window">
+        <field name="name">Customers Dashboard</field>
+        <field name="res_model">res.partner</field>
+        <field name="view_mode">kanban,list,form</field>
+        <field name="view_id" ref="view_kanban_crm_customers"/>
+        <field name="search_view_id" ref="view_search_crm_customers"/>
+        <field name="context">{'dashboard_blueprint_key': 'crm_customers'}</field>
+    </record>
+    <menuitem id="menu_crm_customers"
+              name="Customers Dashboard"
+              parent="crm.crm_menu_report"
+              action="action_crm_customers"
+              sequence="5"/>
+</odoo>

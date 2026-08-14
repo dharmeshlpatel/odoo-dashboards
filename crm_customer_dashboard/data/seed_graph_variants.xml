@@ -10,6 +10,8 @@
         <field name="primary_button_label">Pipeline Analysis</field>
         <field name="primary_action_xmlid">crm.crm_lead_action_pipeline</field>
         <field name="primary_action_context">{"default_type": {"__de__": "group_value", "default": "opportunity", "map": [{"groups": ["crm.group_use_lead"], "value": "lead"}]}}</field>
+        <field name="primary_label_alt_scope_id" ref="scope_crm_pipeline"/>
+        <field name="primary_label_alt">Leads Analysis</field>
         <field name="scope_warning">You cannot disable both 'Pipeline' and 'Leads' because at least one must stay on.</field>
     </record>
 
@@ -21,5 +23,15 @@
         <field name="primary_button_label">Sales Orders</field>
         <field name="primary_action_xmlid">sale.action_orders</field>
         <field name="primary_action_context">{}</field>
+    </record>
+
+    <!-- Community default action above; Enterprise dashboard when crm_enterprise is installed. -->
+    <record id="variant_crm_primary_enterprise" model="dashboard.blueprint.action.variant">
+        <field name="blueprint_id" ref="blueprint_crm_customers"/>
+        <field name="graph_variant_id" ref="graph_variant_crm_lead"/>
+        <field name="sequence">10</field>
+        <field name="name">CRM Enterprise dashboard</field>
+        <field name="module_depends">crm_enterprise</field>
+        <field name="action_xmlid">crm_enterprise.crm_opportunity_action_dashboard</field>
     </record>
 </odoo>

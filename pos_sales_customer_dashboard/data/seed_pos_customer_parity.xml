@@ -25,6 +25,8 @@
         <field name="sequence">20</field>
         <field name="name">My Orders</field>
         <field name="mode">restrict</field>
+        <field name="restrict_kind">mine</field>
+        <field name="merge_noun">POS orders</field>
         <field name="domain">[('user_id', '=', uid)]</field>
         <field name="default_on" eval="False"/>
     </record>

@@ -170,13 +170,7 @@
       blueprint_sales_customers and pooled via share_link_ids.
     -->
 
-    <!-- Primary button opens the Enterprise Opportunity dashboard when present. -->
-    <record id="variant_crm_primary_enterprise" model="dashboard.blueprint.action.variant">
-        <field name="blueprint_id" ref="blueprint_crm_customers"/>
-        <field name="sequence">10</field>
-        <field name="name">CRM Enterprise dashboard</field>
-        <field name="module_depends">crm_enterprise</field>
-        <field name="action_xmlid">crm_enterprise.crm_opportunity_action_dashboard</field>
-    </record>
+    <!-- Enterprise primary alternate lives on graph_variant_crm_lead
+         (see seed_graph_variants.xml) after Chart Model Options exist. -->
 
 </odoo>

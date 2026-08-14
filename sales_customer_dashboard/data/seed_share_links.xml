@@ -1,9 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Sales Customers <-> CRM Customers share pool (Phase A). -->
-<odoo noupdate="1">
-    <record id="blueprint_sales_customers" model="dashboard.blueprint">
-        <field name="share_link_ids" eval="[(6, 0, [
-            ref('crm_customer_dashboard.blueprint_crm_customers'),
-        ])]"/>
-    </record>
-</odoo>
+<!--
+  Packs must not Share-Link to each other. Customer 360 owns the star.
+  Kept empty so an old noupdate mesh is not re-applied if this file is loaded.
+-->
+<odoo noupdate="1"/>

@@ -25,6 +25,7 @@
         <field name="lens_kpis_label">With KPIs</field>
         <field name="state">published</field>
         <field name="sequence">35</field>
+        <field name="share_link_ids" eval="[(4, ref('customer_360_dashboard.blueprint_customer_360'))]"/>
     </record>
 
     <record id="scope_website_orders" model="dashboard.blueprint.scope">
