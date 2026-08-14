@@ -26,4 +26,6 @@
 
 .o_dashboard_hub_main {
     min-width: 0;
+    // o_view_nocontent is position:absolute; pin it to this pane.
+    min-height: 20rem;
 }

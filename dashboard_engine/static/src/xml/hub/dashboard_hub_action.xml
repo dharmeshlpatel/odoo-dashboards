@@ -4,7 +4,7 @@
         <div class="o_dashboard_hub d-flex h-100">
             <aside class="o_dashboard_hub_sidebar border-end">
                 <t t-foreach="state.tree" t-as="group" t-key="group.id">
-                    <div class="o_dashboard_hub_group_label text-muted text-uppercase small px-3 pt-3 pb-1">
+                    <div t-if="group.name" class="o_dashboard_hub_group_label text-muted text-uppercase small px-3 pt-3 pb-1">
                         <t t-esc="group.name"/>
                     </div>
                     <t t-foreach="group.dashboards" t-as="dashboard" t-key="dashboard.id">
@@ -16,19 +16,30 @@
                         </button>
                     </t>
                 </t>
-                <div t-if="!state.tree.length" class="text-muted p-3 small">
-                    No dashboards in the hub yet. Assign a Hub Group on a published blueprint.
-                </div>
             </aside>
-            <main class="o_dashboard_hub_main flex-grow-1 overflow-auto">
+            <main class="o_dashboard_hub_main flex-grow-1 overflow-auto position-relative">
                 <t t-if="state.viewProps">
                     <View t-props="state.viewProps" t-key="viewKey"/>
                 </t>
                 <div t-elif="state.loadingView" class="text-muted p-4">
                     Loading dashboard…
                 </div>
-                <div t-else="" class="text-muted p-4">
-                    Select a dashboard from the list.
+                <div t-else="" class="o_view_nocontent" role="alert">
+                    <div class="o_nocontent_help">
+                        <t t-if="!state.tree.length">
+                            <p class="o_view_nocontent_smiling_face">
+                                <t t-esc="emptyTitle"/>
+                            </p>
+                            <p>
+                                <t t-esc="emptyDescription"/>
+                            </p>
+                        </t>
+                        <t t-else="">
+                            <p class="o_view_nocontent_empty_folder">
+                                <t t-esc="emptyTitle"/>
+                            </p>
+                        </t>
+                    </div>
                 </div>
             </main>
         </div>

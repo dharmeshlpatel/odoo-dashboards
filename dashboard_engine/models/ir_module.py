@@ -15,10 +15,14 @@ class IrModuleModule(models.Model):
         return bool(self.sudo().search_count(domain))
 
     def write(self, vals):
+        removing = self.filtered(
+            lambda m: vals.get("state") in ("to remove", "uninstalled")
+        )
+        removed_names = removing.mapped("name")
         res = super().write(vals)
-        # During module install/upgrade, registry fields may not be fully loaded.
-        # Defer blueprint sync to normal runtime/hooks to avoid transient
-        # "field does not exist" validation errors.
+        if removed_names and "dashboard.blueprint" in self.env:
+            Blueprint = self.env["dashboard.blueprint"].sudo()
+            Blueprint._gc_orphan_generated_artifacts()
         if (
             self.env.context.get("install_mode")
             or self.env.context.get("module")

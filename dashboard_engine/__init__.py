@@ -6,6 +6,7 @@ Dynamic Dashboard Engine module initialization.
 """
 
 from . import models  # noqa: F401
+from .hooks import uninstall_hook  # noqa: F401
 
 # Odoo discovers tests/ automatically when --test-tags / --test-enable is used.
 

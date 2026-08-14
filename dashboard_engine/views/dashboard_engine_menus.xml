@@ -22,26 +22,41 @@
               sequence="5"
               groups="dashboard_engine.group_dashboard_engine_studio"/>
 
+    <!-- Setup / admin tools (not day-to-day Studio work). -->
+    <menuitem id="menu_dashboard_engine_configuration"
+              name="Configuration"
+              parent="menu_dashboard_engine_root"
+              sequence="90"
+              groups="dashboard_engine.group_dashboard_engine_manager"/>
+
     <menuitem id="menu_dashboard_engine_hub_menus"
               name="Hub Menus"
-              parent="menu_dashboard_engine_root"
+              parent="menu_dashboard_engine_configuration"
               action="action_dashboard_blueprint_hub"
-              sequence="7"
+              sequence="10"
               groups="dashboard_engine.group_dashboard_engine_manager"/>
 
     <menuitem id="menu_dashboard_engine_groups"
               name="Groups"
-              parent="menu_dashboard_engine_root"
+              parent="menu_dashboard_engine_configuration"
               action="action_dashboard_blueprint_group"
-              sequence="8"
+              sequence="20"
               groups="dashboard_engine.group_dashboard_engine_manager"/>
 
-    <!-- Kept for shortcuts / favorites; list New also opens this wizard. -->
+    <menuitem id="menu_dashboard_engine_conditions"
+              name="Conditions"
+              parent="menu_dashboard_engine_configuration"
+              action="action_dashboard_condition"
+              sequence="30"
+              groups="dashboard_engine.group_dashboard_engine_manager"/>
+
+    <!-- Create: use Dashboards list New (wizard). Menu kept inactive for old shortcuts. -->
     <menuitem id="menu_dashboard_engine_create"
               name="New Dashboard"
               parent="menu_dashboard_engine_root"
               action="action_dashboard_blueprint_create_wizard"
               sequence="15"
+              active="False"
               groups="dashboard_engine.group_dashboard_engine_studio"/>
 
     <menuitem id="menu_dashboard_engine_relation_paths"
@@ -52,17 +67,12 @@
               active="False"
               groups="dashboard_engine.group_dashboard_engine_manager"/>
 
-    <menuitem id="menu_dashboard_engine_conditions"
-              name="Conditions"
-              parent="menu_dashboard_engine_root"
-              action="action_dashboard_condition"
-              sequence="30"
-              groups="dashboard_engine.group_dashboard_engine_manager"/>
-
+    <!-- Import: use Dashboards list button. Menu kept inactive for old shortcuts. -->
     <menuitem id="menu_dashboard_engine_import_template"
               name="Import Template"
               parent="menu_dashboard_engine_root"
               action="action_dashboard_blueprint_import_wizard"
               sequence="40"
+              active="False"
               groups="dashboard_engine.group_dashboard_engine_manager"/>
 </odoo>

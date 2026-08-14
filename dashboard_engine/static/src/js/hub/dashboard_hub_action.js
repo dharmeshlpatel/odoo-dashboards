@@ -7,6 +7,7 @@ import { evaluateExpr } from "@web/core/py_js/py";
 import { user } from "@web/core/user";
 import { rpc } from "@web/core/network/rpc";
 import { useService } from "@web/core/utils/hooks";
+import { _t } from "@web/core/l10n/translation";
 import { View } from "@web/views/view";
 import { standardActionServiceProps } from "@web/webclient/actions/action_service";
 
@@ -68,6 +69,19 @@ export class DashboardHubAction extends Component {
                 props: { resId, resIds: activeIds, readonly },
             }
         );
+    }
+
+    /** Odoo empty-helper title (smiling face / empty folder). */
+    get emptyTitle() {
+        if (!this.state.tree.length) {
+            return _t("No dashboards in the hub yet");
+        }
+        return _t("Select a dashboard from the list");
+    }
+
+    /** Extra line under the empty-helper title when the hub has no blueprints. */
+    get emptyDescription() {
+        return _t("Install a 360 dashboard pack to add a left link.");
     }
 
     /** Shared hub menu id from the client action context (optional). */

@@ -1,12 +1,30 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
-    <!--
-      Default shared hub for grouping (no menu under Dashboard Engine).
-      Admins can set Parent Menu on Hub Menus if they want a hub entry.
-    -->
     <record id="dashboard_hub_default" model="dashboard.blueprint.hub">
-        <field name="name">Dashboards</field>
+        <field name="name">Dashboards 360</field>
+        <field name="is_root_app" eval="False"/>
         <field name="menu_parent_id" eval="False"/>
-        <field name="menu_sequence">1</field>
+        <field name="menu_sequence">36</field>
+        <field name="menu_web_icon">dashboard_engine,static/description/icon.png</field>
+    </record>
+    <record id="action_dashboard_hub" model="ir.actions.client">
+        <field name="name">Dashboards 360</field>
+        <field name="tag">dashboard_engine.hub</field>
+        <field name="context">{'hub_menu_id': %(dashboard_hub_default)d}</field>
+    </record>
+    <menuitem id="menu_dashboards_360"
+              name="Dashboards 360"
+              action="action_dashboard_hub"
+              sequence="36"
+              web_icon="dashboard_engine,static/description/icon.png"
+              groups="dashboard_engine.group_dashboard_engine_user"/>
+    <record id="dashboard_hub_default" model="dashboard.blueprint.hub">
+        <field name="generated_action_id" ref="action_dashboard_hub"/>
+        <field name="generated_menu_id" ref="menu_dashboards_360"/>
+    </record>
+    <record id="dashboard_group_360" model="dashboard.blueprint.group">
+        <field name="name">360</field>
+        <field name="sequence">10</field>
+        <field name="hub_menu_id" ref="dashboard_hub_default"/>
     </record>
 </odoo>

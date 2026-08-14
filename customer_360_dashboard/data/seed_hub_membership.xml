@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Keep Customer 360 on Dashboards 360 (no Hub Group named 360). -->
+<odoo>
+    <record id="blueprint_customer_360" model="dashboard.blueprint">
+        <field name="is_compose_hub" eval="True"/>
+        <field name="hub_id" ref="dashboard_engine.dashboard_hub_default"/>
+        <field name="group_id" eval="False"/>
+        <field name="module_depends" eval="False"/>
+    </record>
+</odoo>

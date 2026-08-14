@@ -3,38 +3,52 @@
 
 """Customer 360 pack install hooks."""
 
-PARTNER_CUSTOMER_BLUEPRINT_XMLIDS = (
-    "crm_customer_dashboard.blueprint_crm_customers",
-    "sales_customer_dashboard.blueprint_sales_customers",
-    "invoice_customer_dashboard.blueprint_invoice_customers",
-    "website_sales_customer_dashboard.blueprint_website_customers",
-    "pos_sales_customer_dashboard.blueprint_pos_customers",
-    "customer_360_dashboard.blueprint_customer_360",
-)
 
-
-def link_partner_customer_share_pool(env):
-    """Link all installed partner-customer blueprints into one share pool."""
-    bps = []
-    for xid in PARTNER_CUSTOMER_BLUEPRINT_XMLIDS:
-        bp = env.ref(xid, raise_if_not_found=False)
-        if bp:
-            bps.append(bp)
-    if len(bps) < 2:
+def drop_local_crm_scopes(env):
+    """Remove CRM copies that used to live on Customer 360."""
+    leftover = env["dashboard.blueprint.scope"]
+    for xmlid in (
+        "customer_360_dashboard.scope_c360_pipeline",
+        "customer_360_dashboard.scope_c360_leads",
+        "customer_360_dashboard.scope_c360_mine",
+    ):
+        rec = env.ref(xmlid, raise_if_not_found=False)
+        if rec:
+            leftover |= rec
+    if leftover:
+        leftover.sudo().unlink()
+    bp = env.ref(
+        "customer_360_dashboard.blueprint_customer_360",
+        raise_if_not_found=False,
+    )
+    if not bp:
         return
-    for bp in bps:
-        others = [other.id for other in bps if other.id != bp.id]
-        bp.sudo().write({"share_link_ids": [(6, 0, others)]})
+    bp.sudo().write(
+        {
+            "module_depends": False,
+            "module_ids": [(5, 0, 0)],
+            "primary_action_xmlid": False,
+            "primary_action_context": False,
+            "primary_button_label": False,
+            "graph_model": False,
+            "graph_measure": False,
+            "graph_groupby": False,
+            "graph_caption": False,
+        }
+    )
+    if bp.state == "published":
+        bp._sync_generated_artifacts()
 
 
 def post_init_hook(env):
-    link_partner_customer_share_pool(env)
+    drop_local_crm_scopes(env)
     bp = env.ref(
         "customer_360_dashboard.blueprint_customer_360",
         raise_if_not_found=False,
     )
     if bp and bp.state == "published":
-        # Re-apply menu parent after upgrade (noupdate seed).
-        if bp.menu_parent_xmlid != "crm.crm_menu_report":
-            bp.sudo().write({"menu_parent_xmlid": "crm.crm_menu_report"})
         bp._sync_generated_artifacts()
+
+
+def uninstall_hook(env):
+    return

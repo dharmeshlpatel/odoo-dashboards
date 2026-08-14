@@ -158,10 +158,54 @@ class TestDashboardHubApi(TransactionCase):
         first = tree[0]["dashboards"][0]
         self.assertTrue(first["action_id"])
         self.assertEqual(first["id"], self.bp_c360.id)
-        # Hub-grouped dashboards do not get a standalone menu.
+        # Hub-only dashboards (group, no parent menu) do not get a standalone menu.
         self.assertTrue(
             not self.bp_c360.generated_menu_id or not self.bp_c360.generated_menu_id.active
         )
+
+    def test_installed_crm_pack_stays_off_dashboards_360_list(self):
+        crm = self.env.ref(
+            "crm_customer_dashboard.blueprint_crm_customers",
+            raise_if_not_found=False,
+        )
+        if not crm:
+            self.skipTest("crm_customer_dashboard not installed")
+        from odoo.addons.dashboard_engine.share_pools import (
+            link_partner_customer_share_pool,
+        )
+
+        link_partner_customer_share_pool(self.env)
+        hub_menu = self.env.ref("dashboard_engine.dashboard_hub_default")
+        self.assertFalse(crm.group_id)
+        tree = self.env["dashboard.blueprint"].get_hub_tree(
+            hub_menu_id=hub_menu.id
+        )
+        names = [
+            dash["name"] for grp in tree for dash in grp["dashboards"]
+        ]
+        self.assertNotIn(crm.menu_name or crm.name, names)
+        c360 = self.env.ref(
+            "customer_360_dashboard.blueprint_customer_360",
+            raise_if_not_found=False,
+        )
+        if c360:
+            self.assertFalse(c360.group_id)
+            self.assertEqual(c360.hub_id, hub_menu)
+            self.assertIn(c360.menu_name or c360.name, names)
+            self.assertTrue(
+                not c360.generated_menu_id or not c360.generated_menu_id.active
+            )
+            self.assertIn(crm, c360.share_link_ids)
+            self.assertIn(c360, crm.share_link_ids)
+            sale = self.env.ref(
+                "sales_customer_dashboard.blueprint_sales_customers",
+                raise_if_not_found=False,
+            )
+            if sale:
+                self.assertNotIn(sale, crm.share_link_ids)
+        crm.action_publish()
+        self.assertTrue(crm.generated_menu_id)
+        self.assertTrue(crm.generated_menu_id.active)
 
     def test_standalone_menu_only_with_parent_and_no_group(self):
         parent = self.env.ref("dashboard_engine.menu_dashboard_engine_root")
@@ -210,3 +254,35 @@ class TestDashboardHubApi(TransactionCase):
             self.hub_sales.generated_menu_id.parent_id,
             self.env.ref("dashboard_engine.menu_dashboard_engine_root"),
         )
+
+    def test_compose_hub_does_not_create_standalone_menu(self):
+        hub = self.env.ref("dashboard_engine.dashboard_hub_default")
+        group = self.env.ref("dashboard_engine.dashboard_group_360")
+        parent = hub.generated_menu_id
+        bp = self.env["dashboard.blueprint"].create(
+            {
+                "name": "No Menu 360",
+                "key": "test_no_menu_360_%s" % self.env.uid,
+                "host_model_id": self.env["ir.model"]._get("res.partner").id,
+                "state": "published",
+                "is_compose_hub": True,
+                "group_id": group.id,
+                "menu_parent_id": parent.id if parent else False,
+                "menu_name": "No Menu 360",
+            }
+        )
+        bp.action_publish()
+        self.assertTrue(
+            not bp.generated_menu_id or not bp.generated_menu_id.active
+        )
+        self.assertFalse(bp.menu_parent_id)
+
+    def test_default_hub_xml_menu(self):
+        hub = self.env.ref("dashboard_engine.dashboard_hub_default")
+        menu = self.env.ref("dashboard_engine.menu_dashboards_360")
+        self.assertEqual(hub.generated_menu_id, menu)
+        self.assertTrue(menu.active)
+        self.assertFalse(menu.parent_id)
+        self.assertEqual(menu.name, "Dashboards 360")
+        group = self.env.ref("dashboard_engine.dashboard_group_360")
+        self.assertEqual(group.hub_menu_id, hub)
