@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+    <t t-name="dashboard_engine.DashboardPeriodFilterBoxesField">
+        <div class="row o_dashboard_engine_period_boxes">
+            <t t-foreach="lines" t-as="line" t-key="line.id">
+                <div class="col-12 col-lg-6 o_dashboard_engine_period_box">
+                    <b t-esc="line.data.label"/>
+                    <div class="row o_dashboard_engine_period_stack">
+                        <div class="col-6 o_dashboard_engine_period_pick">
+                            <Many2ManyTagsField
+                                name="'period_mq_ids'"
+                                record="line"
+                                readonly="props.readonly"
+                                canCreate="false"
+                                canQuickCreate="false"
+                                canCreateEdit="false"
+                                placeholder.translate="Months"
+                            />
+                        </div>
+                        <div class="col-6 o_dashboard_engine_period_pick">
+                            <Many2ManyTagsField
+                                name="'period_year_ids'"
+                                record="line"
+                                readonly="props.readonly"
+                                canCreate="false"
+                                canQuickCreate="false"
+                                canCreateEdit="false"
+                                placeholder.translate="Year"
+                            />
+                        </div>
+                    </div>
+                </div>
+            </t>
+        </div>
+    </t>
+</templates>
