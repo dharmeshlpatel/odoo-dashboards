@@ -51,6 +51,14 @@ export class DashboardScopeCheckboxesField extends Component {
                 props.record.data.applicable_include_scope_ids?.currentIds ||
                 props.record.data.applicable_include_scope_ids ||
                 [];
+            const viewerId = this._viewerBlueprintId(props);
+            const context = { ...(props.context || {}) };
+            // Cache keys for display_label require a hashable id, not {id: N}.
+            if (viewerId) {
+                context.dashboard_scope_viewer_id = viewerId;
+            } else {
+                delete context.dashboard_scope_viewer_id;
+            }
             return orm
                 .searchRead(
                     relation,
@@ -58,7 +66,7 @@ export class DashboardScopeCheckboxesField extends Component {
                     ["display_label", "display_description", "sequence", "mode"],
                     {
                         order: "sequence, id",
-                        context: props.context || {},
+                        context,
                     }
                 )
                 .then((rows) => ({ rows, preferred, applicable }));
@@ -168,6 +176,26 @@ export class DashboardScopeCheckboxesField extends Component {
             return;
         }
         this.onChange(item.id, !this.isSelected(item));
+    }
+
+    /**
+     * Integer blueprint id only — Odoo cache keys cannot hash {id: N}.
+     */
+    _viewerBlueprintId(props) {
+        const raw =
+            props.record.data.blueprint_id ??
+            props.context?.dashboard_scope_viewer_id ??
+            false;
+        if (!raw) {
+            return false;
+        }
+        if (Array.isArray(raw)) {
+            return raw[0] || false;
+        }
+        if (typeof raw === "object") {
+            return raw.id || false;
+        }
+        return raw;
     }
 
     _updateScopeWarning() {

@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-from odoo import models, api
+from odoo import models, api, fields, tools
 
 # Supported date grouping options for dashboard graphs
 GRAPH_CUSTOM_GROUP = ["day", "week", "month", "quarter", "year"]
@@ -28,6 +28,84 @@ class IrModelFields(models.Model):
         :return: tuple of supported date field types
         """
         return ("date", "datetime")
+
+    @api.model
+    def is_dashboard_date_period_name(self, name):
+        """True when ``name`` matches ``x_<date_field>_<period>``."""
+        if not name or not isinstance(name, str) or not name.startswith("x_"):
+            return False
+        try:
+            _date_field, group = name[2:].rsplit("_", 1)
+        except ValueError:
+            return False
+        return group in GRAPH_CUSTOM_GROUP
+
+    def _with_period_fields_visible(self):
+        """Internal lookups must see period tags even on Advanced forms."""
+        return self.with_context(dashboard_hide_date_period_fields=False)
+
+    @api.model
+    def _dashboard_date_period_candidate_domain(self, model_name=None):
+        """Broad domain for virtual period-tag candidates (refined in Python)."""
+        domain = [
+            ("store", "=", False),
+            ("readonly", "=", True),
+            ("ttype", "=", "char"),
+            ("name", "=like", "x_%"),
+        ]
+        if model_name:
+            domain.append(("model", "=", model_name))
+        return domain
+
+    @api.model
+    @tools.ormcache("model_name")
+    def _dashboard_date_period_names(self, model_name):
+        """Cached technical names of period tags on ``model_name``."""
+        if not model_name:
+            return ()
+        candidates = (
+            self.sudo()
+            ._with_period_fields_visible()
+            .search(self._dashboard_date_period_candidate_domain(model_name))
+        )
+        return tuple(f.name for f in candidates if f.is_date_period())
+
+    @api.model
+    @tools.ormcache()
+    def _all_dashboard_date_period_ids(self):
+        """Cached ids of all dashboard period tags (for Advanced picker hide)."""
+        candidates = (
+            self.sudo()
+            ._with_period_fields_visible()
+            .search(self._dashboard_date_period_candidate_domain())
+        )
+        return tuple(f.id for f in candidates if f.is_date_period())
+
+    def _invalidate_dashboard_date_period_cache(self):
+        self.env.registry.clear_cache()
+
+    @api.model
+    def _search(self, domain, offset=0, limit=None, order=None, *, active_test=True, bypass_access=False):
+        """Hide period tags from field pickers unless Group By opts back in.
+
+        Studio / Advanced forms pass ``dashboard_hide_date_period_fields``.
+        Group By widgets set that flag to False so period tags stay available.
+        """
+        if self.env.context.get("dashboard_hide_date_period_fields"):
+            period_ids = self._all_dashboard_date_period_ids()
+            if period_ids:
+                domain = list(
+                    fields.Domain(domain or [])
+                    & fields.Domain("id", "not in", period_ids)
+                )
+        return super()._search(
+            domain,
+            offset=offset,
+            limit=limit,
+            order=order,
+            active_test=active_test,
+            bypass_access=bypass_access,
+        )
 
     def _get_origin_field(self):
         """
@@ -122,6 +200,8 @@ class IrModelFields(models.Model):
             return self.browse()
         created = self.sudo().create(vals)
         self._set_company_defaults(model_name, created)
+        if created:
+            self._invalidate_dashboard_date_period_cache()
         return created
 
     @api.model
@@ -134,7 +214,7 @@ class IrModelFields(models.Model):
         ):
             return self.browse()
         self.ensure_date_period_fields(model_name)
-        return self.search(
+        return self._with_period_fields_visible().search(
             [
                 ("model", "=", model_name),
                 ("name", "=", "x_%s_%s" % (date_field_name, period)),
@@ -154,7 +234,9 @@ class IrModelFields(models.Model):
         if not model_name or model_name not in self.env:
             return self.browse()
         self.ensure_date_period_fields(model_name)
-        candidates = self.search(
+        # Advanced form sets dashboard_hide_date_period_fields; Group By must
+        # still resolve the virtual period tags.
+        candidates = self._with_period_fields_visible().search(
             [
                 ("model", "=", model_name),
                 (
@@ -305,6 +387,8 @@ class IrModelFields(models.Model):
         """
         # Retrieve models configured for dashboard graph support
         fields = super(IrModelFields, self).create(vals_list)
+        if any(f.is_date_period() for f in fields):
+            self._invalidate_dashboard_date_period_cache()
         graph_models = self.env["dashboard.graph_parameter"].get_param()
         if graph_models:
             for field in fields:
@@ -369,4 +453,8 @@ class IrModelFields(models.Model):
                 self.search(self.get_domain(field)).with_context(
                     allow_unlink=True
                 ).unlink()
-        return super().unlink()
+        drop_period_cache = any(f.is_date_period() for f in self)
+        res = super().unlink()
+        if drop_period_cache:
+            self._invalidate_dashboard_date_period_cache()
+        return res

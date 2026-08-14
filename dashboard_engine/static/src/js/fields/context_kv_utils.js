@@ -6,26 +6,27 @@
  */
 
 export const VALUE_TYPES = [
-    { value: "fixed", label: "Fixed value" },
-    { value: "record_id", label: "This card’s ID" },
-    { value: "group", label: "Depends on user group" },
+    { value: "fixed", label: "Fixed Value" },
+    { value: "record_id", label: "This Card’s ID" },
+    { value: "group", label: "Set Value By Rule" },
 ];
 
 /** How to pass the card record (stored key stays technical; UI shows labels). */
 export const CARD_PASS_TARGETS = [
-    { key: "active_id", label: "As the open record" },
-    { key: "default_partner_id", label: "As the customer on new forms" },
-    { key: "default_user_id", label: "As the salesperson on new forms" },
+    { key: "active_id", label: "As the Active Record" },
+    { key: "default_partner_id", label: "As the Customer on New Forms" },
+    { key: "default_user_id", label: "As the Salesperson on New Forms" },
 ];
 
 /**
  * One-click presets — plain language; keys are filled for the builder.
+ * Labels use Odoo / Studio title case (same as Group By, Graph Title).
  */
 export const CONTEXT_PRESETS = [
     {
         id: "card_id",
-        label: "Open with this card",
-        help: "The opened screen uses this card’s record.",
+        label: "Open with This Record",
+        help: "Use this card’s record when the action opens.",
         build: () => ({
             ...emptyRow(),
             key: "active_id",
@@ -35,8 +36,8 @@ export const CONTEXT_PRESETS = [
     },
     {
         id: "search_filter",
-        label: "Turn on a list filter",
-        help: "A filter on the list/search view starts on.",
+        label: "Apply a Search Filter",
+        help: "Turn on a filter from the target list when it opens.",
         build: () => ({
             ...emptyRow(),
             key: "search_default_",
@@ -46,7 +47,7 @@ export const CONTEXT_PRESETS = [
     },
     {
         id: "create_default",
-        label: "Prefill a form field",
+        label: "Prefill a Form Field",
         help: "When creating a record, start with this field filled.",
         build: () => ({
             ...emptyRow(),
@@ -57,8 +58,8 @@ export const CONTEXT_PRESETS = [
     },
     {
         id: "group_value",
-        label: "Different value by role",
-        help: "Value changes based on the user’s security group.",
+        label: "Set Value By Rule",
+        help: "Value changes by user group or card condition (first match wins).",
         build: () => ({
             ...emptyRow(),
             key: "default_type",
@@ -93,18 +94,18 @@ export function contextRowPurpose(row) {
 export function contextRowTitle(row) {
     const purpose = contextRowPurpose(row);
     if (purpose === "card_record") {
-        return "Open with this card";
+        return "Open with This Record";
     }
     if (purpose === "search_filter") {
-        return "Turn on a list filter";
+        return "Apply a Search Filter";
     }
     if (purpose === "form_default") {
-        return "Prefill a form field";
+        return "Prefill a Form Field";
     }
     if (purpose === "group_setting") {
-        return "Different value by role";
+        return "Set Value By Rule";
     }
-    return "Custom setting";
+    return "Custom Setting";
 }
 
 export function searchFilterShortName(key) {
@@ -131,8 +132,10 @@ export function toFormDefaultKey(shortName) {
 
 export function emptyGroupRule() {
     return {
+        whenType: "group",
         groupXmlid: "",
         groupLabel: "",
+        domain: "[]",
         value: "",
     };
 }
@@ -145,6 +148,65 @@ function emptyRow() {
         asList: false,
         elseValue: "",
         groupRules: [emptyGroupRule()],
+    };
+}
+
+function domainToString(domain) {
+    if (domain === null || domain === undefined) {
+        return "[]";
+    }
+    if (typeof domain === "string") {
+        return domain.trim() || "[]";
+    }
+    try {
+        return JSON.stringify(domain);
+    } catch {
+        return "[]";
+    }
+}
+
+function ruleFromMapEntry(entry) {
+    const when = entry && typeof entry === "object" ? entry.when : null;
+    const value =
+        entry?.value === null || entry?.value === undefined
+            ? ""
+            : String(entry.value);
+    if (when && typeof when === "object") {
+        const wtype = when.type || "group";
+        if (wtype === "record") {
+            return {
+                whenType: "record",
+                groupXmlid: "",
+                groupLabel: "",
+                domain: domainToString(when.domain),
+                value,
+            };
+        }
+        const groups = when.groups || [];
+        return {
+            whenType: "group",
+            groupXmlid: groups[0] || "",
+            groupLabel: groups[0] || "",
+            domain: "[]",
+            value,
+        };
+    }
+    const groups = entry?.groups || [];
+    if (entry?.domain !== undefined && !groups.length) {
+        return {
+            whenType: "record",
+            groupXmlid: "",
+            groupLabel: "",
+            domain: domainToString(entry.domain),
+            value,
+        };
+    }
+    return {
+        whenType: "group",
+        groupXmlid: groups[0] || "",
+        groupLabel: groups[0] || "",
+        domain: "[]",
+        value,
     };
 }
 
@@ -184,7 +246,12 @@ function rowFromValue(key, value) {
         row.asList = true;
         return row;
     }
-    if (value && typeof value === "object" && !Array.isArray(value) && value.__de__ === "group_value") {
+    if (
+        value &&
+        typeof value === "object" &&
+        !Array.isArray(value) &&
+        (value.__de__ === "group_value" || value.__de__ === "rule_value")
+    ) {
         row.valueType = "group";
         row.elseValue =
             value.default === null || value.default === undefined
@@ -192,17 +259,7 @@ function rowFromValue(key, value) {
                 : String(value.default);
         const map = Array.isArray(value.map) ? value.map : [];
         row.groupRules = map.length
-            ? map.map((entry) => {
-                  const groups = entry.groups || [];
-                  return {
-                      groupXmlid: groups[0] || "",
-                      groupLabel: groups[0] || "",
-                      value:
-                          entry.value === null || entry.value === undefined
-                              ? ""
-                              : String(entry.value),
-                  };
-              })
+            ? map.map((entry) => ruleFromMapEntry(entry))
             : [emptyGroupRule()];
         return row;
     }
@@ -256,19 +313,44 @@ export function serializeContextRows(rows) {
             continue;
         }
         if (row.valueType === "group") {
+            const rules = row.groupRules || [];
+            const hasRecord = rules.some(
+                (rule) =>
+                    (rule.whenType || "group") === "record" &&
+                    (rule.domain || "[]").trim() &&
+                    (rule.domain || "[]").trim() !== "[]"
+            );
             const map = [];
-            for (const rule of row.groupRules || []) {
+            for (const rule of rules) {
+                if ((rule.whenType || "group") === "record") {
+                    const domain = (rule.domain || "[]").trim() || "[]";
+                    if (domain === "[]") {
+                        continue;
+                    }
+                    map.push({
+                        when: { type: "record", domain },
+                        value: coerceFixed(rule.value),
+                    });
+                    continue;
+                }
                 const xmlid = (rule.groupXmlid || "").trim();
                 if (!xmlid) {
                     continue;
                 }
-                map.push({
-                    groups: [xmlid],
-                    value: coerceFixed(rule.value),
-                });
+                if (hasRecord) {
+                    map.push({
+                        when: { type: "group", groups: [xmlid] },
+                        value: coerceFixed(rule.value),
+                    });
+                } else {
+                    map.push({
+                        groups: [xmlid],
+                        value: coerceFixed(rule.value),
+                    });
+                }
             }
             obj[key] = {
-                __de__: "group_value",
+                __de__: hasRecord ? "rule_value" : "group_value",
                 default: coerceFixed(row.elseValue),
                 map,
             };
@@ -290,7 +372,7 @@ export function collectGroupXmlids(rows) {
             continue;
         }
         for (const rule of row.groupRules || []) {
-            if (rule.groupXmlid) {
+            if ((rule.whenType || "group") === "group" && rule.groupXmlid) {
                 ids.add(rule.groupXmlid);
             }
         }

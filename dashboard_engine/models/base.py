@@ -128,6 +128,25 @@ class BaseModelDashboardEngine(models.AbstractModel):
         )
 
     @api.model
+    def fields_get(self, allfields=None, attributes=None):
+        """Hide dashboard period tags from DomainSelector field lists.
+
+        Virtual ``x_<date>_<period>`` fields stay on the model for Group By
+        resolution, but they are not searchable — stock field pickers skip them.
+        """
+        res = super().fields_get(allfields=allfields, attributes=attributes)
+        if not res:
+            return res
+        period_names = self.env["ir.model.fields"]._dashboard_date_period_names(
+            self._name
+        )
+        for name in period_names:
+            meta = res.get(name)
+            if meta is not None:
+                meta["searchable"] = False
+        return res
+
+    @api.model
     def _search(
         self,
         domain,

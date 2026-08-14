@@ -255,7 +255,7 @@ class DashboardBlueprintPanel(models.Model):
 
     def _chosen_restrict_scopes(self):
         self.ensure_one()
-        available = self.scope_ids.filtered(lambda s: s.mode == "restrict")
+        available = self._runtime_scopes().filtered(lambda s: s.mode == "restrict")
         if not available:
             return available
         pref = self._current_pref()
@@ -282,7 +282,7 @@ class DashboardBlueprintPanel(models.Model):
         cache = self.env.cr.cache.setdefault("dashboard_scope_targets_all", {})
         if self.id in cache:
             return cache[self.id]
-        rows = self.scope_ids.filtered(lambda s: s.mode == "restrict").mapped(
+        rows = self._runtime_scopes().filtered(lambda s: s.mode == "restrict").mapped(
             "target_ids"
         )
         cache[self.id] = rows
@@ -322,7 +322,7 @@ class DashboardBlueprintPanel(models.Model):
             return False
         if model_name and model_name == self.graph_model:
             return True
-        peers = self._share_component() - self
+        peers = self._share_pool_members() - self
         if not peers:
             return False
         if model_name == "sale.order":
@@ -353,7 +353,7 @@ class DashboardBlueprintPanel(models.Model):
             and self._domain_leaves_apply_to_model(domain, model_name)
             and any(
                 peer.graph_model == model_name
-                for peer in (self._share_component() - self)
+                for peer in (self._share_pool_members() - self)
             )
         ):
             return list(domain)
@@ -405,7 +405,7 @@ class DashboardBlueprintPanel(models.Model):
     def _auto_accept_scope_targets_for_share(self):
         """On share-link write: seed high-confidence CRM↔Sales maps."""
         for rec in self:
-            component = rec._share_component()
+            component = rec._share_pool_members()
             sale_peers = component.filtered(lambda b: b.graph_model == "sale.order")
             crm_peers = component.filtered(lambda b: b.graph_model == "crm.lead")
             if not (sale_peers and crm_peers):
@@ -525,7 +525,6 @@ class DashboardBlueprintPanel(models.Model):
         """Ensure CRM / 360 My scopes have commercial (+ optional) maps."""
         mine_refs = (
             "crm_customer_dashboard.scope_crm_mine",
-            "customer_360_dashboard.scope_c360_mine",
             "crm_salesperson_dashboard.scope_crm_sp_mine",
         )
         for xmlid in mine_refs:
@@ -624,6 +623,10 @@ class DashboardBlueprintScopePanel(models.Model):
     @api.depends(
         "name",
         "description",
+        "mode",
+        "restrict_kind",
+        "merge_noun",
+        "sequence",
         "label_ids.sequence",
         "label_ids.name",
         "label_ids.description",
@@ -631,8 +634,12 @@ class DashboardBlueprintScopePanel(models.Model):
         "target_ids.target_model",
         "target_ids.module_depends",
         "blueprint_id.share_link_ids",
+        "blueprint_id.share_link_ids.scope_ids.restrict_kind",
+        "blueprint_id.share_link_ids.scope_ids.merge_noun",
         "blueprint_id.graph_model",
+        "blueprint_id.is_compose_hub",
     )
+    @api.depends_context("dashboard_scope_viewer_id")
     def _compute_presentation(self):
         for rec in self:
             presented = rec._presentation()
@@ -658,12 +665,13 @@ class DashboardBlueprintScopePanel(models.Model):
             if score >= best_score:
                 best = label
                 best_score = score
-        return {
+        base = {
             "name": (best.name if best else None) or self.name,
             "description": (
                 (best.description if best else None) or self.description or ""
             ),
         }
+        return self._apply_compose_hub_presentation(base)
 
 
 class DashboardBlueprintSlotPanel(models.Model):
@@ -714,7 +722,7 @@ class DashboardBlueprintSlotPanel(models.Model):
             return bool(
                 viewer._restrict_scope_domain_for_model(model, section=self.section)
             )
-        if self.section == "kpi" and self.blueprint_id in viewer._share_component():
+        if self.section == "kpi" and self.blueprint_id in viewer._share_pool_members():
             return bool(
                 viewer._restrict_scope_domain_for_model(model, section=self.section)
             )

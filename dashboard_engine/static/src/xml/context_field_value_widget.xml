@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<templates xml:space="preserve">
+
+    <t t-name="dashboard_engine.ContextFieldValueWidget">
+        <t t-if="kind === 'boolean'">
+            <CheckBox value="boolValue"
+                      disabled="props.readonly"
+                      onChange.bind="onBoolChange">
+                <t t-esc="boolValue ? 'Yes' : 'No'"/>
+            </CheckBox>
+        </t>
+        <t t-elif="kind === 'selection'">
+            <select class="form-select form-select"
+                    t-att-disabled="props.readonly"
+                    t-on-change="onInputChange">
+                <option value="">Choose a value…</option>
+                <t t-foreach="selectionOptions" t-as="opt" t-key="opt[0]">
+                    <option t-att-value="opt[0]"
+                            t-att-selected="stringValue === opt[0]"
+                            t-esc="opt[1]"/>
+                </t>
+            </select>
+        </t>
+        <t t-elif="kind === 'many2one'">
+            <t t-if="relationModel and !props.readonly">
+                <div class="o_ds_record_selector">
+                    <RecordSelector
+                        resModel="relationModel"
+                        resId="recordResId"
+                        update.bind="onRecordUpdate"
+                        fieldString="fieldString"
+                        placeholder="props.placeholder or 'Search a record…'"/>
+                </div>
+            </t>
+            <t t-elif="relationModel and props.readonly">
+                <div class="form-control form-control bg-light o_ds_setup_value"
+                     t-esc="props.recordDisplay or (recordResId ? ('#' + recordResId) : '—')"/>
+            </t>
+            <t t-else="">
+                <input type="text" class="form-control form-control"
+                       placeholder="Set Action / Form Field first"
+                       t-att-value="stringValue"
+                       t-att-readonly="props.readonly"
+                       t-on-change="onInputChange"/>
+            </t>
+        </t>
+        <t t-elif="kind === 'many2many'">
+            <t t-if="relationModel and !props.readonly">
+                <div class="o_ds_record_selector">
+                    <MultiRecordSelector
+                        resModel="relationModel"
+                        resIds="recordResIds"
+                        update.bind="onMultiRecordUpdate"
+                        fieldString="fieldString"
+                        placeholder="props.placeholder or 'Search records…'"/>
+                </div>
+            </t>
+            <t t-elif="relationModel and props.readonly">
+                <div class="form-control form-control bg-light o_ds_setup_value"
+                     t-esc="stringValue or '—'"/>
+            </t>
+            <t t-else="">
+                <input type="text" class="form-control form-control"
+                       placeholder="Set Action / Form Field first"
+                       t-att-value="stringValue"
+                       t-att-readonly="props.readonly"
+                       t-on-change="onInputChange"/>
+            </t>
+        </t>
+        <t t-elif="kind === 'integer'">
+            <input type="number" class="form-control form-control"
+                   step="1"
+                   inputmode="numeric"
+                   t-att-placeholder="props.placeholder or 'e.g. 1'"
+                   t-att-value="stringValue"
+                   t-att-readonly="props.readonly"
+                   t-on-change="onInputChange"/>
+        </t>
+        <t t-elif="kind === 'float'">
+            <input type="number" class="form-control form-control"
+                   step="any"
+                   inputmode="decimal"
+                   t-att-placeholder="props.placeholder or 'e.g. 1.5'"
+                   t-att-value="stringValue"
+                   t-att-readonly="props.readonly"
+                   t-on-change="onInputChange"/>
+        </t>
+        <t t-elif="kind === 'date' or kind === 'datetime'">
+            <DateTimeInput
+                type="kind"
+                value="dateValue"
+                disabled="props.readonly"
+                placeholder="props.placeholder or (kind === 'datetime' ? 'Select date and time…' : 'Select date…')"
+                onApply.bind="onDateApply"/>
+        </t>
+        <t t-else="">
+            <input type="text" class="form-control form-control"
+                   t-att-placeholder="props.placeholder or 'Value'"
+                   t-att-value="stringValue"
+                   t-att-readonly="props.readonly"
+                   t-on-change="onInputChange"/>
+        </t>
+    </t>
+
+</templates>

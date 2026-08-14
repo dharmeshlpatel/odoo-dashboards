@@ -2,14 +2,15 @@
 <templates xml:space="preserve">
 
     <t t-name="dashboard_engine.DashboardContextKvField">
-        <div class="o_dashboard_context_kv w-100">
+        <div class="o_dashboard_context_kv o_ds_action_defaults w-100">
             <t t-if="props.readonly">
                 <t t-foreach="state.rows" t-as="row" t-key="row_index">
                     <t t-if="row.key">
                         <div class="o_dashboard_context_kv_readonly text-muted small mb-2">
-                            <div class="fw-bold text-dark" t-esc="row.key"/>
+                            <div class="fw-bold text-dark" t-esc="contextRowTitle(row)"/>
                             <div>
-                                <span class="badge text-bg-light border me-1" t-esc="typeLabel(row.valueType)"/>
+                                <span class="badge rounded-pill text-bg-light border me-1"
+                                      t-esc="typeLabel(row.valueType)"/>
                                 <span t-esc="readonlySummary(row)"/>
                             </div>
                         </div>
@@ -20,24 +21,223 @@
                 </t>
             </t>
             <t t-else="">
-                <p class="text-muted small mb-2">
-                    Set values passed when this action opens. No technical JSON required.
+                <div class="o_ds_context_presets">
+                    <div class="o_ds_context_presets_label">Add a Setting</div>
+                    <div class="o_ds_context_preset_chips">
+                        <t t-foreach="CONTEXT_PRESETS" t-as="preset" t-key="preset.id">
+                            <button type="button"
+                                    class="btn btn-sm btn-outline-secondary"
+                                    t-att-title="preset.help"
+                                    t-on-click="() => this.addPreset(preset.id)">
+                                <t t-esc="preset.label"/>
+                            </button>
+                        </t>
+                    </div>
+                </div>
+                <p t-if="!state.rows.length" class="form-text mb-0">
+                    Nothing configured — the action opens as usual.
                 </p>
                 <div class="d-flex flex-column gap-2">
                     <t t-foreach="state.rows" t-as="row" t-key="row_index">
-                        <div class="o_dashboard_context_kv_row">
-                            <div class="o_dashboard_context_kv_head d-flex align-items-start gap-2 mb-2">
-                                <div class="flex-grow-1">
-                                    <label class="form-label small mb-0">Context name</label>
-                                    <input type="text"
-                                           class="o_input w-100"
-                                           placeholder="e.g. default_type"
+                        <div class="o_dashboard_context_kv_row o_ds_context_row">
+                            <div class="o_ds_context_row_head d-flex align-items-start gap-2 mb-2">
+                                <div class="o_ds_context_row_title flex-grow-1 fw-bold"
+                                     t-esc="contextRowTitle(row)"/>
+                                <button type="button"
+                                        class="btn btn-link text-danger p-0"
+                                        title="Remove"
+                                        t-on-click="() => this.removeRow(row_index)">
+                                    <i class="fa fa-trash-o"/>
+                                </button>
+                            </div>
+
+                            <t t-if="contextRowPurpose(row) === 'card_record'">
+                                <label class="o_ds_field mb-2 w-100">
+                                    <span>Pass As</span>
+                                    <select class="form-select"
+                                            t-on-change="(ev) => this.onCardPassTarget(row_index, ev)">
+                                        <t t-foreach="CARD_PASS_TARGETS" t-as="target" t-key="target.key">
+                                            <option t-att-value="target.key"
+                                                    t-att-selected="row.key === target.key"
+                                                    t-esc="target.label"/>
+                                        </t>
+                                        <option t-if="!isKnownCardPassTarget(row.key)"
+                                                t-att-value="row.key"
+                                                selected="selected"
+                                                t-esc="row.key"/>
+                                    </select>
+                                </label>
+                                <CheckBox value="row.asList"
+                                          onChange="(checked) => this.onAsListChange(row_index, checked)">
+                                    Allow selecting several records
+                                </CheckBox>
+                            </t>
+
+                            <t t-elif="contextRowPurpose(row) === 'search_filter'">
+                                <label class="o_ds_field mb-0 w-100">
+                                    <span>Filter Name</span>
+                                    <select t-if="filterOptions().length"
+                                            class="form-select"
+                                            t-on-change="(ev) => this.onSearchFilterName(row_index, ev)">
+                                        <option value="">Choose a filter…</option>
+                                        <t t-foreach="filterOptions()" t-as="filt" t-key="filt.name">
+                                            <option t-att-value="filt.name"
+                                                    t-att-selected="searchFilterShortName(row) === filt.name"
+                                                    t-esc="filt.string"/>
+                                        </t>
+                                        <option t-if="searchFilterShortName(row) and !isKnownFilterName(searchFilterShortName(row))"
+                                                t-att-value="searchFilterShortName(row)"
+                                                selected="selected"
+                                                t-esc="searchFilterShortName(row)"/>
+                                    </select>
+                                    <input t-else="" type="text" class="form-control"
+                                           placeholder="e.g. my_pipeline, assigned_to_me"
+                                           t-att-value="searchFilterShortName(row)"
+                                           t-on-change="(ev) => this.onSearchFilterName(row_index, ev)"/>
+                                    <span class="form-text">
+                                        Name of the filter on the list that should start on.
+                                    </span>
+                                </label>
+                            </t>
+
+                            <t t-elif="contextRowPurpose(row) === 'form_default'">
+                                <label class="o_ds_field mb-2 w-100">
+                                    <span>Form Field</span>
+                                    <select t-if="fieldOptions().length"
+                                            class="form-select"
+                                            t-on-change="(ev) => this.onFormFieldName(row_index, ev)">
+                                        <option value="">Choose a field…</option>
+                                        <t t-foreach="fieldOptions()" t-as="fld" t-key="fld.name">
+                                            <option t-att-value="fld.name"
+                                                    t-att-selected="formDefaultShortName(row) === fld.name"
+                                                    t-esc="fld.string"/>
+                                        </t>
+                                        <option t-if="formDefaultShortName(row) and !isKnownFieldName(formDefaultShortName(row))"
+                                                t-att-value="formDefaultShortName(row)"
+                                                selected="selected"
+                                                t-esc="formDefaultShortName(row)"/>
+                                    </select>
+                                    <input t-else="" type="text" class="form-control"
+                                           placeholder="e.g. partner_id, type"
+                                           t-att-value="formDefaultShortName(row)"
+                                           t-on-change="(ev) => this.onFormFieldName(row_index, ev)"/>
+                                </label>
+                                <label class="o_ds_field mb-0 w-100">
+                                    <span>Prefill With</span>
+                                    <ContextFieldValueWidget
+                                        fieldMeta="contextFieldFor(row)"
+                                        value="row.fixedValue"
+                                        placeholder="'Value shown on the new form'"
+                                        onValueChange="(v) => this.setFixedValue(row_index, v)"/>
+                                </label>
+                            </t>
+
+                            <t t-elif="contextRowPurpose(row) === 'group_setting'">
+                                <label class="o_ds_field mb-2 w-100">
+                                    <span>Form Field</span>
+                                    <select t-if="fieldOptions().length"
+                                            class="form-select"
+                                            t-on-change="(ev) => this.onGroupSettingName(row_index, ev)">
+                                        <option value="">Choose a field…</option>
+                                        <t t-foreach="fieldOptions()" t-as="fld" t-key="fld.name">
+                                            <option t-att-value="fld.name"
+                                                    t-att-selected="formDefaultShortName(row) === fld.name"
+                                                    t-esc="fld.string"/>
+                                        </t>
+                                        <option t-if="formDefaultShortName(row) and !isKnownFieldName(formDefaultShortName(row))"
+                                                t-att-value="formDefaultShortName(row)"
+                                                selected="selected"
+                                                t-esc="formDefaultShortName(row)"/>
+                                    </select>
+                                    <input t-else="" type="text" class="form-control"
+                                           placeholder="e.g. type"
+                                           t-att-value="formDefaultShortName(row)"
+                                           t-on-change="(ev) => this.onGroupSettingName(row_index, ev)"/>
+                                </label>
+                                <p class="form-text mb-2">
+                                    First matching rule wins. Everyone else gets the fallback.
+                                </p>
+                                <t t-foreach="row.groupRules" t-as="rule" t-key="rule_index">
+                                    <div class="o_dashboard_context_kv_rule o_ds_context_rule mb-2">
+                                        <div class="d-flex justify-content-between align-items-center mb-1">
+                                            <span class="small fw-bold">When</span>
+                                            <button type="button" class="btn btn-link btn-sm text-danger p-0"
+                                                    t-on-click="() => this.removeGroupRule(row_index, rule_index)">
+                                                Remove
+                                            </button>
+                                        </div>
+                                        <select class="form-select mb-1"
+                                                t-on-change="(ev) => this.onRuleWhenTypeChange(row_index, rule_index, ev)">
+                                            <option value="group" t-att-selected="(rule.whenType or 'group') === 'group'">User Group</option>
+                                            <option value="record" t-att-selected="rule.whenType === 'record'">Card Condition</option>
+                                        </select>
+                                        <t t-if="(rule.whenType or 'group') === 'record'">
+                                            <div class="d-flex align-items-center gap-2 mb-1">
+                                                <code class="small flex-grow-1 text-truncate"
+                                                      t-esc="ruleDomainSummary(rule)"/>
+                                                <button type="button" class="btn btn-secondary btn-sm"
+                                                        t-on-click="() => this.openRuleDomainEditor(row_index, rule_index)">
+                                                    Edit
+                                                </button>
+                                            </div>
+                                        </t>
+                                        <t t-else="">
+                                            <div class="position-relative mb-1">
+                                                <input type="text"
+                                                       class="form-control"
+                                                       placeholder="Search role / group…"
+                                                       t-att-value="rule.groupLabel or rule.groupXmlid"
+                                                       t-on-input="(ev) => this.onGroupSearchInput(row_index, rule_index, ev)"/>
+                                                <div t-if="getGroupHits(row_index, rule_index).length"
+                                                     class="o_dashboard_context_kv_hits list-group">
+                                                    <button type="button"
+                                                            class="list-group-item list-group-item-action py-1"
+                                                            t-foreach="getGroupHits(row_index, rule_index)"
+                                                            t-as="hit" t-key="hit.xmlid"
+                                                            t-on-mousedown.prevent="() => this.pickGroup(row_index, rule_index, hit)">
+                                                        <t t-esc="hit.name"/>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </t>
+                                        <label class="o_ds_field mb-0 w-100">
+                                            <span>Then Use</span>
+                                            <ContextFieldValueWidget
+                                                fieldMeta="contextFieldFor(row)"
+                                                value="rule.value"
+                                                placeholder="'e.g. lead'"
+                                                onValueChange="(v) => this.setRuleValue(row_index, rule_index, v)"/>
+                                        </label>
+                                    </div>
+                                </t>
+                                <button type="button" class="btn btn-link btn-sm px-0 mb-2"
+                                        t-on-click="() => this.addGroupRule(row_index)">
+                                    Add Another Rule
+                                </button>
+                                <label class="o_ds_field mb-0 w-100">
+                                    <span>Otherwise Use</span>
+                                    <ContextFieldValueWidget
+                                        fieldMeta="contextFieldFor(row)"
+                                        value="row.elseValue"
+                                        placeholder="'e.g. opportunity'"
+                                        onValueChange="(v) => this.setElseValue(row_index, v)"/>
+                                </label>
+                            </t>
+
+                            <t t-else="">
+                                <p class="form-text mb-2">
+                                    Custom setting from an older config. Edit carefully or remove and
+                                    re-add with a button above.
+                                </p>
+                                <label class="o_ds_field mb-2 w-100">
+                                    <span>Name</span>
+                                    <input type="text" class="form-control"
                                            t-att-value="row.key"
                                            t-on-change="(ev) => this.onKeyInput(row_index, ev)"/>
-                                </div>
-                                <div style="min-width: 14rem;">
-                                    <label class="form-label small mb-0">How to set the value</label>
-                                    <select class="o_input w-100"
+                                </label>
+                                <label class="o_ds_field mb-2 w-100">
+                                    <span>How to Set the Value</span>
+                                    <select class="form-select"
                                             t-on-change="(ev) => this.onTypeChange(row_index, ev)">
                                         <t t-foreach="VALUE_TYPES" t-as="vt" t-key="vt.value">
                                             <option t-att-value="vt.value"
@@ -45,92 +245,25 @@
                                                     t-esc="vt.label"/>
                                         </t>
                                     </select>
-                                </div>
-                                <button type="button"
-                                        class="btn btn-link text-danger p-0 mt-3"
-                                        title="Remove this default"
-                                        t-on-click="() => this.removeRow(row_index)">
-                                    <i class="fa fa-trash-o"/>
-                                </button>
-                            </div>
-
-                            <t t-if="row.valueType === 'fixed'">
-                                <label class="form-label small mb-0">Value</label>
-                                <input type="text"
-                                       class="o_input w-100"
-                                       placeholder="e.g. opportunity"
-                                       t-att-value="row.fixedValue"
-                                       t-on-change="(ev) => this.onFixedInput(row_index, ev)"/>
-                            </t>
-
-                            <t t-elif="row.valueType === 'record_id'">
-                                <p class="text-muted small mb-1">
-                                    Uses the id of the customer (or card) the user clicked.
-                                </p>
-                                <label class="form-check mb-0">
-                                    <input type="checkbox" class="form-check-input"
-                                           t-att-checked="row.asList"
-                                           t-on-change="(ev) => this.onAsListChange(row_index, ev)"/>
-                                    <span class="form-check-label">Pass as a list (needed for some filters)</span>
                                 </label>
-                            </t>
-
-                            <t t-else="">
-                                <p class="text-muted small mb-2">
-                                    Rules are checked from top to bottom. The first matching group wins.
-                                </p>
-                                <t t-foreach="row.groupRules" t-as="rule" t-key="rule_index">
-                                    <div class="o_dashboard_context_kv_rule mb-2">
-                                        <div class="d-flex justify-content-between align-items-center mb-1">
-                                            <span class="small fw-bold">Group rule <t t-esc="rule_index + 1"/></span>
-                                            <button type="button" class="btn btn-link btn-sm text-danger p-0"
-                                                    t-on-click="() => this.removeGroupRule(row_index, rule_index)">
-                                                Remove rule
-                                            </button>
-                                        </div>
-                                        <label class="form-label small mb-0">When the user is in this group</label>
-                                        <div class="position-relative mb-1">
-                                            <input type="text"
-                                                   class="o_input w-100"
-                                                   placeholder="Search groups by name…"
-                                                   t-att-value="rule.groupLabel or rule.groupXmlid"
-                                                   t-on-input="(ev) => this.onGroupSearchInput(row_index, rule_index, ev)"/>
-                                            <div t-if="getGroupHits(row_index, rule_index).length"
-                                                 class="o_dashboard_context_kv_hits list-group shadow-sm">
-                                                <button type="button"
-                                                        class="list-group-item list-group-item-action py-1"
-                                                        t-foreach="getGroupHits(row_index, rule_index)"
-                                                        t-as="hit" t-key="hit.xmlid"
-                                                        t-on-mousedown.prevent="() => this.pickGroup(row_index, rule_index, hit)">
-                                                    <t t-esc="hit.name"/>
-                                                </button>
-                                            </div>
-                                        </div>
-                                        <label class="form-label small mb-0">Use this value</label>
-                                        <input type="text"
-                                               class="o_input w-100"
-                                               placeholder="e.g. lead"
-                                               t-att-value="rule.value"
-                                               t-on-change="(ev) => this.onRuleValueInput(row_index, rule_index, ev)"/>
-                                    </div>
+                                <t t-if="row.valueType === 'fixed'">
+                                    <label class="o_ds_field mb-0 w-100">
+                                        <span>Value</span>
+                                        <ContextFieldValueWidget
+                                            value="row.fixedValue"
+                                            placeholder="'e.g. opportunity'"
+                                            onValueChange="(v) => this.setFixedValue(row_index, v)"/>
+                                    </label>
                                 </t>
-                                <button type="button" class="btn btn-link btn-sm px-0 mb-2"
-                                        t-on-click="() => this.addGroupRule(row_index)">
-                                    Add another group rule
-                                </button>
-                                <label class="form-label small mb-0">Otherwise use</label>
-                                <input type="text"
-                                       class="o_input w-100"
-                                       placeholder="e.g. opportunity"
-                                       t-att-value="row.elseValue"
-                                       t-on-change="(ev) => this.onElseValueInput(row_index, ev)"/>
+                                <t t-elif="row.valueType === 'record_id'">
+                                    <CheckBox value="row.asList"
+                                              onChange="(checked) => this.onAsListChange(row_index, checked)">
+                                        Allow selecting several records
+                                    </CheckBox>
+                                </t>
                             </t>
                         </div>
                     </t>
-                    <button type="button" class="btn btn-secondary btn-sm align-self-start"
-                            t-on-click="() => this.addRow()">
-                        Add action default
-                    </button>
                 </div>
             </t>
         </div>

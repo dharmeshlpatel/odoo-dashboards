@@ -9,6 +9,13 @@ literals or typed tokens::
     {"__de__": "relative_date", "when": "today"}
     {"__de__": "group_value", "default": "opportunity",
      "map": [{"groups": ["crm.group_use_lead"], "value": "lead"}]}
+    {"__de__": "rule_value", "default": "opportunity",
+     "map": [
+         {"when": {"type": "group", "groups": ["crm.group_use_lead"]},
+          "value": "lead"},
+         {"when": {"type": "record", "domain": "[('country_id.code', '=', 'DE')]"},
+          "value": "b2b_de"},
+     ]}
 
 Compile at render time via :func:`compile_domain_tree` or
 :func:`compile_context_value` — never ``safe_eval`` for tokens.
@@ -136,7 +143,9 @@ def resolve_token(tok, env, record=None, model_name=None, field_name=None):
     if kind == "relative_date":
         return _resolve_relative_date(tok, env, model_name, field_name)
     if kind == "group_value":
-        return _resolve_group_value(tok, env)
+        return _resolve_rule_map(tok, env, record=record, allow_record=False)
+    if kind == "rule_value":
+        return _resolve_rule_map(tok, env, record=record, allow_record=True)
     raise ValidationError(
         "Unknown dashboard condition token %(kind)s." % {"kind": kind}
     )
@@ -237,13 +246,92 @@ def _field_is_datetime(env, model_name, field_name):
     return False
 
 
-def _resolve_group_value(tok, env):
+def _resolve_group_value(tok, env, record=None):
+    """Legacy alias — group-only maps (no card-record when clauses)."""
+    return _resolve_rule_map(tok, env, record=record, allow_record=False)
+
+
+def _resolve_rule_map(tok, env, record=None, allow_record=True):
+    """First matching rule wins; otherwise ``default``.
+
+    Map entries may be legacy ``{"groups": [...], "value": ...}`` or::
+
+        {"when": {"type": "group", "groups": [...]}, "value": ...}
+        {"when": {"type": "record", "domain": [...] | "..."}, "value": ...}
+    """
     user = env.user
     for entry in tok.get("map") or []:
-        groups = entry.get("groups") or []
-        if any(user.has_group(xmlid) for xmlid in groups if xmlid):
-            return _coerce_literal(entry.get("value"))
+        if not isinstance(entry, dict):
+            continue
+        when = entry.get("when")
+        if when is None:
+            groups = entry.get("groups") or []
+            if any(user.has_group(xmlid) for xmlid in groups if xmlid):
+                return _coerce_literal(entry.get("value"))
+            continue
+        if not isinstance(when, dict):
+            continue
+        wtype = when.get("type") or "group"
+        if wtype == "group":
+            groups = when.get("groups") or []
+            if any(user.has_group(xmlid) for xmlid in groups if xmlid):
+                return _coerce_literal(entry.get("value"))
+            continue
+        if wtype == "record":
+            if not allow_record:
+                continue
+            if record is None:
+                continue
+            domain = _coerce_domain(when.get("domain"))
+            if domain is None:
+                _logger.warning(
+                    "rule_value record domain invalid; skipping rule: %r",
+                    when.get("domain"),
+                )
+                continue
+            if not domain:
+                # Empty domain never matches (avoids accidental always-true).
+                continue
+            try:
+                if record.filtered_domain(domain):
+                    return _coerce_literal(entry.get("value"))
+            except Exception:
+                _logger.warning(
+                    "rule_value record domain failed on %s; skipping rule",
+                    record._name,
+                    exc_info=True,
+                )
+            continue
     return _coerce_literal(tok.get("default"))
+
+
+def _coerce_domain(raw):
+    """Normalize a stored domain to a list, or ``None`` if invalid."""
+    if isinstance(raw, (list, tuple)):
+        return list(raw)
+    if raw is None or raw is False:
+        return []
+    text = str(raw).strip()
+    if not text or text == "[]":
+        return []
+    try:
+        from ast import literal_eval
+
+        parsed = literal_eval(text)
+        if isinstance(parsed, (list, tuple)):
+            return list(parsed)
+    except Exception:
+        pass
+    try:
+        from odoo.tools.safe_eval import safe_eval
+
+        # Same expression helpers as domain Char ↔ tree (uid / True / False).
+        parsed = safe_eval(text, _token_eval_context())
+        if isinstance(parsed, (list, tuple)):
+            return list(parsed)
+    except Exception:
+        pass
+    return None
 
 
 def _coerce_literal(raw):
