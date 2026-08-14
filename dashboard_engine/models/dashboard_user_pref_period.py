@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 # Part of Odoo. See LICENSE file for full copyright and licensing details.
 """Per-Chart-Model-Option date filter rows on live user prefs (step 2)."""
+import json
+
 from odoo import _, api, fields, models
 
 
@@ -26,7 +28,9 @@ class DashboardUserPrefPeriodLine(models.Model):
         index=True,
     )
     sequence = fields.Integer(default=10)
-    label = fields.Char(required=True, translate=True)
+    # Not required: the gear list marks Label readonly, so OWL treats empty
+    # Label as invalid and skips the parent onchange that fills Custom Filter.
+    label = fields.Char(translate=True, default="Date")
     field_name = fields.Char(
         string="Date Field Name",
         help="Technical date/datetime field on the active chart model.",
@@ -73,8 +77,70 @@ class DashboardUserPrefPeriodLine(models.Model):
         for rec in self:
             rec.field_name = rec.field_id.name or False
 
+    def _current_period_year(self):
+        return self.env["period.year"].search([("name", "=", "year")], limit=1)
+
+    def _default_label_from_vals(self, vals):
+        """Fill Label when the gear saves a line without sending the readonly field."""
+        label = (vals.get("label") or "").strip() if isinstance(vals.get("label"), str) else vals.get("label")
+        if label:
+            return label
+        field = self.env["ir.model.fields"].browse(vals.get("field_id") or [])
+        if field:
+            return field.field_description or field.name or _("Date")
+        return vals.get("field_name") or _("Date")
+
+    @api.model_create_multi
+    def create(self, vals_list):
+        for vals in vals_list:
+            if not vals.get("label"):
+                vals["label"] = self._default_label_from_vals(vals)
+        return super().create(vals_list)
+
+    def _sync_period_mq_year(self, vals):
+        """Months need a year; clearing years also clears months (v1 gear)."""
+        if self.env.context.get("skip_period_line_mq_year_sync"):
+            return
+        for rec in self:
+            year_cleared = "period_year_ids" in vals and not rec.period_year_ids
+            months_touched = "period_mq_ids" in vals
+            if year_cleared and not months_touched:
+                if rec.period_mq_ids:
+                    rec.with_context(
+                        skip_period_line_mq_year_sync=True,
+                    ).write({"period_mq_ids": [(6, 0, [])]})
+                continue
+            if rec.period_mq_ids and not rec.period_year_ids:
+                year = rec._current_period_year()
+                if year:
+                    rec.with_context(
+                        skip_period_line_mq_year_sync=True,
+                    ).write({"period_year_ids": [(6, 0, year.ids)]})
+
+    @api.onchange("period_mq_ids")
+    def _onchange_period_mq_ids(self):
+        if self.period_mq_ids and not self.period_year_ids:
+            year = self._current_period_year()
+            if year:
+                self.period_year_ids = year
+        self._onchange_sync_pref_custom_filter()
+
+    @api.onchange("period_year_ids")
+    def _onchange_period_year_ids(self):
+        if not self.period_year_ids:
+            self.period_mq_ids = False
+        self._onchange_sync_pref_custom_filter()
+
+    def _onchange_sync_pref_custom_filter(self):
+        """v1 gear: month/year picks rewrite Custom Filter from date ranges."""
+        for rec in self:
+            pref = rec.pref_id
+            if pref:
+                pref.custom_filter = pref._custom_filter_char_from_periods()
+
     def write(self, vals):
         res = super().write(vals)
+        self._sync_period_mq_year(vals)
         if not self.env.context.get("skip_period_line_legacy_mirror"):
             if any(
                 key in vals
@@ -87,7 +153,10 @@ class DashboardUserPrefPeriodLine(models.Model):
                     "label",
                 )
             ):
-                self.mapped("pref_id")._mirror_period_lines_to_legacy()
+                prefs = self.mapped("pref_id")
+                prefs._mirror_period_lines_to_legacy()
+                if any(k in vals for k in ("period_mq_ids", "period_year_ids")):
+                    prefs._sync_custom_filter_from_periods()
         return res
 
 
@@ -196,7 +265,7 @@ class DashboardUserPrefPeriod(models.Model):
                     year_ids = list(spec.get("default_period_year_ids") or [])
                 vals = {
                     "sequence": spec["sequence"],
-                    "label": spec["label"],
+                    "label": spec["label"] or spec.get("field_name") or _("Date"),
                     "field_name": spec.get("field_name") or False,
                     "field_id": spec.get("field_id") or False,
                     "date_filter_id": spec.get("date_filter_id") or False,
@@ -328,7 +397,7 @@ class DashboardUserPrefPeriod(models.Model):
                         0,
                         {
                             "sequence": extra.sequence,
-                            "label": extra.label,
+                            "label": extra.label or extra.field_name or _("Date"),
                             "field_name": extra.field_name,
                             "field_id": extra.field_id.id if extra.field_id else False,
                             "date_filter_id": extra.date_filter_id.id
@@ -360,29 +429,163 @@ class DashboardUserPrefPeriod(models.Model):
                     ]
                 )
 
-    def _period_domain(self):
-        """Date ranges from dynamic period lines (fallback: legacy two slots)."""
+    def _period_mq_years(self, mq_ids, year_ids):
+        """v1: months without a year use the current year for the date domain."""
+        if mq_ids and not year_ids:
+            year_ids = self.env["period.year"].search([("name", "=", "year")], limit=1)
+        return mq_ids, year_ids
+
+    def _collect_period_ranges(self):
+        """Raw per-period AND domains (one list per month/year range)."""
         self.ensure_one()
         lines = self.period_line_ids.sorted("sequence")
         ranges = []
         if lines:
             for line in lines:
-                ranges += self._period_ranges(
-                    line.field_id, line.period_mq_ids, line.period_year_ids
+                mq_ids, year_ids = self._period_mq_years(
+                    line.period_mq_ids, line.period_year_ids
                 )
+                ranges += self._period_ranges(line.field_id, mq_ids, year_ids)
         else:
-            ranges = self._period_ranges(
-                self.period_field_id, self.period_mq_ids, self.period_year_ids
+            mq_ids, year_ids = self._period_mq_years(
+                self.period_mq_ids, self.period_year_ids
+            )
+            ranges = self._period_ranges(self.period_field_id, mq_ids, year_ids)
+            closed_mq, closed_year = self._period_mq_years(
+                self.period_closed_mq_ids, self.period_closed_year_ids
             )
             ranges += self._period_ranges(
-                self.period_closed_field_id,
-                self.period_closed_mq_ids,
-                self.period_closed_year_ids,
+                self.period_closed_field_id, closed_mq, closed_year
             )
+        return ranges
+
+    def _combine_period_ranges(self, ranges, operator):
+        ranges = [rng for rng in (ranges or []) if rng]
         if not ranges:
             return []
-        combine = fields.Domain.AND if self.period_operator == "all" else fields.Domain.OR
+        op = operator or "any"
+        combine = fields.Domain.AND if op == "all" else fields.Domain.OR
         return list(combine(ranges))
+
+    def _range_metas(self, ranges):
+        """Field + start/end for each month/year range (gear Domain.or)."""
+        metas = []
+        for rng in ranges or []:
+            leaves = [
+                item
+                for item in rng
+                if isinstance(item, (list, tuple)) and len(item) >= 3
+            ]
+            start = next((item for item in leaves if item[1] == ">="), None)
+            end = next((item for item in leaves if item[1] == "<="), None)
+            if start and end:
+                metas.append(
+                    {
+                        "field": start[0],
+                        "start": start[2],
+                        "end": end[2],
+                    }
+                )
+        return metas
+
+    def _period_domain(self):
+        """Date ranges from dynamic period lines (fallback: legacy two slots)."""
+        self.ensure_one()
+        return self._combine_period_ranges(
+            self._collect_period_ranges(), self.period_operator
+        )
+
+    def _domain_to_char(self, domain):
+        """Odoo debug-domain string (quoted operators + tuples for leaves)."""
+        chunks = []
+        for item in list(domain or []):
+            if isinstance(item, str):
+                chunks.append(json.dumps(item))
+            elif isinstance(item, (list, tuple)) and len(item) >= 3:
+                chunks.append(
+                    "(%s, %s, %s)"
+                    % (
+                        json.dumps(item[0]),
+                        json.dumps(item[1]),
+                        json.dumps(item[2]),
+                    )
+                )
+            else:
+                chunks.append(json.dumps(item))
+        return "[%s]" % ", ".join(chunks) if chunks else "[]"
+
+    def _custom_filter_char_from_periods(self):
+        """Serialize live month/year ranges the way v1 wrote graph custom filter."""
+        self.ensure_one()
+        return self._domain_to_char(
+            self._combine_period_ranges(
+                self._collect_period_ranges(),
+                self.period_operator,
+            )
+        )
+
+    def _collect_period_ranges_from_picks(self, picks):
+        """Raw per-period AND domains from live gear month/year tags."""
+        self.ensure_one()
+        ranges = []
+        lines = {line.id: line for line in self.period_line_ids}
+        graph_model = self.graph_model or (
+            self.blueprint_id.graph_model if self.blueprint_id else False
+        )
+        Fields = self.env["ir.model.fields"]
+        Mq = self.env["period.month.quarter"]
+        Year = self.env["period.year"]
+        for pick in picks or []:
+            line = lines.get(pick.get("id") or 0)
+            field = line.field_id if line else False
+            field_name = pick.get("field_name") or (
+                line.field_name if line else False
+            )
+            if not field and field_name and graph_model:
+                field = Fields.search(
+                    [("model", "=", graph_model), ("name", "=", field_name)],
+                    limit=1,
+                )
+            mq_ids, year_ids = self._period_mq_years(
+                Mq.browse(pick.get("period_mq_ids") or []),
+                Year.browse(pick.get("period_year_ids") or []),
+            )
+            ranges += self._period_ranges(field, mq_ids, year_ids)
+        return ranges
+
+    def _period_domain_from_picks(self, picks, operator=None):
+        """Build the v1 date domain from live gear month/year picks (unsaved)."""
+        self.ensure_one()
+        return self._combine_period_ranges(
+            self._collect_period_ranges_from_picks(picks),
+            operator or self.period_operator or "any",
+        )
+
+    def web_custom_filter_from_period_picks(self, picks, operator=None):
+        """Live gear: rewrite Custom Filter from month/year tags (same as v1)."""
+        self.ensure_one()
+        op = operator or self.period_operator or "any"
+        ranges = self._collect_period_ranges_from_picks(picks)
+        return {
+            "operator": op,
+            "ranges": self._range_metas(ranges),
+            "domain": self._domain_to_char(self._combine_period_ranges(ranges, op)),
+        }
+
+    def _sync_custom_filter_from_periods(self):
+        if self.env.context.get("skip_custom_filter_from_periods"):
+            return
+        for pref in self:
+            value = pref._custom_filter_char_from_periods()
+            if pref.custom_filter != value:
+                pref.with_context(skip_custom_filter_from_periods=True).write(
+                    {"custom_filter": value}
+                )
+
+    @api.onchange("period_line_ids", "period_operator")
+    def _onchange_period_operator_custom_filter(self):
+        for pref in self:
+            pref.custom_filter = pref._custom_filter_char_from_periods()
 
     @api.model_create_multi
     def create(self, vals_list):
@@ -412,4 +615,25 @@ class DashboardUserPrefPeriod(models.Model):
             self._lift_legacy_period_to_lines()
         if lines_touched and not self.env.context.get("skip_period_line_legacy_mirror"):
             self._mirror_period_lines_to_legacy()
+        if (
+            not self.env.context.get("skip_custom_filter_from_periods")
+            and (
+                lines_touched
+                or "period_operator" in vals
+                or (
+                    legacy_touched
+                    and any(
+                        k in vals
+                        for k in (
+                            "period_mq_ids",
+                            "period_year_ids",
+                            "period_closed_mq_ids",
+                            "period_closed_year_ids",
+                            "period_operator",
+                        )
+                    )
+                )
+            )
+        ):
+            self._sync_custom_filter_from_periods()
         return res

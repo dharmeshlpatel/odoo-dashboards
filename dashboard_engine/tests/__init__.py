@@ -5,3 +5,4 @@ from . import test_dashboard_lens  # noqa: F401
 from . import test_dashboard_pref_company  # noqa: F401
 from . import test_dashboard_hub  # noqa: F401
 from . import test_panel_filters_linked_my  # noqa: F401
+from . import test_dashboard_period_custom_filter  # noqa: F401
