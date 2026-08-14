@@ -2,7 +2,7 @@
 # Part of Odoo. See LICENSE file for full copyright and licensing details.
 {
     "name": "Dynamic Dashboard Engine",
-    "version": "19.0.1.0.231",
+    "version": "19.0.1.0.333",
     "category": "Productivity",
     "summary": "Build kanban dashboards for any Odoo model via dynamic configuration",
     "description": """
@@ -52,4 +52,5 @@ Technical dependencies are intentionally limited to ``base`` and ``web``.
     "application": True,
     "license": "Other proprietary",
     "post_init_hook": "post_init_hook",
+    "uninstall_hook": "uninstall_hook",
 }

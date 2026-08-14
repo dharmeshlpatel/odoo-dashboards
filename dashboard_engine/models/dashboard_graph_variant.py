@@ -35,6 +35,10 @@ class DashboardBlueprintGraphVariant(models.Model):
     blueprint_id = fields.Many2one(
         "dashboard.blueprint", required=True, ondelete="cascade", index=True
     )
+    host_model_name = fields.Char(
+        related="blueprint_id.host_model_name",
+        string="Host Model",
+    )
     sequence = fields.Integer(default=10)
     graph_model = fields.Char(required=True, index=True)
     graph_model_id = fields.Many2one(
@@ -62,6 +66,33 @@ class DashboardBlueprintGraphVariant(models.Model):
         ),
     )
     primary_action_context = fields.Char(default="{}")
+    primary_action_domain = fields.Char(
+        string="Extra Domain",
+        default="[]",
+        help="Extra domain merged into this option's primary action. "
+        "Supports {{id}} for the host record id.",
+    )
+    primary_label_alt_scope_id = fields.Many2one(
+        "dashboard.blueprint.scope",
+        string="When this filter is off",
+        ondelete="cascade",
+        domain="[('blueprint_id', '=', blueprint_id)]",
+        help="Optional settings filter. While it is ticked, the button shows "
+        "Button Label; while it is off, Alternate Label is shown.",
+    )
+    primary_label_alt = fields.Char(
+        translate=True,
+        string="Alternate Label",
+        help="Button label when the selected settings filter is off.",
+    )
+    alternate_action_ids = fields.One2many(
+        "dashboard.blueprint.action.variant",
+        "graph_variant_id",
+        string="Alternate Actions",
+        copy=True,
+        help="Opens a different screen when a listed app is installed. "
+        "First match wins; otherwise this option's primary action is used.",
+    )
     is_default = fields.Boolean(
         string="Default",
         default=False,
@@ -111,6 +142,12 @@ class DashboardBlueprintGraphVariant(models.Model):
         domain="[('id', 'in', applicable_include_scope_ids)]",
         help="Include scopes whose domain matches this chart model. "
         "Ticked ones start on in the live gear for this option.",
+    )
+    # Same Include boxes as Studio: edit name/domain here; shared on the blueprint.
+    include_scope_ids = fields.One2many(
+        related="blueprint_id.scope_ids",
+        readonly=False,
+        string="Data to Include",
     )
     scope_warning = fields.Char(
         string="Scope Warning",
@@ -176,6 +213,9 @@ class DashboardBlueprintGraphVariant(models.Model):
                 "primary_button_label",
                 "primary_action_xmlid",
                 "primary_action_context",
+                "primary_action_domain",
+                "primary_label_alt_scope_id",
+                "primary_label_alt",
                 "default_groupby_ids",
                 "default_ordered_groupby_ids",
                 "default_measure_field_id",
@@ -505,11 +545,149 @@ class DashboardBlueprintGraphPicker(models.Model):
         "blueprint_id",
         string="Graph Model Variants",
     )
+    pooled_default_graph_variant_id = fields.Many2one(
+        "dashboard.blueprint.graph.variant",
+        string="Default Shared Chart Option",
+        ondelete="set null",
+        copy=False,
+        help="Studio Default for compose hubs (e.g. Customer 360) when the "
+        "chosen Chart Model Option comes from Share Links. Does not change "
+        "the owner pack's own Default. Empty = first valid pooled option.",
+    )
+    effective_graph_variant_ids = fields.Many2many(
+        "dashboard.blueprint.graph.variant",
+        compute="_compute_effective_graph_variant_ids",
+        string="All Chart Model Options",
+        help="Local options plus Share Links peers (same pool as Studio).",
+    )
+    shared_graph_variant_ids = fields.Many2many(
+        "dashboard.blueprint.graph.variant",
+        compute="_compute_effective_graph_variant_ids",
+        string="Shared Chart Model Options",
+        help="Read-only Chart Model Options from Share Links peers.",
+    )
+    has_shared_graph_variants = fields.Boolean(
+        compute="_compute_effective_graph_variant_ids",
+    )
+    has_effective_graph_variants = fields.Boolean(
+        compute="_compute_effective_graph_variant_ids",
+    )
+    default_chart_option_id = fields.Many2one(
+        "dashboard.blueprint.graph.variant",
+        string="Default Chart Model Option",
+        compute="_compute_default_chart_option_id",
+        inverse="_inverse_default_chart_option_id",
+        domain="[('id', 'in', effective_graph_variant_ids)]",
+        help="Chart new users see (same as Studio Default radio). Can point "
+        "at a Shared option on 360 hubs without changing the owner pack.",
+    )
+    has_graph_variants = fields.Boolean(
+        string="Has Chart Model Options",
+        compute="_compute_has_graph_variants",
+        help="True when this blueprint owns at least one Chart Model Option. "
+        "Used by Advanced form modifiers (One2many length is unreliable in "
+        "invisible= expressions).",
+    )
+
+    @api.depends("graph_variant_ids")
+    def _compute_has_graph_variants(self):
+        for bp in self:
+            bp.has_graph_variants = bool(bp.graph_variant_ids)
+
+    @api.depends(
+        "graph_variant_ids",
+        "graph_variant_ids.sequence",
+        "graph_variant_ids.graph_model",
+        "share_link_ids",
+        "share_link_ids.graph_variant_ids",
+        "share_link_ids.graph_variant_ids.sequence",
+        "share_link_ids.graph_variant_ids.graph_model",
+    )
+    def _compute_effective_graph_variant_ids(self):
+        for bp in self:
+            eff = bp._effective_graph_variants()
+            bp.effective_graph_variant_ids = eff
+            shared = eff.filtered(lambda v, b=bp: v.blueprint_id != b)
+            bp.shared_graph_variant_ids = shared
+            bp.has_shared_graph_variants = bool(shared)
+            bp.has_effective_graph_variants = bool(eff)
+
+    @api.depends(
+        "graph_variant_ids",
+        "graph_variant_ids.is_default",
+        "graph_variant_ids.sequence",
+        "pooled_default_graph_variant_id",
+        "share_link_ids",
+        "share_link_ids.graph_variant_ids",
+        "share_link_ids.graph_variant_ids.is_default",
+    )
+    def _compute_default_chart_option_id(self):
+        for bp in self:
+            bp.default_chart_option_id = bp._default_graph_variant()
+
+    def _inverse_default_chart_option_id(self):
+        for bp in self:
+            variant = bp.default_chart_option_id
+            if not variant:
+                continue
+            if variant.blueprint_id == bp:
+                bp._studio_mark_default_graph_variant(variant)
+            else:
+                bp._studio_mark_pooled_default_graph_variant(variant)
+
+    @api.model
+    def _graph_variant_dedupe_key(self, variant):
+        """Stable identity for shared Chart Model Option collapsing.
+
+        Same chart model across Share Links collapses; the current blueprint
+        wins (same order as ``_effective_slots``). ``None`` = never collapse.
+        """
+        model = (variant.graph_model or "").strip()
+        if not model:
+            return None
+        return ("model", model)
+
+    def _share_graph_peer_sort_key(self, blueprint):
+        """Pack dashboards before *360 hubs when collapsing shared chart options.
+
+        Customer 360 should compose CRM/Sales options, not become their owner
+        when the same ``graph_model`` exists on both.
+        """
+        key = (blueprint.key or "").strip().lower()
+        is_hub = key.endswith("_360") or key.endswith("360")
+        return (1 if is_hub else 0, blueprint.sequence, blueprint.id)
+
+    def _effective_graph_variants(self):
+        """Chart Model Options from the share component, deduped.
+
+        Order: this blueprint first (by sequence), then other linked blueprints
+        (packs before *360 hubs), by ``(sequence, id)``. First wins on
+        ``_graph_variant_dedupe_key``. Studio edit surfaces stay on
+        ``graph_variant_ids`` (local only).
+        """
+        self.ensure_one()
+        if self.env.context.get("dashboard_studio_local_only"):
+            return self.graph_variant_ids.sorted("sequence")
+        component = self._share_pool_members()
+        peers = (component - self).sorted(self._share_graph_peer_sort_key)
+        ordered_ids = []
+        seen_keys = set()
+        for blueprint in [self] + list(peers):
+            for variant in blueprint.graph_variant_ids.sorted("sequence"):
+                key = self._graph_variant_dedupe_key(variant)
+                if key is not None:
+                    if key in seen_keys:
+                        continue
+                    seen_keys.add(key)
+                ordered_ids.append(variant.id)
+        return self.env["dashboard.blueprint.graph.variant"].browse(ordered_ids)
 
     def _graph_model_candidates(self):
         self.ensure_one()
         rows = []
-        for variant in self.graph_variant_ids.sorted("sequence"):
+        default = self._default_graph_variant()
+        default_id = default.id if default else False
+        for variant in self._effective_graph_variants():
             if variant._is_valid_candidate():
                 rows.append(
                     {
@@ -517,28 +695,56 @@ class DashboardBlueprintGraphPicker(models.Model):
                         "graph_model": variant.graph_model,
                         "label": variant.primary_button_label,
                         "action_xmlid": variant.primary_action_xmlid,
-                        "is_default": bool(variant.is_default),
+                        "is_default": bool(default_id and variant.id == default_id),
+                        "is_local": variant.blueprint_id == self,
+                        "source_blueprint_id": variant.blueprint_id.id,
+                        "source_blueprint_name": (
+                            variant.blueprint_id.display_name
+                            or variant.blueprint_id.name
+                            or ""
+                        ),
                     }
                 )
         return rows
 
     def _default_graph_variant(self):
-        """Blueprint default option (is_default), else first valid by sequence."""
+        """Local Default, else hub shared Default, else first valid pooled option.
+
+        Local ``is_default`` stays on this blueprint. Compose hubs (e.g.
+        Customer 360) can point ``pooled_default_graph_variant_id`` at a Share
+        Links peer without changing that pack's own Default.
+        """
         self.ensure_one()
         marked = self.graph_variant_ids.filtered("is_default").sorted("sequence")
         for variant in marked:
             if variant._is_valid_candidate():
                 return variant
+        pool = self._effective_graph_variants()
+        pooled = self.pooled_default_graph_variant_id
+        if (
+            pooled
+            and pooled in pool
+            and pooled.blueprint_id != self
+            and pooled._is_valid_candidate()
+        ):
+            return pooled
         for variant in self.graph_variant_ids.sorted("sequence"):
             if variant._is_valid_candidate():
                 return variant
-        return marked[:1]
+        for variant in pool:
+            if variant._is_valid_candidate():
+                return variant
+        return marked[:1] or pooled[:1]
 
     def _studio_mark_default_graph_variant(self, variant):
-        """Exclusive default + mirror chart/primary fields onto the blueprint."""
+        """Exclusive local default + mirror chart/primary fields onto the blueprint."""
         self.ensure_one()
         if not variant or variant.blueprint_id != self:
             return
+        if self.pooled_default_graph_variant_id:
+            self.with_context(skip_graph_variant_default=True).write(
+                {"pooled_default_graph_variant_id": False}
+            )
         others = (self.graph_variant_ids - variant).filtered("is_default")
         if others:
             others.with_context(skip_graph_variant_default=True).write(
@@ -549,6 +755,29 @@ class DashboardBlueprintGraphPicker(models.Model):
                 {"is_default": True}
             )
         self._sync_blueprint_from_default_variant()
+
+    def _studio_mark_pooled_default_graph_variant(self, variant):
+        """Hub-only Default pointing at a Share Links peer option."""
+        self.ensure_one()
+        if not variant or variant.blueprint_id == self:
+            return
+        pool = self._effective_graph_variants()
+        if variant not in pool:
+            raise UserError(
+                _("That chart model option is not available via Share Links.")
+            )
+        if not variant._is_valid_candidate():
+            raise UserError(_("That chart model option is incomplete."))
+        # Clear local defaults so the shared pick is what new users see.
+        locals_default = self.graph_variant_ids.filtered("is_default")
+        if locals_default:
+            locals_default.with_context(skip_graph_variant_default=True).write(
+                {"is_default": False}
+            )
+        if self.pooled_default_graph_variant_id != variant:
+            self.with_context(skip_graph_variant_default=True).write(
+                {"pooled_default_graph_variant_id": variant.id}
+            )
 
     def _sync_blueprint_from_default_variant(self):
         """Keep blueprint chart fields = Default Chart Model Option."""
@@ -589,6 +818,21 @@ class DashboardBlueprintGraphPicker(models.Model):
         ctx = variant.primary_action_context or "{}"
         if ctx != (self.primary_action_context or "{}"):
             vals["primary_action_context"] = ctx
+        domain = (variant.primary_action_domain or "[]").strip() or "[]"
+        bp_domain = (self.primary_action_domain or "[]").strip() or "[]"
+        if domain != bp_domain:
+            vals["primary_action_domain"] = domain
+        alt_scope = variant.primary_label_alt_scope_id
+        if (alt_scope.id if alt_scope else False) != (
+            self.primary_label_alt_scope_id.id
+            if self.primary_label_alt_scope_id
+            else False
+        ):
+            vals["primary_label_alt_scope_id"] = alt_scope.id if alt_scope else False
+        alt_label = (variant.primary_label_alt or "").strip() or False
+        bp_alt = (self.primary_label_alt or "").strip() or False
+        if alt_label != bp_alt:
+            vals["primary_label_alt"] = alt_label
         # Group By / Measure live on the option; mirror onto blueprint for packs
         # and code paths that still read blueprint fields.
         ordered = list(variant._ordered_default_groupby_fields())
@@ -624,9 +868,18 @@ class DashboardBlueprintGraphPicker(models.Model):
             self.with_context(skip_graph_variant_sync=True).write(vals)
 
     def _ensure_default_graph_variant_row(self):
-        """Create one Chart Model Option from blueprint when none exist yet."""
+        """Create one Chart Model Option from blueprint when none exist yet.
+
+        Skip compose hubs (*360) and any blueprint whose Share Links peers
+        already define chart options — those must not auto-own pack charts.
+        """
         self.ensure_one()
         if self.graph_variant_ids or not self.graph_model:
+            return
+        if self._is_compose_hub():
+            return
+        peers = self._share_pool_members() - self
+        if any(peer.graph_variant_ids for peer in peers):
             return
         xmlid = (self.primary_action_xmlid or "").strip()
         if not xmlid:
@@ -638,7 +891,7 @@ class DashboardBlueprintGraphPicker(models.Model):
                 xmlid = act.get_external_id().get(act.id) or ""
         if not xmlid:
             return
-        self.env["dashboard.blueprint.graph.variant"].create(
+        created = self.env["dashboard.blueprint.graph.variant"].create(
             {
                 "blueprint_id": self.id,
                 "sequence": 10,
@@ -648,11 +901,21 @@ class DashboardBlueprintGraphPicker(models.Model):
                 or _("Chart Model"),
                 "primary_action_xmlid": xmlid,
                 "primary_action_context": self.primary_action_context or "{}",
+                "primary_action_domain": (
+                    (self.primary_action_domain or "[]").strip() or "[]"
+                ),
+                "primary_label_alt_scope_id": (
+                    self.primary_label_alt_scope_id.id or False
+                ),
+                "primary_label_alt": self.primary_label_alt or False,
                 "is_default": True,
                 "scope_warning": self.scope_warning or False,
                 "graph_domain": (self.graph_domain or "[]").strip() or "[]",
             }
         )
+        legacy_alts = self.alternate_action_ids
+        if legacy_alts:
+            legacy_alts.write({"graph_variant_id": created.id})
 
     def _seed_variant_date_filters_from_blueprint(self, variant):
         """Copy blueprint Open/Closed date fields onto an empty option list.
@@ -782,17 +1045,27 @@ class DashboardBlueprintGraphPicker(models.Model):
                 variant.with_context(skip_graph_variant_default=True).write(vals)
 
     def _effective_graph_variant(self):
-        """User gear pick, else blueprint Default option."""
+        """User gear pick (local or Share Links peer), else local Default.
+
+        Studio left preview always follows the blueprint Default option so
+        Content edits (set Default, Title Label, …) mirror immediately — not
+        the admin's personal gear preference.
+        """
         self.ensure_one()
+        if self.env.context.get("dashboard_studio_preview"):
+            return self._default_graph_variant()
+        pool = self._effective_graph_variants()
         pref = self._current_pref()
         if pref:
+            preferred = pref.preferred_graph_variant_id
             if (
-                pref.preferred_graph_variant_id
-                and pref.preferred_graph_variant_id._is_valid_candidate()
+                preferred
+                and preferred in pool
+                and preferred._is_valid_candidate()
             ):
-                return pref.preferred_graph_variant_id
+                return preferred
             if pref.preferred_graph_model:
-                match = self.graph_variant_ids.filtered(
+                match = pool.filtered(
                     lambda v: v.graph_model == pref.preferred_graph_model
                     and v._is_valid_candidate()
                 )[:1]
@@ -831,7 +1104,11 @@ class DashboardBlueprintGraphPicker(models.Model):
             "graph_data_field",
             "primary_button_label",
             "primary_action_xmlid",
+            "primary_action_id",
             "primary_action_context",
+            "primary_action_domain",
+            "primary_label_alt_scope_id",
+            "primary_label_alt",
             "is_default",
             "default_groupby_field_ids",
             "default_measure_field_id",
@@ -842,81 +1119,132 @@ class DashboardBlueprintGraphPicker(models.Model):
         }
     )
 
+    def _studio_graph_variant_dict(self, variant):
+        """One Chart Model Option for Studio (owned or Share Links peer)."""
+        self.ensure_one()
+        owned = variant.blueprint_id == self
+        ordered_gb = variant._ordered_default_groupby_fields()
+        owner_includes = variant.blueprint_id.scope_ids.filtered(
+            lambda s: s.mode == "include"
+        )
+        applicable = owner_includes.filtered(
+            lambda s, m=variant.graph_model: s._domain_applies_to_model(m)
+        )
+        return {
+            "id": variant.id,
+            "sequence": variant.sequence,
+            "owned": owned,
+            "source_blueprint_id": variant.blueprint_id.id,
+            "source_blueprint_name": (
+                variant.blueprint_id.display_name or variant.blueprint_id.name or ""
+            ),
+            "source_blueprint_key": variant.blueprint_id.key or "",
+            "graph_model": variant.graph_model or "",
+            "graph_model_id": variant.graph_model_id.id or False,
+            "graph_model_label": (
+                variant.graph_model_id.name or variant.graph_model or ""
+            ),
+            "graph_data_field": variant.graph_data_field or "",
+            "primary_button_label": variant.primary_button_label or "",
+            "primary_action_xmlid": variant.primary_action_xmlid or "",
+            "primary_action_id": variant.primary_action_id.id or False,
+            "primary_action_name": (
+                variant.primary_action_id.display_name
+                or variant.primary_action_xmlid
+                or ""
+            ),
+            "primary_action_context": variant.primary_action_context or "{}",
+            "primary_action_domain": variant.primary_action_domain or "[]",
+            "primary_label_alt_scope_id": (
+                variant.primary_label_alt_scope_id.id or False
+            ),
+            "primary_label_alt": variant.primary_label_alt or "",
+            "alternate_actions": [
+                {
+                    "id": alt.id,
+                    "sequence": alt.sequence,
+                    "name": alt.name or "",
+                    "module_depends": alt.module_depends or "",
+                    "module_ids": alt.module_ids.ids,
+                    "module_names": alt.module_ids.mapped("name"),
+                    "action_xmlid": alt.action_xmlid or "",
+                    "action_id": alt.action_id.id or False,
+                    "action_name": (
+                        alt.action_id.display_name or alt.action_xmlid or ""
+                    ),
+                    "action_domain": alt.action_domain or "[]",
+                }
+                for alt in variant.alternate_action_ids.sorted("sequence")
+            ],
+            # Default flag is local only — peer defaults stay on their owner.
+            "is_default": False,  # filled in get_studio_payload from _default_graph_variant
+            "is_available": bool(variant.is_available),
+            "default_groupby_field_ids": ordered_gb.ids,
+            "default_groupby_field_names": [
+                f.field_description or f.name for f in ordered_gb
+            ],
+            "default_measure_field_id": (
+                variant.default_measure_field_id.id or False
+            ),
+            "default_measure_field_name": (
+                variant.default_measure_field_id.field_description
+                or variant.default_measure_field_id.name
+                or ""
+            ),
+            "default_measure_aggregator": (
+                variant.default_measure_aggregator or "sum"
+            ),
+            "default_scope_ids": variant.default_scope_ids.ids,
+            "applicable_include_scope_ids": applicable.ids,
+            "applicable_include_scopes": [
+                {"id": s.id, "name": s.name or "", "mode": "include"}
+                for s in applicable.sorted("sequence")
+            ],
+            "scope_warning": variant.scope_warning or "",
+            "graph_domain": variant.graph_domain or "[]",
+            "date_filters": [
+                {
+                    "id": d.id,
+                    "label": d.label or "",
+                    "field_id": d.field_id.id or False,
+                    "field_name": d.field_name or "",
+                    "field_label": (
+                        d.field_id.field_description or d.field_name or ""
+                    ),
+                    "default_period_mq_ids": d.default_period_mq_ids.ids,
+                    "default_period_year_ids": d.default_period_year_ids.ids,
+                }
+                for d in variant.date_filter_ids.sorted("sequence")
+            ],
+        }
+
     def get_studio_payload(self):
         self._ensure_default_graph_variant_row()
         self._ensure_option_graph_defaults()
         # Heal writes skip the Default-option sync; run it once after fill.
         if self.graph_variant_ids.filtered("is_default"):
             self._sync_blueprint_from_default_variant()
+        # Drop stale hub pointer when the option left Share Links / was deleted.
+        pooled = self.pooled_default_graph_variant_id
+        if pooled:
+            pool = self._effective_graph_variants()
+            if pooled not in pool or pooled.blueprint_id == self:
+                self.with_context(skip_graph_variant_default=True).write(
+                    {"pooled_default_graph_variant_id": False}
+                )
         payload = super().get_studio_payload()
-        include_scopes = self.scope_ids.filtered(lambda s: s.mode == "include")
+        # Always pool Share Links peers (read-only fields; Default radio allowed).
+        default = self._default_graph_variant()
+        default_id = default.id if default else False
         variants = []
-        for variant in self.graph_variant_ids.sorted("sequence"):
-            ordered_gb = variant._ordered_default_groupby_fields()
-            applicable = include_scopes.filtered(
-                lambda s, m=variant.graph_model: s._domain_applies_to_model(m)
-            )
-            variants.append(
-                {
-                    "id": variant.id,
-                    "sequence": variant.sequence,
-                    "graph_model": variant.graph_model or "",
-                    "graph_model_id": variant.graph_model_id.id or False,
-                    "graph_model_label": (
-                        variant.graph_model_id.name
-                        or variant.graph_model
-                        or ""
-                    ),
-                    "graph_data_field": variant.graph_data_field or "",
-                    "primary_button_label": variant.primary_button_label or "",
-                    "primary_action_xmlid": variant.primary_action_xmlid or "",
-                    "primary_action_id": variant.primary_action_id.id or False,
-                    "primary_action_name": (
-                        variant.primary_action_id.display_name
-                        or variant.primary_action_xmlid
-                        or ""
-                    ),
-                    "primary_action_context": variant.primary_action_context or "{}",
-                    "is_default": bool(variant.is_default),
-                    "is_available": bool(variant.is_available),
-                    "default_groupby_field_ids": ordered_gb.ids,
-                    "default_groupby_field_names": [
-                        f.field_description or f.name for f in ordered_gb
-                    ],
-                    "default_measure_field_id": (
-                        variant.default_measure_field_id.id or False
-                    ),
-                    "default_measure_field_name": (
-                        variant.default_measure_field_id.field_description
-                        or variant.default_measure_field_id.name
-                        or ""
-                    ),
-                    "default_measure_aggregator": (
-                        variant.default_measure_aggregator or "sum"
-                    ),
-                    "default_scope_ids": variant.default_scope_ids.ids,
-                    "applicable_include_scope_ids": applicable.ids,
-                    "scope_warning": variant.scope_warning or "",
-                    "graph_domain": variant.graph_domain or "[]",
-                    "date_filters": [
-                        {
-                            "id": d.id,
-                            "label": d.label or "",
-                            "field_id": d.field_id.id or False,
-                            "field_name": d.field_name or "",
-                            "field_label": (
-                                d.field_id.field_description or d.field_name or ""
-                            ),
-                            "default_period_mq_ids": d.default_period_mq_ids.ids,
-                            "default_period_year_ids": d.default_period_year_ids.ids,
-                        }
-                        for d in variant.date_filter_ids.sorted("sequence")
-                    ],
-                }
-            )
+        for variant in self._effective_graph_variants():
+            row = self._studio_graph_variant_dict(variant)
+            row["is_default"] = bool(default_id and variant.id == default_id)
+            variants.append(row)
         payload["graph_variants"] = variants
-        payload["default_graph_variant_id"] = (
-            self.graph_variant_ids.filtered("is_default")[:1].id or False
+        payload["default_graph_variant_id"] = default_id or False
+        payload["pooled_default_graph_variant_id"] = (
+            self.pooled_default_graph_variant_id.id or False
         )
         payload["period_mq_catalog"] = [
             {"id": row.id, "name": row.name or "", "label": row.display_name or row.name or ""}
@@ -930,10 +1258,15 @@ class DashboardBlueprintGraphPicker(models.Model):
 
     def studio_set_default_graph_variant(self, variant_id):
         self.ensure_one()
-        variant = self.graph_variant_ids.filtered(lambda v: v.id == int(variant_id))[:1]
+        variant_id = int(variant_id)
+        pool = self._effective_graph_variants()
+        variant = pool.filtered(lambda v: v.id == variant_id)[:1]
         if not variant:
             raise UserError(_("Unknown chart model option on this dashboard."))
-        self._studio_mark_default_graph_variant(variant)
+        if variant.blueprint_id == self:
+            self._studio_mark_default_graph_variant(variant)
+        else:
+            self._studio_mark_pooled_default_graph_variant(variant)
         return self.get_studio_payload()
 
     def studio_write_graph_variant(self, variant_id, vals):
@@ -996,8 +1329,41 @@ class DashboardBlueprintGraphPicker(models.Model):
                 if not xmlid:
                     raise UserError(_("Primary action is required."))
                 clean["primary_action_xmlid"] = xmlid
+            elif key == "primary_action_id":
+                action_id = int(value) if value else False
+                if not action_id:
+                    raise UserError(_("Primary action is required."))
+                action = self.env["ir.actions.act_window"].browse(action_id)
+                if not action.exists():
+                    raise UserError(_("Unknown window action."))
+                xmlid = action.get_external_id().get(action.id) or ""
+                if not xmlid:
+                    raise UserError(
+                        _("This action has no external ID (xmlid). "
+                          "Export it or pick another action.")
+                    )
+                clean["primary_action_xmlid"] = xmlid
             elif key == "primary_action_context":
                 clean["primary_action_context"] = (value or "").strip() or "{}"
+            elif key == "primary_action_domain":
+                # Same shape as Custom Filter; may include {{id}} tokens.
+                clean["primary_action_domain"] = self._studio_validate_graph_domain(
+                    value
+                )
+            elif key == "primary_label_alt_scope_id":
+                sid = int(value) if value else False
+                if sid:
+                    scope = self.scope_ids.filtered(lambda s: s.id == sid)[:1]
+                    if not scope:
+                        raise UserError(
+                            _("Alternate label filter must belong to this dashboard.")
+                        )
+                    clean["primary_label_alt_scope_id"] = sid
+                else:
+                    clean["primary_label_alt_scope_id"] = False
+                    clean["primary_label_alt"] = False
+            elif key == "primary_label_alt":
+                clean["primary_label_alt"] = (value or "").strip() or False
             elif key == "default_groupby_field_ids":
                 ids = [int(i) for i in (value or []) if i]
                 allowed = set(variant.graph_groupby_allowed_field_ids.ids)
@@ -1257,37 +1623,108 @@ class DashboardBlueprintGraphPicker(models.Model):
             row.unlink()
         return self.get_studio_payload()
 
+    def _studio_find_alternate_action(self, row_id, *, required=True):
+        self.ensure_one()
+        try:
+            rid = int(row_id)
+        except (TypeError, ValueError):
+            rid = 0
+        row = self.env["dashboard.blueprint.action.variant"].browse(rid)
+        if (
+            row.exists()
+            and row.blueprint_id == self
+            and row.graph_variant_id
+            and row.graph_variant_id.blueprint_id == self
+        ):
+            return row
+        if required:
+            raise UserError(_("Unknown alternate action on this dashboard."))
+        return row.browse()
+
+    def studio_create_graph_variant_alternate_action(self, variant_id, vals=None):
+        self.ensure_one()
+        variant = self._studio_find_graph_variant(variant_id)
+        vals = vals or {}
+        seq = max(variant.alternate_action_ids.mapped("sequence") or [0]) + 10
+        module_ids = [int(i) for i in (vals.get("module_ids") or []) if i]
+        action_id = int(vals.get("action_id") or 0) or False
+        xmlid = (vals.get("action_xmlid") or "").strip() or False
+        create_vals = {
+            "blueprint_id": self.id,
+            "graph_variant_id": variant.id,
+            "sequence": seq,
+            "name": (vals.get("name") or "").strip() or _("Alternate action"),
+        }
+        if module_ids:
+            create_vals["module_ids"] = [(6, 0, module_ids)]
+        if action_id:
+            create_vals["action_id"] = action_id
+        elif xmlid:
+            create_vals["action_xmlid"] = xmlid
+        created = self.env["dashboard.blueprint.action.variant"].create(create_vals)
+        payload = self.get_studio_payload()
+        payload["created_graph_variant_alternate_action_id"] = created.id
+        return payload
+
+    def studio_write_graph_variant_alternate_action(self, row_id, vals):
+        self.ensure_one()
+        row = self._studio_find_alternate_action(row_id, required=False)
+        if not row:
+            return self.get_studio_payload()
+        clean = {}
+        for key, value in (vals or {}).items():
+            if key == "name":
+                clean["name"] = (value or "").strip() or False
+            elif key == "sequence":
+                clean["sequence"] = int(value or 0)
+            elif key == "module_ids":
+                ids = [int(i) for i in (value or []) if i]
+                clean["module_ids"] = [(6, 0, ids)]
+            elif key == "action_id":
+                aid = int(value) if value else False
+                if not aid:
+                    clean["action_id"] = False
+                    clean["action_xmlid"] = False
+                else:
+                    action = self.env["ir.actions.act_window"].browse(aid)
+                    if not action.exists():
+                        raise UserError(_("Unknown window action."))
+                    xmlid = action.get_external_id().get(action.id) or ""
+                    if not xmlid:
+                        raise UserError(
+                            _("This action has no external ID (xmlid). "
+                              "Export it or pick another action.")
+                        )
+                    clean["action_id"] = aid
+                    clean["action_xmlid"] = xmlid
+            elif key == "action_xmlid":
+                clean["action_xmlid"] = (value or "").strip() or False
+            elif key == "action_domain":
+                # Same shape as Primary Action Domain; may include {{id}} tokens.
+                # Empty / [] means inherit the Chart Model Option domain at runtime.
+                clean["action_domain"] = self._studio_validate_graph_domain(value)
+        if clean:
+            row.write(clean)
+        return self.get_studio_payload()
+
+    def studio_unlink_graph_variant_alternate_action(self, row_id):
+        self.ensure_one()
+        row = self._studio_find_alternate_action(row_id, required=False)
+        if row:
+            row.unlink()
+        return self.get_studio_payload()
+
     def _seed_crm_graph_variant_defaults(self):
-        """Ensure CRM / Customer 360 boards expose Chart model in Configuration."""
+        """Ensure CRM Customers exposes Chart model options in Configuration.
+
+        Customer 360 must NOT be seeded here — it composes CRM / Sales / …
+        options via Share Links. Seeding duplicates makes Sales show
+        ``Shared from Customer 360`` for Pipeline / Sales Orders.
+        """
         Variant = self.env["dashboard.blueprint.graph.variant"].sudo()
         specs = [
             (
                 "crm_customer_dashboard.blueprint_crm_customers",
-                [
-                    {
-                        "sequence": 10,
-                        "graph_model": "crm.lead",
-                        "graph_data_field": "partner_id",
-                        "primary_button_label": "Pipeline Analysis",
-                        "primary_action_xmlid": "crm.crm_lead_action_pipeline",
-                        "primary_action_context": (
-                            '{"default_type": {"__de__": "group_value", '
-                            '"default": "opportunity", "map": [{"groups": '
-                            '["crm.group_use_lead"], "value": "lead"}]}}'
-                        ),
-                    },
-                    {
-                        "sequence": 20,
-                        "graph_model": "sale.order",
-                        "graph_data_field": "partner_id",
-                        "primary_button_label": "Sales Orders",
-                        "primary_action_xmlid": "sale.action_orders",
-                        "primary_action_context": "{}",
-                    },
-                ],
-            ),
-            (
-                "customer_360_dashboard.blueprint_customer_360",
                 [
                     {
                         "sequence": 10,
@@ -1436,10 +1873,17 @@ class DashboardUserPrefGraphPicker(models.Model):
         "dashboard.blueprint.graph.variant",
         string="Chart Model",
         ondelete="set null",
-        domain="[('blueprint_id', '=', blueprint_id)]",
+        domain="[('id', 'in', allowed_graph_variant_ids)]",
         help="Pick which records feed the chart. The left button label and "
         "screen change with this choice so they always match. "
-        "Empty = blueprint default.",
+        "Includes Chart Model Options from Share Links dashboards on the "
+        "same host. Empty = blueprint default.",
+    )
+    allowed_graph_variant_ids = fields.Many2many(
+        "dashboard.blueprint.graph.variant",
+        compute="_compute_allowed_graph_variant_ids",
+        string="Allowed Chart Models",
+        help="Local Chart Model Options plus those pooled via Share Links.",
     )
     has_graph_variants = fields.Boolean(compute="_compute_has_graph_variants")
 
@@ -1448,6 +1892,29 @@ class DashboardUserPrefGraphPicker(models.Model):
         "blueprint_id.graph_variant_ids",
         "blueprint_id.graph_variant_ids.graph_model",
         "blueprint_id.graph_variant_ids.primary_action_xmlid",
+        "blueprint_id.share_link_ids",
+        "blueprint_id.share_link_ids.graph_variant_ids",
+        "blueprint_id.share_link_ids.graph_variant_ids.graph_model",
+        "blueprint_id.share_link_ids.graph_variant_ids.primary_action_xmlid",
+    )
+    def _compute_allowed_graph_variant_ids(self):
+        for pref in self:
+            if pref.blueprint_id:
+                pref.allowed_graph_variant_ids = (
+                    pref.blueprint_id._effective_graph_variants()
+                )
+            else:
+                pref.allowed_graph_variant_ids = False
+
+    @api.depends(
+        "blueprint_id",
+        "blueprint_id.graph_variant_ids",
+        "blueprint_id.graph_variant_ids.graph_model",
+        "blueprint_id.graph_variant_ids.primary_action_xmlid",
+        "blueprint_id.share_link_ids",
+        "blueprint_id.share_link_ids.graph_variant_ids",
+        "blueprint_id.share_link_ids.graph_variant_ids.graph_model",
+        "blueprint_id.share_link_ids.graph_variant_ids.primary_action_xmlid",
     )
     def _compute_has_graph_variants(self):
         for pref in self:

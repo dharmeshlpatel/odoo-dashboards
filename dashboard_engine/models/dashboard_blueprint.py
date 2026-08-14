@@ -190,9 +190,16 @@ class DashboardBlueprint(models.Model):
         string="Hub Group",
         ondelete="set null",
         index=True,
-        help="If set, this dashboard appears only under that group in the group's "
-        "hub menu (no standalone menu). Leave empty and set Parent Menu for a "
-        "standalone menu entry. Leave both empty to show the dashboard nowhere.",
+        help="If set, this dashboard appears under that group in Dashboards 360. "
+        "A Parent Menu can still create the app Reporting entry (CRM, Sales, …).",
+    )
+    hub_id = fields.Many2one(
+        "dashboard.blueprint.hub",
+        string="Hub",
+        ondelete="set null",
+        index=True,
+        help="Show this dashboard in that hub left list with no Hub Group "
+        "(e.g. Customer 360 under Dashboards 360).",
     )
     menu_group_ids = fields.Many2many(
         "res.groups",
@@ -211,6 +218,43 @@ class DashboardBlueprint(models.Model):
         string="Web Icon Image",
         attachment=True,
         help="Optional uploaded image for the generated menu icon.",
+    )
+    menu_parent_unused_hint = fields.Char(
+        string="Parent Menu",
+        compute="_compute_menu_setup_previews",
+        help="Legacy placeholder; use hub_menu_label when Hub Group is set.",
+    )
+    hub_menu_label = fields.Char(
+        string="Parent Menu",
+        compute="_compute_menu_setup_previews",
+        help="Hub Menu of the selected Hub Group (read only).",
+    )
+    menu_full_path_preview = fields.Char(
+        string="Full Path",
+        compute="_compute_menu_setup_previews",
+        help="Preview of the menu path (same as Studio Setup).",
+    )
+    menu_action_preview = fields.Char(
+        string="Action",
+        compute="_compute_menu_setup_previews",
+        help="Legacy single-line Action preview.",
+    )
+    menu_action_type = fields.Selection(
+        selection=[
+            ("ir.actions.report", "ir.actions.report"),
+            ("ir.actions.act_window", "ir.actions.act_window"),
+            ("ir.actions.act_url", "ir.actions.act_url"),
+            ("ir.actions.server", "ir.actions.server"),
+            ("ir.actions.client", "ir.actions.client"),
+        ],
+        string="Action Type",
+        compute="_compute_menu_setup_previews",
+        help="Same Action type list as ir.ui.menu.",
+    )
+    menu_action_name = fields.Char(
+        string="Action Name",
+        compute="_compute_menu_setup_previews",
+        help="Generated window action name (Created on Publish until then).",
     )
     lens_my_enabled = fields.Boolean(string="Show My filter", default=False)
     lens_my_default = fields.Boolean(string="My filter on by default", default=False)
@@ -254,10 +298,10 @@ class DashboardBlueprint(models.Model):
         "blueprint_id",
         string="Alternate Actions",
         copy=True,
-        help="Opens a different screen when a listed app is installed, e.g. "
-        "an Enterprise dashboard instead of the plain list. The first "
-        "variant whose apps are all present wins; otherwise the primary "
-        "action above is used.",
+        domain=[("graph_variant_id", "=", False)],
+        help="Legacy blueprint-level alternates (no Chart Model Options). "
+        "Prefer Alternate Actions on each Chart Model Option. The first "
+        "variant whose apps are all present wins.",
     )
     include_child_records = fields.Boolean(
         string="Include Child Records",
@@ -529,8 +573,9 @@ class DashboardBlueprint(models.Model):
         store=True,
         readonly=False,
         ondelete="set null",
-        help="Used only when Hub Group is empty. Places a standalone menu under "
-        "this parent. Ignored when a Hub Group is set.",
+        help="When a Hub Group is set, Parent Menu shows that Hub Menu "
+        "(read only). When Hub Group is empty, choose any parent for a "
+        "standalone menu.",
     )
     primary_action_id = fields.Many2one(
         "ir.actions.act_window",
@@ -1223,10 +1268,18 @@ class DashboardBlueprint(models.Model):
         help="Pool card links with other dashboards on the same host model "
         "(bi-directional).\n"
         "Shared: Manage Menu (Views / New / Reports), Right · KPIs, "
-        "Footer · Totals, Footer · Shortcuts.\n"
-        "Not shared: Header, Primary Button, Configuration (scopes / graph / "
-        "filters), Menu entry, and this blueprint’s own identity.\n"
+        "Footer · Totals, Footer · Shortcuts, and Chart Model Options "
+        "in the gear picker (edit each option on its owner dashboard).\n"
+        "Not shared: Header, this dashboard’s Default chart option, "
+        "Configuration scopes owned here, Menu entry, and this blueprint’s "
+        "own identity.\n"
         "Each shared link still respects its Required Apps and access groups.",
+    )
+    is_compose_hub = fields.Boolean(
+        string="Compose Hub",
+        help="This dashboard pulls KPIs, menus, Chart Model Options, and "
+        "filter boxes from Share Links (e.g. Customer 360). Linked packs "
+        "stay standalone.",
     )
     scope_ids = fields.One2many(
         "dashboard.blueprint.scope", "blueprint_id", string="Scopes", copy=True
@@ -1326,7 +1379,9 @@ class DashboardBlueprint(models.Model):
             path_str, source = rec._resolve_graph_path_string()
             if not path_str:
                 continue
-            if not source or not rec.host_model_name:
+            if not source or source not in rec.env or not rec.host_model_name:
+                continue
+            if not rec._modules_installed(rec.module_depends):
                 continue
             validate_relation_path(
                 rec.env, source, path_str, rec.host_model_name
@@ -1406,15 +1461,24 @@ class DashboardBlueprint(models.Model):
         domain = [
             ("state", "=", "published"),
             ("active", "=", True),
+            "|",
             ("group_id", "!=", False),
+            ("hub_id", "!=", False),
         ]
         if hub_menu_id:
-            domain.append(("group_id.hub_menu_id", "=", int(hub_menu_id)))
+            hub_id = int(hub_menu_id)
+            domain = [
+                ("state", "=", "published"),
+                ("active", "=", True),
+                "|",
+                ("group_id.hub_menu_id", "=", hub_id),
+                ("hub_id", "=", hub_id),
+            ]
         blueprints = self.search(domain)
         return blueprints.filtered(lambda blueprint: blueprint._is_runtime_active()).sorted(
             key=lambda blueprint: (
-                blueprint.group_id.sequence,
-                blueprint.group_id.id,
+                blueprint.group_id.sequence if blueprint.group_id else 0,
+                blueprint.group_id.id if blueprint.group_id else 0,
                 blueprint.menu_sequence,
                 blueprint.id,
             )
@@ -1427,12 +1491,14 @@ class DashboardBlueprint(models.Model):
         current_group_id = None
         bucket = None
         for blueprint in self._hub_visible_blueprints(hub_menu_id=hub_menu_id):
-            if blueprint.group_id.id != current_group_id:
-                current_group_id = blueprint.group_id.id
+            group = blueprint.group_id
+            group_id = group.id if group else 0
+            if group_id != current_group_id:
+                current_group_id = group_id
                 bucket = {
-                    "id": blueprint.group_id.id,
-                    "name": blueprint.group_id.name,
-                    "sequence": blueprint.group_id.sequence,
+                    "id": group_id,
+                    "name": group.name if group else "",
+                    "sequence": group.sequence if group else 0,
                     "dashboards": [],
                 }
                 tree.append(bucket)
@@ -1618,6 +1684,7 @@ class DashboardBlueprint(models.Model):
             "amount_aggregator",
             "module_depends",
             "module_ids",
+            "group_ids",
             "name",
             "sequence",
             "section",
@@ -1663,7 +1730,16 @@ class DashboardBlueprint(models.Model):
         {"sequence", "kind", "alignment", "icon", "field_names", "separator"}
     )
     _STUDIO_SCOPE_WRITE_FIELDS = frozenset(
-        {"name", "description", "mode", "domain", "default_on", "sequence"}
+        {
+            "name",
+            "description",
+            "mode",
+            "domain",
+            "default_on",
+            "sequence",
+            "restrict_kind",
+            "merge_noun",
+        }
     )
 
     def _studio_slot_dict(self, slot, owned=True):
@@ -1674,42 +1750,154 @@ class DashboardBlueprint(models.Model):
         data["module_names"] = [
             m.shortdesc or m.display_name or m.name for m in slot.module_ids
         ]
+        data["group_ids"] = slot.group_ids.ids
+        data["group_names"] = [
+            g.full_name or g.display_name or g.name for g in slot.group_ids
+        ]
         data["compute_model_label"] = slot.compute_model_id.name or ""
+        data["compute_model_id"] = slot.compute_model_id.id or False
+        data["action_id"] = slot.action_id.id or False
         data["owned"] = bool(owned)
         data["source_blueprint_id"] = slot.blueprint_id.id
         data["source_blueprint_name"] = slot.blueprint_id.name or ""
         data["source_blueprint_key"] = slot.blueprint_id.key or ""
         return data
 
-    def _studio_menu_full_path(self):
-        """Preview Full Path like ir.ui.menu.complete_name."""
+    def _hub_group_menu(self):
+        """Generated ir.ui.menu of the Hub Menu for this blueprint's Hub Group."""
         self.ensure_one()
-        if self.group_id and self.group_id.hub_menu_id:
-            hub = self.group_id.hub_menu_id
-            parent = hub.menu_parent_id
-            hub_leaf = hub.name or ""
-            if parent:
-                return "%s/%s › %s" % (
-                    parent.complete_name or parent.display_name,
-                    hub_leaf,
-                    self.group_id.name or "",
+        hub = self.group_id.hub_menu_id if self.group_id else False
+        return hub.generated_menu_id if hub else self.env["ir.ui.menu"]
+
+    def _hub_group_menu_label(self):
+        """Label to show as Parent Menu when a Hub Group is set."""
+        self.ensure_one()
+        hub = self.group_id.hub_menu_id if self.group_id else False
+        if not hub:
+            return ""
+        menu = hub.generated_menu_id
+        if menu:
+            return menu.complete_name or menu.display_name or hub.name or ""
+        return hub.name or ""
+
+    def _sync_menu_parent_from_hub_group(self):
+        """Fill Parent Menu from the hub only when the blueprint has none.
+
+        Packs keep their app Reporting parent (e.g. CRM) and still appear in
+        Dashboards 360. Compose hubs have no parent and stay hub-only.
+        """
+        for rec in self.filtered("group_id"):
+            if rec._is_compose_hub():
+                if rec.menu_parent_id or rec.menu_parent_xmlid:
+                    rec.with_context(skip_hub_menu_parent_sync=True).write(
+                        {"menu_parent_id": False, "menu_parent_xmlid": False}
+                    )
+                continue
+            if rec.menu_parent_id or rec.menu_parent_xmlid:
+                continue
+            menu = rec._hub_group_menu()
+            menu_id = menu.id if menu else False
+            current_id = rec.menu_parent_id.id if rec.menu_parent_id else False
+            if current_id != menu_id:
+                rec.with_context(skip_hub_menu_parent_sync=True).write(
+                    {"menu_parent_id": menu_id}
                 )
-            return "%s › %s" % (hub_leaf, self.group_id.name or "")
+
+    @api.onchange("group_id")
+    def _onchange_group_id_fill_parent_menu(self):
+        if self._is_compose_hub():
+            self.menu_parent_id = False
+            return
+        if self.group_id and not (self.menu_parent_id or self.menu_parent_xmlid):
+            self.menu_parent_id = self._hub_group_menu()
+
+    def _studio_menu_full_path(self):
+        """Preview Full Path like ir.ui.menu.complete_name (``/`` separators)."""
+        self.ensure_one()
         leaf = self.menu_name or self.name or ""
+        if (
+            self.group_id
+            and self.group_id.hub_menu_id
+            and not (self.menu_parent_xmlid or self.menu_parent_id)
+        ):
+            hub = self.group_id.hub_menu_id
+            if hub.generated_menu_id:
+                base = (
+                    hub.generated_menu_id.complete_name
+                    or hub.generated_menu_id.display_name
+                    or hub.name
+                    or ""
+                )
+            else:
+                parent = hub.menu_parent_id
+                if parent:
+                    base = "%s/%s" % (
+                        parent.complete_name or parent.display_name,
+                        hub.name or "",
+                    )
+                else:
+                    base = hub.name or ""
+            # Hub path + dashboard Menu name (not Hub Group name).
+            if base and leaf:
+                return "%s/%s" % (base, leaf)
+            return base or leaf or ""
         parent = self.menu_parent_id
         if parent:
             return "%s/%s" % (parent.complete_name or parent.display_name, leaf)
         return leaf or ""
 
-    def _studio_menu_action_label(self):
-        """Readonly Action line for Setup (generated window action)."""
+    def _studio_menu_action_parts(self):
+        """Action type + name like ir.ui.menu Reference (two fields)."""
         self.ensure_one()
         action = self.generated_action_id
         if action:
-            return "ir.actions.act_window,%s" % (action.display_name or action.name)
+            return (
+                "ir.actions.act_window",
+                action.display_name or action.name or "",
+            )
         if self.host_model_name:
-            return "ir.actions.act_window,%s" % (self.menu_name or self.name or "Dashboard")
+            return (
+                "ir.actions.act_window",
+                self.menu_name or self.name or "Dashboard",
+            )
+        return False, ""
+
+    def _studio_menu_action_label(self):
+        """Readonly Action line for Setup (generated window action)."""
+        self.ensure_one()
+        action_type, action_name = self._studio_menu_action_parts()
+        if action_type and action_name:
+            return "%s,%s" % (action_type, action_name)
         return ""
+
+    @api.depends(
+        "group_id",
+        "group_id.name",
+        "group_id.hub_menu_id",
+        "group_id.hub_menu_id.name",
+        "group_id.hub_menu_id.menu_parent_id",
+        "group_id.hub_menu_id.menu_parent_id.complete_name",
+        "group_id.hub_menu_id.generated_menu_id",
+        "group_id.hub_menu_id.generated_menu_id.complete_name",
+        "menu_name",
+        "name",
+        "menu_parent_id",
+        "menu_parent_id.complete_name",
+        "generated_action_id",
+        "generated_action_id.name",
+        "host_model_name",
+    )
+    def _compute_menu_setup_previews(self):
+        """Menu Setup preview lines for Advanced (match Studio)."""
+        for rec in self:
+            label = rec._hub_group_menu_label() if rec.group_id else False
+            rec.hub_menu_label = label or False
+            rec.menu_parent_unused_hint = label or False
+            rec.menu_full_path_preview = rec._studio_menu_full_path() or False
+            action_type, action_name = rec._studio_menu_action_parts()
+            rec.menu_action_type = action_type or False
+            rec.menu_action_name = action_name or False
+            rec.menu_action_preview = rec._studio_menu_action_label() or False
 
     def get_studio_payload(self):
         """JSON-friendly snapshot for the Studio OWL client action."""
@@ -1745,6 +1933,8 @@ class DashboardBlueprint(models.Model):
                     "domain": scope.domain or "[]",
                     "default_on": scope.default_on,
                     "sequence": scope.sequence,
+                    "restrict_kind": scope.restrict_kind or False,
+                    "merge_noun": scope.merge_noun or False,
                 }
             )
         ordered_groupby = list(self._ordered_graph_groupby_fields())
@@ -1758,8 +1948,18 @@ class DashboardBlueprint(models.Model):
             "host_model_label": self.host_model_id.name or self.host_model_name or "",
             "host_editable": self.state == "draft",
             "menu_name": self.menu_name or "",
-            "menu_parent_id": self.menu_parent_id.id or False,
-            "menu_parent_name": self.menu_parent_id.display_name or "",
+            "menu_parent_id": (
+                (self._hub_group_menu().id or False)
+                if self.group_id and not (self.menu_parent_xmlid or self.menu_parent_id)
+                else (self.menu_parent_id.id or False)
+            ),
+            "menu_parent_name": (
+                self._hub_group_menu_label()
+                if self.group_id and not (self.menu_parent_xmlid or self.menu_parent_id)
+                else (self.menu_parent_id.display_name or "")
+            ),
+            "menu_parent_readonly": bool(self.group_id)
+            and not (self.menu_parent_xmlid or self.menu_parent_id),
             "menu_sequence": self.menu_sequence,
             "menu_group_ids": self.menu_group_ids.ids,
             "menu_group_names": [
@@ -1771,6 +1971,9 @@ class DashboardBlueprint(models.Model):
             "menu_web_icon_data": self.menu_web_icon_data or False,
             "menu_full_path": self._studio_menu_full_path(),
             "menu_action_label": self._studio_menu_action_label(),
+            "menu_action_type": self._studio_menu_action_parts()[0] or "",
+            "menu_action_name": self._studio_menu_action_parts()[1] or "",
+            "menu_action_id": self.generated_action_id.id or False,
             "company_id": self.company_id.id or False,
             "company_name": self.company_id.display_name or "",
             "module_ids": self.module_ids.ids,
@@ -1789,6 +1992,7 @@ class DashboardBlueprint(models.Model):
             "multi_company": self.env.user.has_group("base.group_multi_company"),
             "primary_button_label": self.primary_button_label or "",
             "primary_action_xmlid": self.primary_action_xmlid or "",
+            "primary_action_id": self.primary_action_id.id or False,
             "primary_action_context": self.primary_action_context or "{}",
             "graph_caption": self.graph_caption or "",
             "graph_model": self.graph_model or "",
@@ -2080,6 +2284,18 @@ class DashboardBlueprint(models.Model):
                 clean[key] = value or False
             else:
                 clean[key] = value
+        # Hub Group → Parent Menu = that Hub Menu's generated menu (if any).
+        effective_group_id = (
+            clean["group_id"]
+            if "group_id" in clean
+            else (self.group_id.id or False)
+        )
+        if effective_group_id:
+            group = self.env["dashboard.blueprint.group"].browse(effective_group_id)
+            hub_menu = (
+                group.hub_menu_id.generated_menu_id if group.exists() else False
+            )
+            clean["menu_parent_id"] = hub_menu.id if hub_menu else False
         old_host = self.host_model_id.id
         if clean:
             mirror_groupby = "graph_groupby_ids" in clean
@@ -2112,7 +2328,7 @@ class DashboardBlueprint(models.Model):
         for key, value in (vals or {}).items():
             if key not in self._STUDIO_SLOT_WRITE_FIELDS:
                 continue
-            if key in ("condition_ids", "module_ids"):
+            if key in ("condition_ids", "module_ids", "group_ids"):
                 ids = value if isinstance(value, (list, tuple)) else []
                 clean[key] = [(6, 0, [int(i) for i in ids if i])]
             else:
@@ -2300,6 +2516,14 @@ class DashboardBlueprint(models.Model):
                 clean["name"] = name
             elif key == "description":
                 clean["description"] = value or False
+            elif key == "restrict_kind":
+                kind = (value or "").strip() if isinstance(value, str) else value
+                if kind and kind not in ("mine", "my_team", "unassigned"):
+                    raise UserError(_("Invalid restrict kind."))
+                clean["restrict_kind"] = kind or False
+            elif key == "merge_noun":
+                noun = (value or "").strip() if isinstance(value, str) else value
+                clean["merge_noun"] = noun or False
         if clean:
             scope.write(clean)
         return self.get_studio_payload()
@@ -2315,6 +2539,9 @@ class DashboardBlueprint(models.Model):
             raise UserError(_("Invalid scope mode."))
         domain = self._studio_validate_graph_domain(vals.get("domain") or "[]")
         seq = max(self.scope_ids.mapped("sequence") or [0]) + 10
+        kind = vals.get("restrict_kind") or False
+        if kind and kind not in ("mine", "my_team", "unassigned"):
+            raise UserError(_("Invalid restrict kind."))
         created = self.env["dashboard.blueprint.scope"].create(
             {
                 "blueprint_id": self.id,
@@ -2324,6 +2551,8 @@ class DashboardBlueprint(models.Model):
                 "domain": domain,
                 "default_on": bool(vals.get("default_on")),
                 "sequence": int(vals.get("sequence") or seq),
+                "restrict_kind": vals.get("restrict_kind") or False,
+                "merge_noun": (vals.get("merge_noun") or "").strip() or False,
             }
         )
         payload = self.get_studio_payload()
@@ -2662,11 +2891,16 @@ class DashboardBlueprint(models.Model):
         if not model_name or model_name not in self.env:
             return []
         Model = self.env[model_name]
+        Fields = self.env["ir.model.fields"].sudo()
         wanted = set(ttypes) if ttypes else None
         fields_meta = Model.fields_get()
+        period_names = set(Fields._dashboard_date_period_names(model_name))
         names = []
         for name, meta in fields_meta.items():
             if name.startswith("_"):
+                continue
+            # Period tags (create_date > Month, …) are Group By only.
+            if name in period_names or Fields.is_dashboard_date_period_name(name):
                 continue
             ttype = meta.get("type")
             if wanted and ttype not in wanted:
@@ -2680,10 +2914,9 @@ class DashboardBlueprint(models.Model):
             if stored_only and not store:
                 continue
             names.append(name)
-        Field = self.env["ir.model.fields"].sudo()
         id_by_name = {
             f.name: f.id
-            for f in Field.search(
+            for f in Fields.search(
                 [("model", "=", model_name), ("name", "in", names)]
             )
         }
@@ -2726,7 +2959,7 @@ class DashboardBlueprint(models.Model):
     def studio_action_search_filters(self, model_name=None):
         """Real ``<filter>`` names from ``model_name``'s default search view.
 
-        Used by the "Turn on a list filter" picker so admins choose from
+        Used by the "Apply a search filter" picker so admins choose from
         actual filters (e.g. ``assigned_to_me``) instead of typing them.
         """
         self.ensure_one()
@@ -2879,12 +3112,15 @@ class DashboardBlueprint(models.Model):
                 }
             )
 
+        # Left Studio card follows Default Chart Model Option + blueprint
+        # Content — not the admin's personal gear pick / scopes.
+        studio_bp = self.with_context(dashboard_studio_preview=True)
         graph_bars = []
         graph_type = False
         graph_json = False
-        if self._has_graph():
+        if studio_bp._has_graph():
             try:
-                payloads = self._build_graph_payloads(record)
+                payloads = studio_bp._build_graph_payloads(record)
                 payload = payloads.get(record.id) or {}
                 graph_type = payload.get("type") or False
                 raw_json = payload.get("json") or ""
@@ -2920,15 +3156,13 @@ class DashboardBlueprint(models.Model):
             "res_name": record.display_name,
             "title": title,
             "header_lines": header_lines,
-            "primary_label": self._resolved_primary_label()
-            or self.primary_button_label
+            "primary_label": studio_bp._resolved_primary_label()
+            or studio_bp.primary_button_label
             or "",
             "graph_caption": self.graph_caption or "",
             # Studio map matches the live card (share pool included). Zero-value
             # slots stay visible here via dashboard_studio_preview.
-            "slots": self.with_context(
-                dashboard_studio_preview=True,
-            )._build_slots_payload(record),
+            "slots": studio_bp._build_slots_payload(record),
             "graph_bars": graph_bars,
             "graph_type": graph_type,
             "graph_json": graph_json,
@@ -2965,6 +3199,11 @@ class DashboardBlueprint(models.Model):
             if "share_link_ids" in vals:
                 self._sync_share_link_symmetric()
                 self._auto_accept_scope_targets_for_share()
+            if (
+                not self.env.context.get("skip_hub_menu_parent_sync")
+                and "group_id" in vals
+            ):
+                self.filtered("group_id")._sync_menu_parent_from_hub_group()
             self._sync_artifacts_after_write(vals)
             return res
 
@@ -2974,6 +3213,11 @@ class DashboardBlueprint(models.Model):
         if "share_link_ids" in vals:
             self._sync_share_link_symmetric()
             self._auto_accept_scope_targets_for_share()
+        if (
+            not self.env.context.get("skip_hub_menu_parent_sync")
+            and "group_id" in vals
+        ):
+            self.filtered("group_id")._sync_menu_parent_from_hub_group()
         self._sync_artifacts_after_write(vals)
         return res
 
@@ -3043,6 +3287,7 @@ class DashboardBlueprint(models.Model):
         records.filtered("graph_groupby_ids")._mirror_legacy_graph_groupby_from_unified()
         records._ensure_unified_graph_groupby()
         records.filtered("share_link_ids")._sync_share_link_symmetric()
+        records.filtered("group_id")._sync_menu_parent_from_hub_group()
         for rec in records.filtered(lambda b: b.state == "published"):
             rec._sync_generated_artifacts()
         return records
@@ -3054,10 +3299,72 @@ class DashboardBlueprint(models.Model):
         actions = self.mapped("generated_action_id")
         menus = self.mapped("generated_menu_id")
         res = super().unlink()
-        menus.unlink()
-        actions.unlink()
-        views.unlink()
+        for recs in (menus, actions, views):
+            recs.filtered(lambda r: r.exists() and not self._record_has_xmlid(r)).unlink()
         return res
+
+    @api.model
+    def _gc_orphan_generated_artifacts(self):
+        """Delete generated menus/actions/views that no blueprint owns.
+
+        Pack uninstall removes the blueprint XML, but menus created in Python
+        are not module data, so they can stay and open a broken kanban.
+        """
+        bps = self.search([])
+        keep_views = bps.mapped("generated_view_id") | bps.mapped(
+            "generated_search_view_id"
+        )
+        keep_actions = bps.mapped("generated_action_id")
+        keep_menus = bps.mapped("generated_menu_id")
+        View = self.env["ir.ui.view"].sudo()
+        Action = self.env["ir.actions.act_window"].sudo()
+        Menu = self.env["ir.ui.menu"].sudo()
+        orphan_views = View.search(
+            [
+                ("name", "=like", "dashboard.engine.%"),
+                ("id", "not in", keep_views.ids or [0]),
+            ]
+        )
+        orphan_views = orphan_views.filtered(
+            lambda v: not self._record_has_xmlid(v)
+        )
+        orphan_actions = Action.browse()
+        if orphan_views:
+            orphan_actions |= Action.search(
+                [
+                    ("id", "not in", keep_actions.ids or [0]),
+                    ("view_id", "in", orphan_views.ids),
+                ]
+            )
+        leftover_actions = Action.search(
+            [
+                ("id", "not in", keep_actions.ids or [0]),
+                ("context", "ilike", "dashboard_blueprint_key"),
+            ]
+        )
+        orphan_actions |= leftover_actions
+        orphan_actions = orphan_actions.filtered(
+            lambda a: not self._record_has_xmlid(a)
+        )
+        action_refs = [
+            "ir.actions.act_window,%s" % action_id
+            for action_id in orphan_actions.ids
+        ]
+        orphan_menus = Menu.browse()
+        if action_refs:
+            orphan_menus = Menu.search(
+                [
+                    ("id", "not in", keep_menus.ids or [0]),
+                    ("action", "in", action_refs),
+                ]
+            )
+        orphan_menus = orphan_menus.filtered(
+            lambda m: not self._record_has_xmlid(m)
+        )
+        orphan_menus.unlink()
+        orphan_actions.unlink()
+        orphan_views.unlink()
+        return True
 
     # ------------------------------------------------------------------
     # Artifact generation
@@ -3260,9 +3567,13 @@ class DashboardBlueprint(models.Model):
             )
 
     def _should_generate_standalone_menu(self):
-        """Standalone menu only when no hub group and a parent menu is set."""
+        """Standalone menu when a parent is set (Reporting door).
+
+        Compose hubs (*360) stay on the Dashboards 360 left list only.
+        Hub Group does not remove the CRM / Sales / … Reporting menu.
+        """
         self.ensure_one()
-        if self.group_id:
+        if self._is_compose_hub():
             return False
         return bool(self.menu_parent_id or self.menu_parent_xmlid)
 
@@ -3284,24 +3595,49 @@ class DashboardBlueprint(models.Model):
         self.ensure_one()
         return hashlib.sha256(self._kanban_arch().encode()).hexdigest()
 
+    def _record_has_xmlid(self, record):
+        """True when Odoo module XML owns this record (uninstall will drop it)."""
+        if not record:
+            return False
+        return bool(
+            self.env["ir.model.data"].sudo().search(
+                [("model", "=", record._name), ("res_id", "=", record.id)],
+                limit=1,
+            )
+        )
+
+    def _xml_artifact(self, xmlid_name):
+        """Pack XML record ``module.xmlid_name``, if this blueprint is seeded."""
+        self.ensure_one()
+        module = self._blueprint_xmlid_module()
+        if not module:
+            return self.env["ir.ui.view"].browse()
+        return self.env.ref(
+            "%s.%s" % (module, xmlid_name), raise_if_not_found=False
+        )
+
+    def _xml_owned(self):
+        self.ensure_one()
+        return bool(self._blueprint_xmlid_module())
+
     def _sync_generated_artifacts(self):
-        """Create or update kanban view + action; menu only for standalone."""
+        """Update XML (or Studio) kanban view + action; menu only for standalone."""
         self.ensure_one()
         if not self._is_runtime_active():
-            if self.generated_menu_id:
-                self.generated_menu_id.active = False
-            if self.generated_action_id:
-                # Keep action but hide menu; leave view for republish.
-                pass
+            self._purge_generated_menu()
             self._sync_hub_menus_for_blueprint()
             return
 
         search_view = self._upsert_search_view()
         view = self._upsert_kanban_view()
+        if not view:
+            return
         action = self._upsert_window_action(view, search_view)
+        if not action:
+            return
         vals = {
             "generated_view_id": view.id,
-            "generated_search_view_id": search_view.id,
+            "generated_search_view_id": search_view.id if search_view else False,
             "generated_action_id": action.id,
             "generated_arch_hash": self._kanban_arch_hash(),
         }
@@ -3310,10 +3646,70 @@ class DashboardBlueprint(models.Model):
             if menu:
                 menu.active = True
                 vals["generated_menu_id"] = menu.id
-        elif self.generated_menu_id:
-            self.generated_menu_id.active = False
         self.write(vals)
+        if not self._should_generate_standalone_menu():
+            self._purge_generated_menu()
+        self._bind_generated_artifact_xmlids()
         self._sync_hub_menus_for_blueprint()
+
+    def _purge_generated_menu(self):
+        """Hide or drop the standalone menu when the blueprint is not live."""
+        for rec in self:
+            menu = rec.generated_menu_id
+            if not menu:
+                continue
+            if rec._record_has_xmlid(menu):
+                if menu.active:
+                    menu.active = False
+                continue
+            rec.generated_menu_id = False
+            if menu.exists():
+                menu.unlink()
+
+    def _blueprint_xmlid_module(self):
+        self.ensure_one()
+        data = self.env["ir.model.data"].sudo().search(
+            [("model", "=", "dashboard.blueprint"), ("res_id", "=", self.id)],
+            limit=1,
+        )
+        return data.module if data else False
+
+    def _bind_generated_artifact_xmlids(self):
+        """Own generated menus/views as the pack's data so uninstall removes them."""
+        Data = self.env["ir.model.data"].sudo()
+        for rec in self:
+            module = rec._blueprint_xmlid_module()
+            if not module:
+                continue
+            if rec._xml_artifact("view_kanban_%s" % rec.key):
+                continue
+            for kind, record in (
+                ("view", rec.generated_view_id),
+                ("search", rec.generated_search_view_id),
+                ("action", rec.generated_action_id),
+                ("menu", rec.generated_menu_id),
+            ):
+                if not record:
+                    continue
+                name = "generated_%s_%s" % (kind, rec.key)
+                existing = Data.search(
+                    [("module", "=", module), ("name", "=", name)], limit=1
+                )
+                if existing:
+                    if existing.model != record._name or existing.res_id != record.id:
+                        existing.write(
+                            {"model": record._name, "res_id": record.id}
+                        )
+                    continue
+                Data.create(
+                    {
+                        "module": module,
+                        "name": name,
+                        "model": record._name,
+                        "res_id": record.id,
+                        "noupdate": True,
+                    }
+                )
 
     def _sync_hub_menus_for_blueprint(self):
         """Refresh hub menu visibility when this blueprint's hub reachability changes."""
@@ -3867,9 +4263,17 @@ class DashboardBlueprint(models.Model):
             "arch": self._kanban_arch(),
             "priority": 99,
         }
-        if self.generated_view_id:
-            self.generated_view_id.write(vals)
-            return self.generated_view_id
+        xml_view = self._xml_artifact("view_kanban_%s" % self.key)
+        view = xml_view or self.generated_view_id
+        if view:
+            view.write(vals)
+            return view
+        if self._xml_owned():
+            _logger.warning(
+                "Dashboard engine: missing XML kanban view for blueprint %s",
+                self.key,
+            )
+            return View.browse()
         return View.create(vals)
 
     def _host_default_search_view(self):
@@ -3985,9 +4389,13 @@ class DashboardBlueprint(models.Model):
                 )
             vals["arch"] = f"<search>{''.join(filters)}</search>"
             vals["inherit_id"] = False
-        if self.generated_search_view_id:
-            self.generated_search_view_id.write(vals)
-            return self.generated_search_view_id
+        xml_search = self._xml_artifact("view_search_%s" % self.key)
+        search = xml_search or self.generated_search_view_id
+        if search:
+            search.write(vals)
+            return search
+        if self._xml_owned():
+            return View.browse()
         return View.create(vals)
 
     def _lens_action_context(self):
@@ -4024,9 +4432,13 @@ class DashboardBlueprint(models.Model):
             "domain": [],
             "target": "current",
         }
-        if self.generated_action_id:
-            self.generated_action_id.write(vals)
-            return self.generated_action_id
+        xml_action = self._xml_artifact("action_%s" % self.key)
+        action = xml_action or self.generated_action_id
+        if action:
+            action.write(vals)
+            return action
+        if self._xml_owned():
+            return Action.browse()
         return Action.create(vals)
 
     def _upsert_menu(self, action):
@@ -4054,9 +4466,13 @@ class DashboardBlueprint(models.Model):
             "web_icon": self.menu_web_icon or False,
             "web_icon_data": self.menu_web_icon_data or False,
         }
-        if self.generated_menu_id:
-            self.generated_menu_id.write(vals)
-            return self.generated_menu_id
+        xml_menu = self._xml_artifact("menu_%s" % self.key)
+        menu = xml_menu or self.generated_menu_id
+        if menu:
+            menu.write(vals)
+            return menu
+        if self._xml_owned():
+            return Menu.browse()
         return Menu.create(vals)
 
     # ------------------------------------------------------------------
@@ -4095,6 +4511,67 @@ class DashboardBlueprint(models.Model):
         reverse = self.search([("share_link_ids", "in", self.id)])
         return self.share_link_ids | reverse
 
+    def _is_compose_hub(self):
+        """True only when Compose Hub is set (Customer 360, Product 360, …)."""
+        self.ensure_one()
+        return bool(self.is_compose_hub)
+
+    def _share_pool_members(self):
+        """Blueprints whose slots / chart options this viewer should compose.
+
+        Compose hubs pull **direct** Share Links (star). Packs pull only
+        other packs they link to — a 360 hub is not a bridge to siblings.
+        """
+        self.ensure_one()
+        if self._is_compose_hub():
+            return self | self.share_link_ids
+        direct = self.share_link_ids | self.search(
+            [("share_link_ids", "in", self.id)]
+        )
+        return self | direct.filtered(lambda b: not b._is_compose_hub())
+
+    def _restrict_scopes_grouped_by_kind(self, restrict=None):
+        """Split restrict scopes into kind groups vs unique (empty kind) rows."""
+        self.ensure_one()
+        Scope = self.env["dashboard.blueprint.scope"]
+        if restrict is None:
+            restrict = self._runtime_scopes().filtered(lambda s: s.mode == "restrict")
+        groups = {}
+        ungrouped = Scope
+        for scope in restrict.sorted(lambda s: (s.sequence, s.id)):
+            kind = scope.restrict_kind
+            if not kind:
+                ungrouped |= scope
+                continue
+            groups.setdefault(kind, Scope)
+            groups[kind] |= scope
+        return groups, ungrouped
+
+    def _compose_restrict_representatives(self, restrict=None):
+        """One tick per restrict kind on a compose hub; unique kinds stay separate."""
+        self.ensure_one()
+        groups, ungrouped = self._restrict_scopes_grouped_by_kind(restrict)
+        reps = ungrouped
+        for _kind, siblings in groups.items():
+            ordered = siblings.sorted(lambda s: (s.sequence, s.id))
+            if len(ordered) > 1:
+                reps |= ordered[:1]
+            else:
+                reps |= ordered
+        return reps
+
+    def _runtime_scopes(self):
+        """Scopes the live gear may tick.
+
+        Compose hubs do not own Pipeline / Leads / My Pipeline. Those rows
+        live on the installed packs and appear here through Share Links.
+        Packs keep their own ``scope_ids``.
+        """
+        self.ensure_one()
+        if self._is_compose_hub():
+            return self._share_pool_members().mapped("scope_ids")
+        return self.scope_ids
+
     def _share_component(self):
         """Connected component of blueprints linked via share_link_ids."""
         self.ensure_one()
@@ -4123,10 +4600,11 @@ class DashboardBlueprint(models.Model):
 
         Order: this blueprint first (by slot sequence), then other blueprints
         by ``(sequence, id)``, each with slots by sequence. First wins on
-        ``_slot_dedupe_key``.
+        ``_slot_dedupe_key``. Compose hubs use star Share Links; packs do not
+        inherit sibling packs through a 360 hub.
         """
         self.ensure_one()
-        component = self._share_component()
+        component = self._share_pool_members()
         peers = (component - self).sorted(lambda b: (b.sequence, b.id))
         ordered_ids = []
         seen_keys = set()
@@ -4171,6 +4649,80 @@ class DashboardBlueprint(models.Model):
                 other.with_context(skip_share_sync=True).write(
                     {"share_link_ids": [(3, rec.id)]}
                 )
+
+    @api.model
+    def _sync_star_share_pool(self, hub_xmlid, spoke_xmlids):
+        """Point a compose hub at installed spokes; drop spoke↔spoke links.
+
+        Packs stay standalone. The hub composes whatever spokes are present.
+        """
+        hub = self.env.ref(hub_xmlid, raise_if_not_found=False)
+        if not hub:
+            hub = self.browse()
+        spokes = self.browse()
+        for xmlid in spoke_xmlids or ():
+            spoke = self.env.ref(xmlid, raise_if_not_found=False)
+            if spoke:
+                spokes |= spoke
+        if hub:
+            if not hub.is_compose_hub:
+                hub.with_context(skip_share_sync=True).sudo().write(
+                    {"is_compose_hub": True}
+                )
+            hub.with_context(skip_share_sync=True).sudo().write(
+                {"share_link_ids": [(6, 0, spokes.ids)]}
+            )
+        for spoke in spokes:
+            commands = []
+            for other in spokes - spoke:
+                if other in spoke.share_link_ids:
+                    commands.append((3, other.id))
+            if hub and hub not in spoke.share_link_ids:
+                commands.append((4, hub.id))
+            if commands:
+                spoke.with_context(skip_share_sync=True).sudo().write(
+                    {"share_link_ids": commands}
+                )
+        self._detach_packs_from_360_hub(spokes)
+
+    @api.model
+    def _detach_packs_from_360_hub(self, packs):
+        """Packs stay on CRM/Sales Reporting, not as extra Dashboards 360 rows."""
+        group = self.env.ref(
+            "dashboard_engine.dashboard_group_360", raise_if_not_found=False
+        )
+        if not group:
+            return
+        for bp in packs:
+            if bp and bp.group_id == group and not bp._is_compose_hub():
+                bp.sudo().write({"group_id": False})
+
+    @api.model
+    def _attach_compose_hubs_to_360_app(self):
+        """Put known *360 blueprints on the Dashboards 360 hub (no Hub Group)."""
+        from odoo.addons.dashboard_engine.share_pools import (
+            COMPOSE_360_BLUEPRINT_XMLIDS,
+        )
+
+        hub = self.env.ref(
+            "dashboard_engine.dashboard_hub_default", raise_if_not_found=False
+        )
+        if not hub:
+            return
+        for xmlid in COMPOSE_360_BLUEPRINT_XMLIDS:
+            bp = self.env.ref(xmlid, raise_if_not_found=False)
+            if not bp:
+                continue
+            bp.sudo().write(
+                {
+                    "hub_id": hub.id,
+                    "is_compose_hub": True,
+                    "group_id": False,
+                    "menu_parent_id": False,
+                    "menu_parent_xmlid": False,
+                }
+            )
+            bp._purge_generated_menu()
 
     def _build_slots_payload(self, record):
         self.ensure_one()
@@ -4387,6 +4939,7 @@ class DashboardBlueprint(models.Model):
                 .create(self._default_pref_values())
                 .with_user(self.env.user)
             )
+            pref.sudo()._heal_compose_restrict_any_sibling()
         else:
             heal = {}
             if not pref.period_field_id and self.period_field_id:
@@ -4399,7 +4952,7 @@ class DashboardBlueprint(models.Model):
             needs_preferred = (not preferred) or (
                 preferred and not preferred._is_valid_candidate()
             )
-            if needs_preferred and self.graph_variant_ids:
+            if needs_preferred and self._effective_graph_variants():
                 default = self._default_graph_variant()
                 if default and default._is_valid_candidate():
                     heal["preferred_graph_variant_id"] = default.id
@@ -4414,6 +4967,7 @@ class DashboardBlueprint(models.Model):
                     heal
                 )
             pref.sudo()._ensure_unified_groupby()
+            pref.sudo()._heal_compose_restrict_any_sibling()
             if not pref.period_line_ids:
                 # Keep existing Open/Closed month-year picks, then align rows
                 # to the active Chart Model Option date filter list.
@@ -4483,6 +5037,15 @@ class DashboardBlueprint(models.Model):
                 settings["groupbys"] = (
                     [settings["groupby"]] + self._groupby_extra_specs()
                 )
+        # Studio left card: Default Chart Model Option only (no personal gear).
+        if self.env.context.get("dashboard_studio_preview"):
+            defaults = self._default_include_scopes(variant)
+            if defaults:
+                settings["domain"] = self._merge_domains(
+                    settings["domain"],
+                    self._default_scope_domain(defaults, graph_model=graph_model),
+                )
+            return settings
         pref = self._current_pref()
         if not pref:
             defaults = self._default_include_scopes(variant)
@@ -4548,7 +5111,10 @@ class DashboardBlueprint(models.Model):
                 (self.env.ref("dashboard_engine.dashboard_user_pref_view_form").id, "form")
             ],
             "target": "new",
-            "context": {"dashboard_blueprint_key": self.key},
+            "context": {
+                "dashboard_blueprint_key": self.key,
+                "dashboard_scope_viewer_id": self.id,
+            },
         }
 
     @api.model
@@ -4647,7 +5213,7 @@ class DashboardBlueprint(models.Model):
         See docs/superpowers/specs/2026-07-28-restrict-scope-surface-matrix-design.md
         """
         self.ensure_one()
-        available = self.scope_ids.filtered(lambda s: s.mode == "restrict")
+        available = self._runtime_scopes().filtered(lambda s: s.mode == "restrict")
         if not available:
             return []
         pref = self._current_pref()
@@ -5221,7 +5787,8 @@ class DashboardBlueprint(models.Model):
         self.ensure_one()
         if settings is None:
             settings = self._effective_graph_settings()
-        domain = self._eval_domain_with_record(self.primary_action_domain, record)
+        domain_src = self._resolved_primary_action_domain_src()
+        domain = self._eval_domain_with_record(domain_src, record)
         leaf = self._primary_host_leaf(record)
         if leaf and (
             not action_model or self._domain_leaf_valid_on(action_model, leaf)
@@ -5254,9 +5821,13 @@ class DashboardBlueprint(models.Model):
             for key, value in ctx.items()
             if not (isinstance(key, str) and key.startswith("search_default_"))
         }
-        ctx.update(
-            self._eval_context_with_record(self.primary_action_context, record)
+        graph_variant = self._effective_graph_variant()
+        context_src = (
+            graph_variant.primary_action_context
+            if graph_variant
+            else self.primary_action_context
         )
+        ctx.update(self._eval_context_with_record(context_src, record))
         # Mirror graph groupbys/measure only when the opened action uses the
         # active Chart Model (option), not the blueprint's stored model.
         # Otherwise GraphView.computeReportMeasures crashes on
@@ -5332,30 +5903,71 @@ class DashboardBlueprint(models.Model):
             model_name, self._odoo_view_measure_name(measure)
         )
 
-    def _resolved_primary_action_xmlid(self):
-        """Primary action xmlid: graph-picker bundle, else module variant, else default."""
+    def _resolved_primary_action_variant(self):
+        """Winning alternate action row (by installed apps), or empty."""
         self.ensure_one()
+        ActionVariant = self.env["dashboard.blueprint.action.variant"]
+        graph_variant = self._effective_graph_variant()
+        if graph_variant:
+            for alt in graph_variant.alternate_action_ids.sorted("sequence"):
+                if self._modules_installed(alt.module_depends):
+                    return alt
+            return ActionVariant
+        for variant in self.alternate_action_ids.sorted("sequence"):
+            if self._modules_installed(variant.module_depends):
+                return variant
+        return ActionVariant
+
+    def _resolved_primary_action_xmlid(self):
+        """Primary action xmlid: option alternate → option action → blueprint fallback."""
+        self.ensure_one()
+        alt = self._resolved_primary_action_variant()
+        if alt:
+            return alt.action_xmlid
         graph_variant = self._effective_graph_variant()
         if graph_variant:
             return graph_variant.primary_action_xmlid
-        for variant in self.alternate_action_ids.sorted("sequence"):
-            if self._modules_installed(variant.module_depends):
-                return variant.action_xmlid
         return self.primary_action_xmlid
 
-    def _resolved_primary_label(self):
-        """Button text: graph-picker bundle, else scope alt, else default."""
+    def _resolved_primary_action_domain_src(self):
+        """Static extra domain string: winning alternate override, else option/blueprint."""
         self.ensure_one()
-        if self._effective_graph_variant():
-            return (
-                self._effective_primary_bundle().get("label")
+        alt = self._resolved_primary_action_variant()
+        if alt:
+            alt_domain = (alt.action_domain or "").strip() or "[]"
+            if alt_domain != "[]":
+                return alt.action_domain
+        graph_variant = self._effective_graph_variant()
+        if graph_variant:
+            return graph_variant.primary_action_domain
+        return self.primary_action_domain
+
+    def _resolved_primary_label(self):
+        """Button text: option label (+ optional scope alt), else blueprint fallback."""
+        self.ensure_one()
+        studio = self.env.context.get("dashboard_studio_preview")
+        graph_variant = self._effective_graph_variant()
+        if graph_variant:
+            default_label = (
+                graph_variant.primary_button_label
                 or self.primary_button_label
                 or _("Open Analysis")
             )
+            scope = graph_variant.primary_label_alt_scope_id
+            alt = graph_variant.primary_label_alt
+            if not scope or not alt:
+                return default_label
+            if studio:
+                return default_label if scope.default_on else alt
+            pref = self._current_pref()
+            active = scope in pref.scope_ids if pref else scope.default_on
+            return default_label if active else alt
         default_label = self.primary_button_label or _("Open Analysis")
         scope = self.primary_label_alt_scope_id
         if not scope or not self.primary_label_alt:
             return default_label
+        if studio:
+            return default_label if scope.default_on else self.primary_label_alt
         pref = self._current_pref()
         active = (
             scope in pref.scope_ids if pref else scope.default_on
@@ -5704,12 +6316,13 @@ class DashboardBlueprintSlot(models.Model):
     )
     group_ids = fields.Many2many(
         "res.groups",
-        string="Only for",
+        string="Visibility",
         compute="_compute_group_ids",
         inverse="_inverse_group_ids",
         store=True,
         readonly=False,
-        help="Leave empty to show this item to everyone.",
+        help="Only users in these groups see this menu item. "
+        "Leave empty to show it to everyone who can open the dashboard.",
     )
     module_ids = fields.Many2many(
         "ir.module.module",
@@ -5872,6 +6485,12 @@ class DashboardBlueprintSlot(models.Model):
         for rec in self:
             path_str, source = rec._resolve_slot_path_string()
             if not path_str or not source:
+                continue
+            if source not in rec.env:
+                continue
+            if not rec.env["dashboard.blueprint"]._modules_installed_static(
+                rec.module_depends
+            ):
                 continue
             host = rec.blueprint_id.host_model_name
             if not host:
@@ -6643,6 +7262,9 @@ class DashboardBlueprintActionVariant(models.Model):
     Same idea as :class:`DashboardBlueprintSlotActionVariant`, one level up:
     replaces v1's ``crm_enterprise`` vs ``report_sale_crm`` primary-button
     branches. The first variant whose apps are all installed wins.
+
+    Prefer linking to a Chart Model Option (``graph_variant_id``). Blueprint-only
+    rows (``graph_variant_id`` empty) remain as a legacy fallback.
     """
 
     _name = "dashboard.blueprint.action.variant"
@@ -6653,10 +7275,22 @@ class DashboardBlueprintActionVariant(models.Model):
     blueprint_id = fields.Many2one(
         "dashboard.blueprint", required=True, ondelete="cascade", index=True
     )
+    graph_variant_id = fields.Many2one(
+        "dashboard.blueprint.graph.variant",
+        string="Chart Model Option",
+        ondelete="cascade",
+        index=True,
+        help="When set, this alternate applies only while that chart option "
+        "is active. Leave empty for legacy blueprint-wide alternates.",
+    )
     host_model_name = fields.Char(
         related="blueprint_id.host_model_name", readonly=True
     )
-    graph_model = fields.Char(related="blueprint_id.graph_model", readonly=True)
+    graph_model = fields.Char(
+        compute="_compute_graph_model",
+        store=True,
+        readonly=True,
+    )
     sequence = fields.Integer(default=10)
     name = fields.Char(translate=True)
     module_depends = fields.Char(
@@ -6684,6 +7318,37 @@ class DashboardBlueprintActionVariant(models.Model):
             "('res_model', '=', graph_model), ('res_model', '=', False)]"
         ),
     )
+    action_domain = fields.Char(
+        string="Domain",
+        default="[]",
+        help="Optional extra domain when this alternate wins. "
+        "Leave empty (or []) to inherit the Chart Model Option "
+        "Primary Action Domain. Supports {{id}} for the host record id.",
+    )
+
+    @api.model_create_multi
+    def create(self, vals_list):
+        Variant = self.env["dashboard.blueprint.graph.variant"]
+        for vals in vals_list:
+            gid = vals.get("graph_variant_id")
+            if gid and not vals.get("blueprint_id"):
+                variant = Variant.browse(gid)
+                if variant.exists():
+                    vals["blueprint_id"] = variant.blueprint_id.id
+        return super().create(vals_list)
+
+    @api.depends(
+        "graph_variant_id",
+        "graph_variant_id.graph_model",
+        "blueprint_id",
+        "blueprint_id.graph_model",
+    )
+    def _compute_graph_model(self):
+        for rec in self:
+            if rec.graph_variant_id:
+                rec.graph_model = rec.graph_variant_id.graph_model or False
+            else:
+                rec.graph_model = rec.blueprint_id.graph_model or False
 
     @api.depends("module_depends")
     def _compute_module_ids(self):
@@ -6733,6 +7398,12 @@ class DashboardBlueprintScope(models.Model):
         "dashboard.blueprint", required=True, ondelete="cascade", index=True
     )
     graph_model = fields.Char(related="blueprint_id.graph_model", readonly=True)
+    domain_model = fields.Char(
+        string="Domain Model",
+        compute="_compute_domain_model",
+        help="Model used by the domain selector (Studio + Advanced). "
+        "Prefers the active Chart Model Option when set in context.",
+    )
     sequence = fields.Integer(default=10)
     name = fields.Char(required=True, translate=True, string="Name")
     description = fields.Char(
@@ -6758,27 +7429,200 @@ class DashboardBlueprintScope(models.Model):
         help="Include boxes are combined (union). Restrict boxes narrow "
         "the result (intersection), e.g. 'only mine'.",
     )
+    restrict_kind = fields.Selection(
+        [
+            ("mine", "Mine"),
+            ("my_team", "My team"),
+            ("unassigned", "Unassigned"),
+        ],
+        string="Kind",
+        help="On a 360 hub, restrict ticks with the same kind become one box. "
+        "Leave empty to keep this box unique. Pack Reporting menus keep "
+        "this row's own name.",
+    )
+    merge_noun = fields.Char(
+        string="Short name",
+        translate=True,
+        help="Word used when 360 merges this kind, e.g. opportunities, "
+        "sales orders, POS orders. Unused when Kind is empty.",
+    )
     domain = fields.Char(default="[]", string="Domain")
     default_on = fields.Boolean(default=True, string="Default")
     display_label = fields.Char(compute="_compute_presentation")
     display_description = fields.Char(compute="_compute_presentation")
 
     @api.depends(
+        "domain",
+        "blueprint_id",
+        "blueprint_id.graph_model",
+        "blueprint_id.host_model_id",
+        "blueprint_id.graph_variant_ids",
+        "blueprint_id.graph_variant_ids.graph_model",
+        "blueprint_id.pooled_default_graph_variant_id",
+        "blueprint_id.pooled_default_graph_variant_id.graph_model",
+        "blueprint_id.share_link_ids",
+        "blueprint_id.share_link_ids.graph_variant_ids",
+        "blueprint_id.share_link_ids.graph_variant_ids.graph_model",
+    )
+    def _compute_domain_model(self):
+        """Model for the domain selector — must match this scope's fields.
+
+        Do not blindly use the hub Default Chart Model Option: on Customer 360
+        that may be Invoice Analysis while Pipeline/Leads still use crm.lead
+        fields (``type``, ``user_id``). Prefer context (option form), then the
+        first chart/host model this domain actually applies to.
+        """
+        ctx_model = (self.env.context.get("dashboard_scope_domain_model") or "").strip()
+        for rec in self:
+            bp = rec.blueprint_id
+            candidates = []
+            if ctx_model:
+                candidates.append(ctx_model)
+            if bp:
+                if bp.graph_model:
+                    candidates.append(bp.graph_model)
+                try:
+                    variants = bp._effective_graph_variants()
+                except Exception:
+                    variants = bp.graph_variant_ids
+                for variant in variants:
+                    if variant.graph_model:
+                        candidates.append(variant.graph_model)
+                if bp.host_model_name:
+                    candidates.append(bp.host_model_name)
+            ordered = []
+            seen = set()
+            for model_name in candidates:
+                if model_name and model_name not in seen:
+                    seen.add(model_name)
+                    ordered.append(model_name)
+            chosen = False
+            for model_name in ordered:
+                if model_name in rec.env and rec._domain_applies_to_model(model_name):
+                    chosen = model_name
+                    break
+            if not chosen:
+                chosen = (
+                    ctx_model
+                    or (bp.graph_model if bp else False)
+                    or (ordered[0] if ordered else False)
+                )
+            rec.domain_model = chosen or False
+
+    @api.depends(
         "name",
         "description",
+        "mode",
+        "restrict_kind",
+        "merge_noun",
+        "sequence",
         "label_ids.sequence",
         "label_ids.name",
         "label_ids.description",
         "label_ids.module_depends",
+        "blueprint_id.share_link_ids.scope_ids.restrict_kind",
+        "blueprint_id.share_link_ids.scope_ids.merge_noun",
+        "blueprint_id.share_link_ids.scope_ids.sequence",
+        "blueprint_id.is_compose_hub",
     )
+    @api.depends_context("dashboard_scope_viewer_id")
     def _compute_presentation(self):
         for rec in self:
             presented = rec._presentation()
             rec.display_label = presented["name"]
             rec.display_description = presented["description"]
 
-    def _presentation(self):
-        """Resolve the label / help currently shown in the gear popup."""
+    def _scope_viewer_blueprint(self):
+        """Dashboard whose gear is open (360 vs pack), from RPC context."""
+        vid = self._hashable_scope_viewer_id(self.env.context.get("dashboard_scope_viewer_id"))
+        if not vid:
+            return self.env["dashboard.blueprint"]
+        viewer = self.env["dashboard.blueprint"].browse(vid)
+        return viewer if viewer.exists() else self.env["dashboard.blueprint"]
+
+    @api.model
+    def _hashable_scope_viewer_id(self, raw):
+        """Integer id only — ``depends_context`` cannot hash ``{id: N}``."""
+        if not raw:
+            return False
+        if isinstance(raw, models.BaseModel):
+            return raw[:1].id or False
+        if isinstance(raw, (list, tuple)):
+            raw = raw[0] if raw else False
+            if isinstance(raw, models.BaseModel):
+                return raw.id or False
+        if isinstance(raw, dict):
+            raw = raw.get("id") or raw.get("res_id")
+        try:
+            return int(raw)
+        except (TypeError, ValueError):
+            return False
+
+    def _with_hashable_scope_viewer_context(self):
+        raw = self.env.context.get("dashboard_scope_viewer_id")
+        vid = self._hashable_scope_viewer_id(raw)
+        if raw == vid:
+            return self
+        return self.with_context(dashboard_scope_viewer_id=vid)
+
+    @api.model
+    def search_read(self, domain=None, fields=None, offset=0, limit=None, order=None, **read_kwargs):
+        self = self._with_hashable_scope_viewer_context()
+        return super().search_read(
+            domain=domain,
+            fields=fields,
+            offset=offset,
+            limit=limit,
+            order=order,
+            **read_kwargs,
+        )
+
+    def read(self, fields=None, load="_classic_read"):
+        self = self._with_hashable_scope_viewer_context()
+        return super().read(fields, load=load)
+
+    @api.model
+    def web_search_read(self, domain, specification, offset=0, limit=None, order=None, count_limit=None):
+        self = self._with_hashable_scope_viewer_context()
+        return super().web_search_read(
+            domain,
+            specification,
+            offset=offset,
+            limit=limit,
+            order=order,
+            count_limit=count_limit,
+        )
+
+    def web_read(self, specification):
+        self = self._with_hashable_scope_viewer_context()
+        return super().web_read(specification)
+
+    @api.model
+    def _join_english_list(self, items):
+        """Join short nouns: a; a and b; a, b, and c."""
+        items = [i for i in items if i]
+        if not items:
+            return ""
+        if len(items) == 1:
+            return items[0]
+        if len(items) == 2:
+            return _("%s and %s") % (items[0], items[1])
+        return _("%s, and %s") % (", ".join(items[:-1]), items[-1])
+
+    def _merged_restrict_help(self, kind, nouns):
+        joined = self._join_english_list(nouns)
+        if not joined:
+            return ""
+        if kind == "mine":
+            return _("Only show %s assigned to you.") % joined
+        if kind == "my_team":
+            return _("Only show %s for your team.") % joined
+        if kind == "unassigned":
+            return _("Only show unassigned %s.") % joined
+        return ""
+
+    def _pack_presentation(self):
+        """Label / help from this row and optional module-aware variants."""
         self.ensure_one()
         best = self.env["dashboard.blueprint.scope.label"]
         best_score = -1
@@ -6801,6 +7645,51 @@ class DashboardBlueprintScope(models.Model):
                 (best.description if best else None) or self.description or ""
             ),
         }
+
+    def _compose_hub_merged_presentation(self, viewer):
+        """Merged 360 title/help when two or more restrict scopes share a kind."""
+        self.ensure_one()
+        kind = self.restrict_kind
+        if self.mode != "restrict" or not kind:
+            return None
+        restrict = viewer._runtime_scopes().filtered(lambda s: s.mode == "restrict")
+        siblings = restrict.filtered(lambda s: s.restrict_kind == kind)
+        if len(siblings) < 2:
+            return None
+        ordered = siblings.sorted(lambda s: (s.sequence, s.id))
+        titles = {
+            "mine": _("My Records"),
+            "my_team": _("My Team"),
+            "unassigned": _("Unassigned"),
+        }
+        nouns = []
+        seen = set()
+        for scope in ordered:
+            noun = (scope.merge_noun or "").strip()
+            key = noun.lower()
+            if noun and key not in seen:
+                seen.add(key)
+                nouns.append(noun)
+        help_txt = self._merged_restrict_help(kind, nouns)
+        return {
+            "name": titles.get(kind) or self.name,
+            "description": help_txt or self._pack_presentation()["description"],
+        }
+
+    def _apply_compose_hub_presentation(self, base):
+        """On a 360 hub, replace pack labels with the merged kind title/help."""
+        self.ensure_one()
+        viewer = self._scope_viewer_blueprint()
+        if viewer and viewer._is_compose_hub():
+            merged = self._compose_hub_merged_presentation(viewer)
+            if merged:
+                return merged
+        return base
+
+    def _presentation(self):
+        """Resolve the label / help currently shown in the gear popup."""
+        self.ensure_one()
+        return self._apply_compose_hub_presentation(self._pack_presentation())
 
     def _scope_domain(self):
         """Domain for this scope, with ``uid`` resolved to the reader."""
@@ -7146,6 +8035,11 @@ class DashboardUserPref(models.Model):
         compute="_compute_applicable_include_scope_ids",
         help="Include scopes whose domain fits the active chart model.",
     )
+    applicable_restrict_scope_ids = fields.Many2many(
+        "dashboard.blueprint.scope",
+        compute="_compute_applicable_restrict_scope_ids",
+        help="My Data scopes from this dashboard or Share Links packs.",
+    )
 
     scope_ids = fields.Many2many(
         "dashboard.blueprint.scope",
@@ -7270,7 +8164,7 @@ class DashboardUserPref(models.Model):
         help="Whether a record has to fall in any of the chosen periods "
         "(from either date row) or in all of them.",
     )
-    custom_filter = fields.Char(
+    custom_filter = fields.Text(
         default="[]",
         string="Custom Filter",
         help="Add custom rules to further narrow down the data based on "
@@ -7322,11 +8216,17 @@ class DashboardUserPref(models.Model):
         "blueprint_id.scope_ids",
         "blueprint_id.scope_ids.mode",
         "blueprint_id.scope_ids.domain",
+        "blueprint_id.is_compose_hub",
+        "blueprint_id.share_link_ids.scope_ids",
+        "blueprint_id.share_link_ids.scope_ids.mode",
+        "blueprint_id.share_link_ids.scope_ids.domain",
+        "preferred_graph_variant_id",
+        "preferred_graph_variant_id.blueprint_id.scope_ids",
         "graph_model",
     )
     def _compute_scope_block_flags(self):
         for rec in self:
-            scopes = rec.blueprint_id.scope_ids
+            scopes = rec._pref_available_scopes()
             rec.has_restrict_scope = any(s.mode == "restrict" for s in scopes)
             model = rec.graph_model or rec.blueprint_id.graph_model
             rec.has_include_scope = any(
@@ -7338,15 +8238,43 @@ class DashboardUserPref(models.Model):
         "blueprint_id.scope_ids",
         "blueprint_id.scope_ids.mode",
         "blueprint_id.scope_ids.domain",
+        "preferred_graph_variant_id",
+        "preferred_graph_variant_id.blueprint_id.scope_ids",
+        "preferred_graph_variant_id.blueprint_id.scope_ids.mode",
+        "preferred_graph_variant_id.blueprint_id.scope_ids.domain",
         "graph_model",
     )
     def _compute_applicable_include_scope_ids(self):
         for pref in self:
             model = pref.graph_model or pref.blueprint_id.graph_model
-            pref.applicable_include_scope_ids = pref.blueprint_id.scope_ids.filtered(
+            scopes = pref._pref_available_scopes()
+            pref.applicable_include_scope_ids = scopes.filtered(
                 lambda s, m=model: s.mode == "include"
                 and s._domain_applies_to_model(m)
             )
+
+    @api.depends(
+        "blueprint_id.scope_ids",
+        "blueprint_id.scope_ids.mode",
+        "blueprint_id.is_compose_hub",
+        "blueprint_id.share_link_ids.scope_ids",
+        "blueprint_id.share_link_ids.scope_ids.mode",
+        "blueprint_id.share_link_ids.scope_ids.restrict_kind",
+        "blueprint_id.share_link_ids.scope_ids.sequence",
+        "blueprint_id.scope_ids.restrict_kind",
+        "preferred_graph_variant_id",
+        "preferred_graph_variant_id.blueprint_id.scope_ids",
+        "preferred_graph_variant_id.blueprint_id.scope_ids.mode",
+    )
+    def _compute_applicable_restrict_scope_ids(self):
+        for pref in self:
+            restrict = pref._pref_available_scopes().filtered(
+                lambda s: s.mode == "restrict"
+            )
+            bp = pref.blueprint_id
+            if bp and bp._is_compose_hub():
+                restrict = bp._compose_restrict_representatives(restrict)
+            pref.applicable_restrict_scope_ids = restrict
 
     @api.depends(
         "preferred_graph_variant_id",
@@ -7573,6 +8501,7 @@ class DashboardUserPref(models.Model):
             prepared.append(vals)
         records = super().create(prepared)
         records._mirror_legacy_groupby_from_unified()
+        records._sync_compose_restrict_from_representatives()
         return records
 
     def write(self, vals):
@@ -7584,6 +8513,7 @@ class DashboardUserPref(models.Model):
         vals = dict(vals)
         unified_touched = "groupby_ids" in vals or "ordered_groupby_ids" in vals
         legacy_touched = any(k in vals for k in self._GROUPBY_LEGACY_KEYS)
+        scopes_touched = "scope_ids" in vals
 
         if legacy_touched and not unified_touched:
             res = super().write(vals)
@@ -7592,12 +8522,69 @@ class DashboardUserPref(models.Model):
                 if unified:
                     super(DashboardUserPref, rec).write(unified)
                 super(DashboardUserPref, rec).write(rec._legacy_groupby_mirror_vals())
+            if scopes_touched:
+                self._sync_compose_restrict_from_representatives()
             return res
 
         res = super().write(vals)
         if unified_touched:
             self._mirror_legacy_groupby_from_unified()
+        if scopes_touched:
+            self._sync_compose_restrict_from_representatives()
         return res
+
+    def _compose_restrict_kind_groups(self):
+        """Kind groups for this pref's compose hub (empty if not a hub)."""
+        self.ensure_one()
+        bp = self.blueprint_id
+        if not bp or not bp._is_compose_hub():
+            return {}
+        restrict = self._pref_available_scopes().filtered(lambda s: s.mode == "restrict")
+        groups, _ungrouped = bp._restrict_scopes_grouped_by_kind(restrict)
+        return {
+            kind: siblings
+            for kind, siblings in groups.items()
+            if len(siblings) > 1
+        }
+
+    def _sync_compose_restrict_from_representatives(self):
+        """Gear shows one tick per kind; store every sibling of that kind."""
+        if self.env.context.get("skip_restrict_expand"):
+            return
+        for pref in self:
+            groups = pref._compose_restrict_kind_groups()
+            if not groups:
+                continue
+            chosen = pref.scope_ids
+            final = chosen
+            for siblings in groups.values():
+                rep = siblings.sorted(lambda s: (s.sequence, s.id))[:1]
+                if chosen & rep:
+                    final |= siblings
+                else:
+                    final -= siblings
+            if final != chosen:
+                pref.with_context(skip_restrict_expand=True).sudo().write(
+                    {"scope_ids": [(6, 0, final.ids)]}
+                )
+
+    def _heal_compose_restrict_any_sibling(self):
+        """Old prefs: if any sibling of a kind is on, turn the whole kind on."""
+        if self.env.context.get("skip_restrict_expand"):
+            return
+        for pref in self:
+            groups = pref._compose_restrict_kind_groups()
+            if not groups:
+                continue
+            chosen = pref.scope_ids
+            final = chosen
+            for siblings in groups.values():
+                if chosen & siblings:
+                    final |= siblings
+            if final != chosen:
+                pref.with_context(skip_restrict_expand=True).sudo().write(
+                    {"scope_ids": [(6, 0, final.ids)]}
+                )
 
     # ------------------------------------------------------------------
     # Reading preferences back
@@ -7704,10 +8691,33 @@ class DashboardUserPref(models.Model):
                 ranges.append(list(fields.Domain.AND(leaves)))
         return ranges
 
+    def _pref_available_scopes(self):
+        """Scopes the gear may tick for this dashboard.
+
+        Compose hubs use Share Links packs (Pipeline / Leads / My Pipeline
+        live on CRM Customers, not on Customer 360). Other dashboards keep
+        local scopes plus the active Chart Model Option owner's scopes.
+        """
+        self.ensure_one()
+        bp = self.blueprint_id
+        if bp and bp._is_compose_hub():
+            return bp._runtime_scopes()
+        local = bp.scope_ids
+        variant = self.preferred_graph_variant_id
+        if not variant and bp:
+            variant = bp._default_graph_variant()
+        if (
+            variant
+            and variant.blueprint_id
+            and variant.blueprint_id != bp
+        ):
+            return local | variant.blueprint_id.scope_ids
+        return local
+
     def _scope_domains(self):
         """Included and restricting domains from the ticked boxes."""
         self.ensure_one()
-        available = self.blueprint_id.scope_ids
+        available = self._pref_available_scopes()
         chosen = self.scope_ids & available
         # Prefer the active Chart Model Option (gear pick / Default).
         graph_model = self.graph_model or self.blueprint_id.graph_model

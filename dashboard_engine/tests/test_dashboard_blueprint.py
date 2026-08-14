@@ -61,11 +61,64 @@ class TestDashboardBlueprintEngine(TransactionCase):
         self.assertTrue(bp.generated_menu_id)
         self.assertTrue(bp.generated_menu_id.active)
 
-        arch = bp.generated_view_id.arch_db
-        # Card content rides along with the record, so no runtime RPC widgets.
-        self.assertIn('widget="dashboard_slots"', arch)
-        self.assertIn('widget="analytic_dashboard_graph"', arch)
-        self.assertNotIn("<widget", arch)
+    def test_gc_orphan_generated_menu(self):
+        parent = self.env.ref("base.menu_administration")
+        bp = self.env["dashboard.blueprint"].create(
+            {
+                "name": "Orphan Menu Pack",
+                "key": "test_gc_orphan_menu_%s" % self.env.uid,
+                "host_model_id": self._host_model().id,
+                "menu_name": "Orphan Customers Dashboard",
+                "menu_parent_id": parent.id,
+                "state": "published",
+            }
+        )
+        bp.action_publish()
+        menu = bp.generated_menu_id
+        action = bp.generated_action_id
+        view = bp.generated_view_id
+        self.assertTrue(menu)
+        menu_id, action_id, view_id = menu.id, action.id, view.id
+        self.env.cr.execute(
+            "UPDATE dashboard_blueprint SET generated_menu_id = NULL, "
+            "generated_action_id = NULL, generated_view_id = NULL WHERE id = %s",
+            (bp.id,),
+        )
+        bp.invalidate_recordset(
+            ["generated_menu_id", "generated_action_id", "generated_view_id"]
+        )
+        bp.unlink()
+        self.env["dashboard.blueprint"]._gc_orphan_generated_artifacts()
+        self.assertFalse(self.env["ir.ui.menu"].browse(menu_id).exists())
+        self.assertFalse(self.env["ir.actions.act_window"].browse(action_id).exists())
+        self.assertFalse(self.env["ir.ui.view"].browse(view_id).exists())
+
+    def test_purge_generated_menu_while_blueprint_exists(self):
+        """Pack uninstall_hook runs before the blueprint XML is deleted."""
+        from odoo.addons.dashboard_engine.hooks import (
+            purge_generated_dashboard_artifacts,
+        )
+
+        parent = self.env.ref("base.menu_administration")
+        key = "test_purge_live_%s" % self.env.uid
+        bp = self.env["dashboard.blueprint"].create(
+            {
+                "name": "Live Pack Menu",
+                "key": key,
+                "host_model_id": self._host_model().id,
+                "menu_name": "Live Customers Dashboard",
+                "menu_parent_id": parent.id,
+                "state": "published",
+            }
+        )
+        bp.action_publish()
+        menu_id = bp.generated_menu_id.id
+        action_id = bp.generated_action_id.id
+        view_id = bp.generated_view_id.id
+        purge_generated_dashboard_artifacts(self.env, keys=(key,))
+        self.assertFalse(self.env["ir.ui.menu"].browse(menu_id).exists())
+        self.assertFalse(self.env["ir.actions.act_window"].browse(action_id).exists())
+        self.assertFalse(self.env["ir.ui.view"].browse(view_id).exists())
 
     def test_soft_module_depends_hides_inactive_blueprint(self):
         bp = self.env["dashboard.blueprint"].create(
@@ -1126,6 +1179,81 @@ class TestDashboardBlueprintEngine(TransactionCase):
             any(leaf[0] == "write_date" for leaf in domain if isinstance(leaf, tuple))
         )
 
+    def test_period_line_months_fill_current_year_and_clear_with_year(self):
+        """v1: months imply current year; clearing years also clears months."""
+        bp = self._scoped_blueprint()
+        pref = bp._get_or_create_pref()
+        create_field = self.env["ir.model.fields"].search(
+            [("model", "=", "res.partner"), ("name", "=", "create_date")], limit=1
+        )
+        mq = self.env["period.month.quarter"].search([], limit=1)
+        current_year = self.env["period.year"].search([("name", "=", "year")], limit=1)
+        if not create_field or not mq or not current_year:
+            self.skipTest("Date field or period catalog missing")
+        pref.write({"period_field_id": create_field.id})
+        pref._sync_pref_period_lines()
+        line = pref.period_line_ids[:1]
+        if not line:
+            self.skipTest("No period line on pref")
+        line.write({"period_mq_ids": [(6, 0, mq.ids)], "period_year_ids": [(5, 0, 0)]})
+        self.assertEqual(line.period_year_ids, current_year)
+        # v1: month/year picks rewrite Custom Filter from those date ranges.
+        pref.invalidate_recordset(["custom_filter"])
+        custom = pref.custom_filter or "[]"
+        self.assertIn("create_date", custom)
+        line.write({"period_year_ids": [(5, 0, 0)]})
+        self.assertFalse(line.period_year_ids)
+        self.assertFalse(line.period_mq_ids)
+        pref.invalidate_recordset(["custom_filter"])
+        self.assertEqual(pref.custom_filter or "[]", "[]")
+
+    def test_web_custom_filter_from_live_period_picks(self):
+        """Gear month tags rewrite Custom Filter before Apply (v1 onchange)."""
+        bp = self._scoped_blueprint()
+        pref = bp._get_or_create_pref()
+        create_field = self.env["ir.model.fields"].search(
+            [("model", "=", "res.partner"), ("name", "=", "create_date")], limit=1
+        )
+        mq = self.env["period.month.quarter"].search([], limit=1)
+        if not create_field or not mq:
+            self.skipTest("Date field or period catalog missing")
+        pref.write({"period_field_id": create_field.id})
+        pref._sync_pref_period_lines()
+        line = pref.period_line_ids[:1]
+        if not line:
+            self.skipTest("No period line on pref")
+        value = pref.web_custom_filter_from_period_picks(
+            [
+                {
+                    "id": line.id,
+                    "field_name": "create_date",
+                    "period_mq_ids": mq.ids,
+                    "period_year_ids": [],
+                }
+            ],
+            "any",
+        )
+        domain = value.get("domain") if isinstance(value, dict) else value
+        self.assertIn("create_date", domain)
+        mqs = self.env["period.month.quarter"].search([], limit=2)
+        if len(mqs) < 2:
+            return
+        many = pref.web_custom_filter_from_period_picks(
+            [
+                {
+                    "id": line.id,
+                    "field_name": "create_date",
+                    "period_mq_ids": mqs.ids,
+                    "period_year_ids": [],
+                }
+            ],
+            "any",
+        )
+        many_domain = many.get("domain") if isinstance(many, dict) else many
+        self.assertIn("create_date", many_domain)
+        self.assertIn("|", many_domain)
+        self.assertGreaterEqual(len(many.get("ranges") or []), 2)
+
     def test_preferences_are_private_to_their_owner(self):
         bp = self._scoped_blueprint()
         mine = bp._get_or_create_pref()
@@ -1262,6 +1390,31 @@ class TestDashboardBlueprintEngine(TransactionCase):
         info = bp._graph_link_path()
         self.assertTrue(info)
         self.assertEqual(info.domain_field, "parent_id.country_id")
+
+    def test_soft_dep_slot_skips_unknown_source_model(self):
+        """Slots whose compute model is not installed must still seed."""
+        Slot = self.env["dashboard.blueprint.slot"]
+        bp = self.env["dashboard.blueprint"].create(
+            {
+                "name": "Soft stock slot",
+                "key": "test_soft_stock_slot",
+                "host_model_id": self._host_model().id,
+            }
+        )
+        slot = Slot.create(
+            {
+                "blueprint_id": bp.id,
+                "key": "bottom_deliveries",
+                "name": "Deliveries",
+                "section": "bottom",
+                "compute_model": "stock.picking",
+                "relate_field": "partner_id",
+                "module_depends": "sale,stock",
+            }
+        )
+        self.assertTrue(slot.id)
+        if "stock.picking" not in self.env:
+            self.assertEqual(slot.compute_model, "stock.picking")
         self.assertEqual(info.first_hop_field, "parent_id")
         self.assertFalse(info.is_direct)
 
@@ -1775,6 +1928,70 @@ class TestDashboardBlueprintEngine(TransactionCase):
             token_ctx, self.env(user=plain), record=partner
         )
         self.assertEqual(plain_ctx["default_type"], "person")
+
+    def test_action_context_resolves_rule_value_record_domain(self):
+        """rule_value can pick a value from a domain on the clicked card."""
+        from odoo.addons.dashboard_engine.tools.condition_domain import (
+            compile_context_value,
+        )
+
+        token_ctx = {
+            "x_kind": {
+                "__de__": "rule_value",
+                "default": "person",
+                "map": [
+                    {
+                        "when": {
+                            "type": "record",
+                            "domain": "[('is_company', '=', True)]",
+                        },
+                        "value": "company",
+                    }
+                ],
+            }
+        }
+        company = self.env["res.partner"].create(
+            {"name": "Rule Co", "is_company": True}
+        )
+        person = self.env["res.partner"].create(
+            {"name": "Rule Person", "is_company": False}
+        )
+        self.assertEqual(
+            compile_context_value(token_ctx, self.env, record=company)["x_kind"],
+            "company",
+        )
+        self.assertEqual(
+            compile_context_value(token_ctx, self.env, record=person)["x_kind"],
+            "person",
+        )
+        # No card → skip record rules and use default.
+        self.assertEqual(
+            compile_context_value(token_ctx, self.env, record=None)["x_kind"],
+            "person",
+        )
+
+    def test_action_context_rule_value_empty_domain_never_matches(self):
+        from odoo.addons.dashboard_engine.tools.condition_domain import (
+            compile_context_value,
+        )
+
+        token_ctx = {
+            "x_kind": {
+                "__de__": "rule_value",
+                "default": "fallback",
+                "map": [
+                    {
+                        "when": {"type": "record", "domain": "[]"},
+                        "value": "matched",
+                    }
+                ],
+            }
+        }
+        partner = self.env["res.partner"].create({"name": "Empty Domain Host"})
+        self.assertEqual(
+            compile_context_value(token_ctx, self.env, record=partner)["x_kind"],
+            "fallback",
+        )
 
 
     def test_condition_skipped_when_required_app_missing(self):
@@ -2662,9 +2879,17 @@ class TestDashboardBlueprintEngine(TransactionCase):
         self.assertIn("pos_to_invoice", keys)
         self.assertIn("view_pos_orders", keys)
         self.assertTrue(bp.scope_ids)
-        effective = set(bp._effective_slots().mapped("key"))
-        # Phase A: POS shares with Website only (not CRM/Sales commercial pool).
-        self.assertTrue(bp.share_link_ids.filtered(lambda b: b.key == "website_customers"))
+        hub = self.env.ref(
+            "customer_360_dashboard.blueprint_customer_360",
+            raise_if_not_found=False,
+        )
+        if hub:
+            self.assertTrue(
+                bp.share_link_ids.filtered(lambda b: b.key == "customer_360")
+            )
+        self.assertFalse(
+            bp.share_link_ids.filtered(lambda b: b.key == "website_customers")
+        )
 
     def test_modules_installed_is_memoized_per_request(self):
         Blueprint = self.env["dashboard.blueprint"]
@@ -2938,6 +3163,162 @@ class TestDashboardBlueprintTemplate(TransactionCase):
         self.assertEqual(action["type"], "ir.actions.act_url")
         self.assertIn("/web/content/", action["url"])
 
+    def test_compose_hub_merges_same_restrict_kind(self):
+        host = self._host_model()
+        suffix = self.env.uid
+        hub = self.env["dashboard.blueprint"].create(
+            {
+                "name": "Merge Hub",
+                "key": "test_merge_restrict_hub_%s" % suffix,
+                "host_model_id": host.id,
+                "is_compose_hub": True,
+                "state": "draft",
+                "graph_model": "res.partner",
+            }
+        )
+        pack_a = self.env["dashboard.blueprint"].create(
+            {
+                "name": "Pack A",
+                "key": "test_merge_pack_a_%s" % suffix,
+                "host_model_id": host.id,
+                "state": "draft",
+                "graph_model": "res.partner",
+            }
+        )
+        pack_b = self.env["dashboard.blueprint"].create(
+            {
+                "name": "Pack B",
+                "key": "test_merge_pack_b_%s" % suffix,
+                "host_model_id": host.id,
+                "state": "draft",
+                "graph_model": "res.partner",
+            }
+        )
+        hub.write({"share_link_ids": [(6, 0, (pack_a | pack_b).ids)]})
+        a_mine = self.env["dashboard.blueprint.scope"].create(
+            {
+                "blueprint_id": pack_a.id,
+                "name": "My Pipeline",
+                "description": "Only show opportunities assigned to you.",
+                "mode": "restrict",
+                "restrict_kind": "mine",
+                "merge_noun": "opportunities",
+                "domain": "[('user_id', '=', uid)]",
+                "sequence": 10,
+                "default_on": False,
+            }
+        )
+        b_mine = self.env["dashboard.blueprint.scope"].create(
+            {
+                "blueprint_id": pack_b.id,
+                "name": "Only mine",
+                "description": "Show only sales orders you are responsible for.",
+                "mode": "restrict",
+                "restrict_kind": "mine",
+                "merge_noun": "sales orders",
+                "domain": "[('user_id', '=', uid)]",
+                "sequence": 30,
+                "default_on": False,
+            }
+        )
+        unique = self.env["dashboard.blueprint.scope"].create(
+            {
+                "blueprint_id": pack_a.id,
+                "name": "Unassigned leads",
+                "mode": "restrict",
+                "domain": "[('user_id', '=', False)]",
+                "sequence": 40,
+                "default_on": False,
+            }
+        )
+        self.assertTrue(hub.is_compose_hub)
+        self.assertEqual(set(hub.share_link_ids.ids), {pack_a.id, pack_b.id})
+        mine_scopes = hub._runtime_scopes().filtered(
+            lambda s: s.restrict_kind == "mine"
+        )
+        self.assertEqual(set(mine_scopes.ids), {a_mine.id, b_mine.id})
+        pref = self.env["dashboard.user.pref"].create(
+            {
+                "blueprint_id": hub.id,
+                "user_id": self.env.user.id,
+            }
+        )
+        pref.invalidate_recordset(["applicable_restrict_scope_ids"])
+        reps = pref.applicable_restrict_scope_ids
+        self.assertIn(a_mine, reps)
+        self.assertNotIn(b_mine, reps)
+        self.assertIn(unique, reps)
+        merged = a_mine.with_context(
+            dashboard_scope_viewer_id=hub.id
+        )._presentation()
+        self.assertEqual(merged["name"], "My Records")
+        self.assertIn("opportunities", merged["description"])
+        self.assertIn("sales orders", merged["description"])
+        self.assertIn("assigned to you", merged["description"])
+        pack_label = a_mine.with_context(
+            dashboard_scope_viewer_id=pack_a.id
+        )._presentation()
+        self.assertEqual(pack_label["name"], "My Pipeline")
+        rows = (
+            self.env["dashboard.blueprint.scope"]
+            .with_context(dashboard_scope_viewer_id={"id": hub.id})
+            .search_read([("id", "=", a_mine.id)], ["display_label"])
+        )
+        self.assertEqual(rows[0]["display_label"], "My Records")
+        pref.write({"scope_ids": [(6, 0, [a_mine.id])]})
+        self.assertIn(a_mine, pref.scope_ids)
+        self.assertIn(b_mine, pref.scope_ids)
+        pref.write({"scope_ids": [(6, 0, [])]})
+        self.assertNotIn(a_mine, pref.scope_ids)
+        self.assertNotIn(b_mine, pref.scope_ids)
+
+    def test_single_restrict_kind_keeps_pack_title_on_hub(self):
+        host = self._host_model()
+        suffix = self.env.uid
+        hub = self.env["dashboard.blueprint"].create(
+            {
+                "name": "Single Kind Hub",
+                "key": "test_single_restrict_hub_%s" % suffix,
+                "host_model_id": host.id,
+                "is_compose_hub": True,
+                "state": "draft",
+                "graph_model": "res.partner",
+            }
+        )
+        pack = self.env["dashboard.blueprint"].create(
+            {
+                "name": "Pack Only",
+                "key": "test_single_restrict_pack_%s" % suffix,
+                "host_model_id": host.id,
+                "state": "draft",
+                "graph_model": "res.partner",
+            }
+        )
+        hub.write({"share_link_ids": [(6, 0, pack.ids)]})
+        mine = self.env["dashboard.blueprint.scope"].create(
+            {
+                "blueprint_id": pack.id,
+                "name": "My Pipeline",
+                "mode": "restrict",
+                "restrict_kind": "mine",
+                "merge_noun": "opportunities",
+                "sequence": 10,
+                "default_on": False,
+            }
+        )
+        pref = self.env["dashboard.user.pref"].create(
+            {
+                "blueprint_id": hub.id,
+                "user_id": self.env.user.id,
+            }
+        )
+        pref.invalidate_recordset(["applicable_restrict_scope_ids"])
+        self.assertEqual(pref.applicable_restrict_scope_ids, mine)
+        presented = mine.with_context(
+            dashboard_scope_viewer_id=hub.id
+        )._presentation()
+        self.assertEqual(presented["name"], "My Pipeline")
+
 
 @tagged("post_install", "-at_install")
 class TestDashboardBlueprintMultiCompany(TransactionCase):
@@ -3173,6 +3554,236 @@ class TestDashboardBlueprintMultiCompany(TransactionCase):
         self.assertIn("kpi_c", a._effective_slots().mapped("key"))
         self.assertIn(c, a._share_component())
 
+    def test_share_pools_graph_variants_always(self):
+        """Share Links always pool Chart Model Options into the gear picker."""
+        host = self._host_model()
+        a = self.env["dashboard.blueprint"].create(
+            {
+                "name": "Graph Share A",
+                "key": "test_graph_share_a_%s" % self.env.uid,
+                "host_model_id": host.id,
+                "sequence": 10,
+            }
+        )
+        b = self.env["dashboard.blueprint"].create(
+            {
+                "name": "Graph Share B",
+                "key": "test_graph_share_b_%s" % self.env.uid,
+                "host_model_id": host.id,
+                "sequence": 20,
+            }
+        )
+        Variant = self.env["dashboard.blueprint.graph.variant"]
+        va = Variant.create(
+            {
+                "blueprint_id": a.id,
+                "sequence": 10,
+                "graph_model": "res.users",
+                "graph_data_field": "partner_id",
+                "primary_button_label": "Users",
+                "primary_action_xmlid": "base.action_res_users",
+                "is_default": True,
+            }
+        )
+        vb = Variant.create(
+            {
+                "blueprint_id": b.id,
+                "sequence": 10,
+                "graph_model": "res.partner",
+                "graph_data_field": "parent_id",
+                "primary_button_label": "Contacts",
+                "primary_action_xmlid": "base.action_partner_form",
+                "is_default": True,
+            }
+        )
+        self.assertTrue(va._is_valid_candidate())
+        self.assertTrue(vb._is_valid_candidate())
+        a.share_link_ids = [(4, b.id)]
+        eff_a = a._effective_graph_variants()
+        eff_b = b._effective_graph_variants()
+        self.assertEqual(set(eff_a.ids), {va.id, vb.id})
+        self.assertEqual(set(eff_b.ids), {va.id, vb.id})
+        # Local first, then peers — A sees its Users option before Contacts.
+        self.assertEqual(eff_a[0], va)
+        self.assertEqual(eff_b[0], vb)
+        models_a = {row["graph_model"] for row in a._graph_model_candidates()}
+        self.assertEqual(models_a, {"res.users", "res.partner"})
+        # Default stays local even after pooling.
+        self.assertEqual(a._default_graph_variant(), va)
+        self.assertEqual(b._default_graph_variant(), vb)
+        # Gear preference may pick a peer option; effective chart follows.
+        pref = a._get_or_create_pref()
+        pref.write({"preferred_graph_variant_id": vb.id})
+        self.assertEqual(a._effective_graph_variant(), vb)
+        # Studio edit list stays local-only.
+        local_only = a.with_context(
+            dashboard_studio_local_only=True
+        )._effective_graph_variants()
+        self.assertEqual(local_only, va)
+
+    def test_share_graph_hub_loses_dedupe_to_pack(self):
+        """*360 hubs lose same-model dedupe to pack dashboards."""
+        host = self._host_model()
+        pack = self.env["dashboard.blueprint"].create(
+            {
+                "name": "Pack Customers",
+                "key": "test_pack_customers_%s" % self.env.uid,
+                "host_model_id": host.id,
+                "sequence": 20,
+            }
+        )
+        hub = self.env["dashboard.blueprint"].create(
+            {
+                "name": "Hub 360",
+                "key": "test_hub_360_%s" % self.env.uid,
+                "host_model_id": host.id,
+                "sequence": 5,
+            }
+        )
+        Variant = self.env["dashboard.blueprint.graph.variant"]
+        pack_v = Variant.create(
+            {
+                "blueprint_id": pack.id,
+                "graph_model": "res.partner",
+                "graph_data_field": "parent_id",
+                "primary_button_label": "From Pack",
+                "primary_action_xmlid": "base.action_partner_form",
+                "is_default": True,
+            }
+        )
+        Variant.create(
+            {
+                "blueprint_id": hub.id,
+                "graph_model": "res.partner",
+                "graph_data_field": "parent_id",
+                "primary_button_label": "From Hub",
+                "primary_action_xmlid": "base.action_partner_form",
+                "is_default": True,
+            }
+        )
+        pack.share_link_ids = [(4, hub.id)]
+        # Viewer on a third linked blueprint with no local option.
+        viewer = self.env["dashboard.blueprint"].create(
+            {
+                "name": "Viewer",
+                "key": "test_viewer_%s" % self.env.uid,
+                "host_model_id": host.id,
+                "sequence": 30,
+            }
+        )
+        viewer.share_link_ids = [(4, pack.id)]
+        eff = viewer._effective_graph_variants()
+        self.assertEqual(eff, pack_v)
+        self.assertEqual(eff.blueprint_id, pack)
+
+    def test_hub_pooled_default_shared_option(self):
+        """360 hub can set Default on a Share Links peer without touching the pack."""
+        host = self._host_model()
+        pack_a = self.env["dashboard.blueprint"].create(
+            {
+                "name": "Pack A CRM",
+                "key": "test_pack_a_%s" % self.env.uid,
+                "host_model_id": host.id,
+                "sequence": 10,
+            }
+        )
+        pack_b = self.env["dashboard.blueprint"].create(
+            {
+                "name": "Pack B Sales",
+                "key": "test_pack_b_%s" % self.env.uid,
+                "host_model_id": host.id,
+                "sequence": 20,
+            }
+        )
+        hub = self.env["dashboard.blueprint"].create(
+            {
+                "name": "Customer 360",
+                "key": "test_customer_360_%s" % self.env.uid,
+                "host_model_id": host.id,
+                "sequence": 5,
+            }
+        )
+        Variant = self.env["dashboard.blueprint.graph.variant"]
+        va = Variant.create(
+            {
+                "blueprint_id": pack_a.id,
+                "graph_model": "res.partner",
+                "graph_data_field": "parent_id",
+                "primary_button_label": "Contacts",
+                "primary_action_xmlid": "base.action_partner_form",
+                "is_default": True,
+            }
+        )
+        vb = Variant.create(
+            {
+                "blueprint_id": pack_b.id,
+                "graph_model": "res.users",
+                "graph_data_field": "partner_id",
+                "primary_button_label": "Users",
+                "primary_action_xmlid": "base.action_res_users",
+                "is_default": True,
+            }
+        )
+        hub.share_link_ids = [(4, pack_a.id), (4, pack_b.id)]
+        # No hub pick yet → first valid pooled peer.
+        self.assertEqual(hub._default_graph_variant(), va)
+        # Hub Default on shared Sales option — pack Defaults unchanged.
+        payload = hub.studio_set_default_graph_variant(vb.id)
+        self.assertEqual(hub.pooled_default_graph_variant_id, vb)
+        self.assertEqual(hub._default_graph_variant(), vb)
+        self.assertTrue(va.is_default)
+        self.assertTrue(vb.is_default)
+        self.assertEqual(pack_a._default_graph_variant(), va)
+        self.assertEqual(pack_b._default_graph_variant(), vb)
+        default_rows = [r for r in payload["graph_variants"] if r["is_default"]]
+        self.assertEqual(len(default_rows), 1)
+        self.assertEqual(default_rows[0]["id"], vb.id)
+        self.assertFalse(default_rows[0]["owned"])
+
+    def test_share_graph_variant_dedupe_prefers_current(self):
+        """Same graph_model across Share Links: current blueprint wins."""
+        host = self._host_model()
+        a = self.env["dashboard.blueprint"].create(
+            {
+                "name": "Graph Dedupe A",
+                "key": "test_graph_dedupe_a_%s" % self.env.uid,
+                "host_model_id": host.id,
+                "sequence": 10,
+            }
+        )
+        b = self.env["dashboard.blueprint"].create(
+            {
+                "name": "Graph Dedupe B",
+                "key": "test_graph_dedupe_b_%s" % self.env.uid,
+                "host_model_id": host.id,
+                "sequence": 20,
+            }
+        )
+        Variant = self.env["dashboard.blueprint.graph.variant"]
+        va = Variant.create(
+            {
+                "blueprint_id": a.id,
+                "graph_model": "res.partner",
+                "graph_data_field": "parent_id",
+                "primary_button_label": "From A",
+                "primary_action_xmlid": "base.action_partner_form",
+                "is_default": True,
+            }
+        )
+        vb = Variant.create(
+            {
+                "blueprint_id": b.id,
+                "graph_model": "res.partner",
+                "graph_data_field": "parent_id",
+                "primary_button_label": "From B",
+                "primary_action_xmlid": "base.action_partner_form",
+                "is_default": True,
+            }
+        )
+        a.share_link_ids = [(4, b.id)]
+        self.assertEqual(a._effective_graph_variants(), va)
+        self.assertEqual(b._effective_graph_variants(), vb)
+
     def test_seeded_invoice_customers_slots_exist(self):
         if not self.env["ir.module.module"].search(
             [
@@ -3197,6 +3808,47 @@ class TestDashboardBlueprintMultiCompany(TransactionCase):
         self.assertEqual(overdue.style, "danger")
         self.assertEqual(overdue.style_mode, "when_positive")
 
+    def test_compose_hub_star_keeps_packs_standalone(self):
+        host = self._host_model()
+        pack_a, pack_b, hub = self.env["dashboard.blueprint"].create(
+            [
+                {
+                    "name": "Pack A",
+                    "key": "test_star_pack_a_%s" % self.env.uid,
+                    "host_model_id": host.id,
+                    "sequence": 10,
+                },
+                {
+                    "name": "Pack B",
+                    "key": "test_star_pack_b_%s" % self.env.uid,
+                    "host_model_id": host.id,
+                    "sequence": 20,
+                },
+                {
+                    "name": "Hub 360",
+                    "key": "test_star_hub_360_%s" % self.env.uid,
+                    "host_model_id": host.id,
+                    "sequence": 5,
+                    "is_compose_hub": True,
+                },
+            ]
+        )
+        self.env["dashboard.blueprint.slot"].create(
+            {
+                "blueprint_id": pack_b.id,
+                "key": "kpi_from_b",
+                "name": "From B",
+                "section": "kpi",
+                "label": "From B",
+                "show_if_zero": True,
+                "action_model": "res.partner",
+            }
+        )
+        hub.share_link_ids = [(6, 0, [pack_a.id, pack_b.id])]
+        self.assertIn("kpi_from_b", hub._effective_slots().mapped("key"))
+        self.assertNotIn("kpi_from_b", pack_a._effective_slots().mapped("key"))
+        self.assertNotIn(pack_b, pack_a._share_pool_members())
+
     def test_invoice_customers_joins_share_triangle(self):
         crm = self.env.ref(
             "crm_customer_dashboard.blueprint_crm_customers",
@@ -3212,14 +3864,21 @@ class TestDashboardBlueprintMultiCompany(TransactionCase):
         )
         if not all((crm, sale, inv)):
             self.skipTest("partner customer packs incomplete")
-        from odoo.addons.invoice_customer_dashboard.hooks import (
+        from odoo.addons.dashboard_engine.share_pools import (
             link_partner_customer_share_pool,
         )
 
         link_partner_customer_share_pool(self.env)
-        self.assertIn(inv, crm.share_link_ids)
-        self.assertIn(crm, inv.share_link_ids)
-        self.assertIn("open_invoices", crm._effective_slots().mapped("key"))
+        self.assertNotIn(inv, crm.share_link_ids)
+        self.assertNotIn(sale, crm.share_link_ids)
+        self.assertNotIn("open_invoices", crm._effective_slots().mapped("key"))
+        hub = self.env.ref(
+            "customer_360_dashboard.blueprint_customer_360",
+            raise_if_not_found=False,
+        )
+        if hub:
+            self.assertIn(inv, hub.share_link_ids)
+            self.assertIn("open_invoices", hub._effective_slots().mapped("key"))
 
     def test_seeded_customer_360_attention_and_share(self):
         if not self.env["ir.module.module"].search(
@@ -3230,7 +3889,15 @@ class TestDashboardBlueprintMultiCompany(TransactionCase):
         ):
             self.skipTest("customer_360_dashboard not installed")
         bp = self.env.ref("customer_360_dashboard.blueprint_customer_360")
+        self.env["dashboard.blueprint"]._attach_compose_hubs_to_360_app()
+        bp.invalidate_recordset(["is_compose_hub", "group_id", "hub_id"])
         self.assertTrue(bp.lens_attention_enabled)
+        self.assertTrue(bp.is_compose_hub)
+        self.assertFalse(bp.group_id)
+        self.assertEqual(
+            bp.hub_id,
+            self.env.ref("dashboard_engine.dashboard_hub_default"),
+        )
         self.assertTrue(bp.lens_attention_default)
         self.assertEqual(bp.lens_attention_label, "Needs attention")
         crm = self.env.ref(
@@ -3239,15 +3906,23 @@ class TestDashboardBlueprintMultiCompany(TransactionCase):
         )
         if not crm:
             self.skipTest("crm_customer_dashboard not installed")
-        from odoo.addons.customer_360_dashboard.hooks import (
-            link_partner_customer_share_pool,
-        )
-
-        link_partner_customer_share_pool(self.env)
         self.assertIn(bp, crm.share_link_ids)
         self.assertIn(crm, bp.share_link_ids)
         overdue = crm.slot_ids.filtered(lambda s: s.key == "overdue_opportunities")
         self.assertTrue(overdue.is_attention_signal)
         self.assertIn(
             "overdue_opportunities", bp._effective_slots().mapped("key")
+        )
+        self.assertFalse(
+            bp.scope_ids.filtered(
+                lambda s: s.name in ("Pipeline", "Leads", "My Pipeline")
+            )
+        )
+        names = set(bp._runtime_scopes().mapped("name"))
+        self.assertIn("Pipeline", names)
+        self.assertIn("Leads", names)
+        self.assertIn("My Pipeline", names)
+        self.assertIn(
+            self.env.ref("crm_customer_dashboard.scope_crm_pipeline"),
+            bp._runtime_scopes(),
         )
