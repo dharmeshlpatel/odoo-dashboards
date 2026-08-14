@@ -2,7 +2,7 @@
 
 **Date:** 2026-07-30  
 **Module:** `dashboard_engine`  
-**Status:** Approved — **color remap only** (layout/structure unchanged)  
+**Status:** Done (color remap). Follow-up: [2026-08-11-studio-native-form-widgets-design.md](2026-08-11-studio-native-form-widgets-design.md) for form field / tag native look.  
 **Scope:** Replace custom teal/slate accents with Odoo Enterprise primary + greys. No layout rebuild.
 
 ## Goal
