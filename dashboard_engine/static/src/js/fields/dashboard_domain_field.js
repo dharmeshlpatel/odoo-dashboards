@@ -2,6 +2,7 @@
 
 import { Component } from "@odoo/owl";
 import { DateTimeInput } from "@web/core/datetime/datetime_input";
+import { Domain } from "@web/core/domain";
 import { DomainSelector } from "@web/core/domain_selector/domain_selector";
 import { _t } from "@web/core/l10n/translation";
 import {
@@ -11,6 +12,8 @@ import {
     serializeDateTime,
 } from "@web/core/l10n/dates";
 import { registry } from "@web/core/registry";
+import { connector } from "@web/core/tree_editor/condition_tree";
+import { constructTreeFromDomain } from "@web/core/tree_editor/construct_tree_from_domain";
 import { TreeEditor } from "@web/core/tree_editor/tree_editor";
 import { getValueEditorInfo } from "@web/core/tree_editor/tree_editor_value_editors";
 import { DomainField, domainField } from "@web/views/fields/domain/domain_field";
@@ -178,6 +181,9 @@ export class DashboardTreeEditor extends TreeEditor {
 
     getValueEditorInfo(node) {
         const fieldDef = this.getFieldDef(node.path);
+        if (!fieldDef) {
+            return getValueEditorInfo({ type: "char", name: node.path || "id" }, node.operator);
+        }
         return getDashboardValueEditorInfo(fieldDef, node.operator);
     }
 
@@ -198,11 +204,87 @@ export class DashboardTreeEditor extends TreeEditor {
     }
 }
 
+const DATE_PERIODS = new Set(["day", "week", "month", "quarter", "year"]);
+
+/** Virtual ``x_<date>_<period>`` tags — Group By only, never domain leaves. */
+export function isDashboardDatePeriodFieldName(name) {
+    if (!name || typeof name !== "string" || !name.startsWith("x_")) {
+        return false;
+    }
+    const sep = name.lastIndexOf("_");
+    if (sep <= 2) {
+        return false;
+    }
+    return DATE_PERIODS.has(name.slice(sep + 1));
+}
+
+function dashboardDomainFieldFilter(fieldDef) {
+    const base =
+        fieldDef?.searchable &&
+        fieldDef.type !== "json" &&
+        fieldDef.type !== "separator";
+    if (!base) {
+        return false;
+    }
+    // Prefer technical name when present (properties / enriched defs).
+    if (fieldDef.name && isDashboardDatePeriodFieldName(fieldDef.name)) {
+        return false;
+    }
+    // Label pattern from ir.model.fields: "Created on > Month".
+    const label = fieldDef.string || "";
+    if (/\s>\s(Day|Week|Month|Quarter|Year)$/i.test(label)) {
+        return false;
+    }
+    return true;
+}
+
 export class DashboardDomainSelector extends DomainSelector {
     static components = {
         ...DomainSelector.components,
         TreeEditor: DashboardTreeEditor,
     };
+
+    async onPropsUpdated(p) {
+        // Never use stock "in range" virtual operators here. Two month/year
+        // ranges (even count) rewrite to an empty tree → "Match all records".
+        let domain;
+        try {
+            domain = new Domain(p.domain);
+        } catch {
+            this.tree = connector("&");
+            this.showArchivedCheckbox = false;
+            this.includeArchived = false;
+            return;
+        }
+        try {
+            this.tree = constructTreeFromDomain(domain, false);
+            const { fieldDef: activeFieldDef } = await this.fieldService.loadFieldInfo(
+                p.resModel,
+                "active"
+            );
+            this.showArchivedCheckbox = this.getShowArchivedCheckBox(
+                Boolean(activeFieldDef),
+                p
+            );
+            this.includeArchived = false;
+        } catch {
+            this.tree = connector("&");
+            this.showArchivedCheckbox = false;
+            this.includeArchived = false;
+        }
+    }
+
+    getPathEditorInfo(resModel, defaultCondition) {
+        const info = super.getPathEditorInfo(resModel, defaultCondition);
+        const extractProps = info.extractProps;
+        return {
+            ...info,
+            extractProps: (params) => ({
+                ...extractProps(params),
+                filter: dashboardDomainFieldFilter,
+            }),
+        };
+    }
 }
 
 export class DashboardDomainField extends DomainField {
@@ -210,6 +292,15 @@ export class DashboardDomainField extends DomainField {
         ...DomainField.components,
         DomainSelector: DashboardDomainSelector,
     };
+
+    async loadFacets(props = this.props) {
+        try {
+            await super.loadFacets(props);
+        } catch {
+            this.state.facets = [];
+            this.state.folded = false;
+        }
+    }
 }
 
 export const dashboardDomainField = {
