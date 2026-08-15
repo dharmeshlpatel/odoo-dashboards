@@ -1397,7 +1397,7 @@
                                                         <div>
                                                             <h5 class="o_ds_variant_step_title">Chart</h5>
                                                             <p class="o_ds_variant_step_help">
-                                                                Default Group By, Measure, and Measured As for this chart model.
+                                                                Default Group By and Measure for this chart model.
                                                             </p>
                                                         </div>
                                                     </div>
@@ -1425,19 +1425,7 @@
                                                                 <t t-foreach="variantMeasureCatalog(variant.id)" t-as="mf" t-key="mf.id">
                                                                     <option t-att-value="mf.id"
                                                                             t-att-selected="variant.default_measure_field_id === mf.id"
-                                                                            t-esc="mf.string + ' (' + mf.name + ')'"/>
-                                                                </t>
-                                                            </select>
-                                                        </label>
-                                                        <label class="o_ds_field mb-0 o_ds_variant_metric_agg">
-                                                            <span>Measured As</span>
-                                                            <select class="form-select"
-                                                                    t-att-disabled="!variant.default_measure_field_id"
-                                                                    t-on-change="(ev) => this.onVariantMeasureAggregatorChange(variant.id, ev)">
-                                                                <t t-foreach="MEASURE_AGGREGATORS" t-as="agg" t-key="agg.value">
-                                                                    <option t-att-value="agg.value"
-                                                                            t-att-selected="(variant.default_measure_aggregator || 'sum') === agg.value"
-                                                                            t-esc="agg.label"/>
+                                                                            t-esc="mf.string"/>
                                                                 </t>
                                                             </select>
                                                         </label>
@@ -2418,7 +2406,7 @@
                                                                 <t t-foreach="state.catalogs.slotMeasureFields" t-as="f" t-key="'am'+f.name">
                                                                     <option t-att-value="f.name"
                                                                             t-att-selected="state.editor.amount_measure_field === f.name"
-                                                                            t-esc="f.string + ' (' + f.name + ')'"/>
+                                                                            t-esc="f.string"/>
                                                                 </t>
                                                             </select>
                                                         </label>

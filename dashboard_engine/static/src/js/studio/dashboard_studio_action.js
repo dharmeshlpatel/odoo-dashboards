@@ -1499,20 +1499,21 @@ export class DashboardStudioAction extends Component {
         let graphFieldRecords = [];
         let graphMeasureFields = [];
         if (graphModel) {
-            const [groupbyRows, measureMeta] = await Promise.all([
+            const [groupbyRows, measureMeta, dateMeta] = await Promise.all([
                 this.orm.call(
                     "dashboard.blueprint",
                     "studio_groupby_fields",
                     [[bp], graphModel]
                 ),
-                this.orm.searchRead(
-                    "ir.model.fields",
-                    [
-                        ["model", "=", graphModel],
-                        ["ttype", "in", ["integer", "float", "monetary", "date", "datetime"]],
-                    ],
-                    ["id", "name", "field_description", "ttype", "store"],
-                    { order: "field_description", limit: 500 }
+                this.orm.call(
+                    "dashboard.blueprint",
+                    "studio_graph_measure_fields",
+                    [[bp], graphModel]
+                ),
+                this.orm.call(
+                    "dashboard.blueprint",
+                    "studio_model_fields",
+                    [[bp], graphModel, ["date", "datetime"], true]
                 ),
             ]);
             graphFieldRecords = (groupbyRows || []).map((f) => ({
@@ -1523,27 +1524,19 @@ export class DashboardStudioAction extends Component {
                 ttype: f.ttype,
                 store: f.store,
             }));
-            graphMeasureFields = (measureMeta || [])
-                .filter(
-                    (f) =>
-                        f.store !== false &&
-                        ["integer", "float", "monetary"].includes(f.ttype)
-                )
-                .map((f) => ({
-                    id: f.id,
-                    name: f.name,
-                    string: f.field_description || f.name,
-                    field_description: f.field_description,
-                    ttype: f.ttype,
-                    store: f.store,
-                }));
-            graphDateFields = (measureMeta || [])
-                .filter((f) => f.ttype === "date" || f.ttype === "datetime")
-                .map((f) => ({
-                    id: f.id,
-                    name: f.name,
-                    string: f.field_description || f.name,
-                }));
+            graphMeasureFields = (measureMeta || []).map((f) => ({
+                id: f.id,
+                name: f.name,
+                string: f.string || f.field_description || f.name,
+                field_description: f.field_description,
+                ttype: f.ttype,
+                store: f.store,
+            }));
+            graphDateFields = (dateMeta || []).map((f) => ({
+                id: f.id,
+                name: f.name,
+                string: f.string || f.name,
+            }));
         }
         this.state.catalogs.hostFields = hostFields;
         this.state.catalogs.graphFields = graphFields;
@@ -2058,8 +2051,8 @@ export class DashboardStudioAction extends Component {
         try {
             this.state.catalogs.slotMeasureFields = await this.orm.call(
                 "dashboard.blueprint",
-                "studio_model_fields",
-                [[this.blueprintId], model, ["integer", "float", "monetary"], true]
+                "studio_graph_measure_fields",
+                [[this.blueprintId], model]
             );
         } catch {
             this.state.catalogs.slotMeasureFields = [];
@@ -4619,11 +4612,9 @@ export class DashboardStudioAction extends Component {
                 [this.blueprintId],
                 model,
             ]),
-            this.orm.call("dashboard.blueprint", "studio_model_fields", [
+            this.orm.call("dashboard.blueprint", "studio_graph_measure_fields", [
                 [this.blueprintId],
                 model,
-                ["integer", "float", "monetary"],
-                true,
             ]),
             this.orm.call("dashboard.blueprint", "studio_model_fields", [
                 [this.blueprintId],
@@ -4777,10 +4768,12 @@ export class DashboardStudioAction extends Component {
             return;
         }
         await this.updateGraphVariant(variantId, "default_measure_field_id", id);
-        const variant = (this.state.payload.graph_variants || []).find((v) => v.id === variantId);
-        if (variant && !variant.default_measure_aggregator) {
-            await this.updateGraphVariant(variantId, "default_measure_aggregator", "sum");
-        }
+        const mf = (this.variantMeasureCatalog(variantId) || []).find((row) => row.id === id);
+        await this.updateGraphVariant(
+            variantId,
+            "default_measure_aggregator",
+            mf?.aggregator || "sum"
+        );
     }
 
     async onVariantMeasureAggregatorChange(variantId, ev) {
