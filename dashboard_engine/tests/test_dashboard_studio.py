@@ -261,6 +261,19 @@ class TestDashboardStudio(TransactionCase):
         )
         self.assertTrue(all(row.get("store") for row in stored))
 
+        measures = bp.studio_graph_measure_fields(
+            bp.graph_model or bp.host_model_name
+        )
+        self.assertTrue(isinstance(measures, list))
+        self.assertFalse(any(row["name"] == "id" for row in measures))
+        if "crm.lead" in self.env:
+            lead_measures = {
+                row["name"] for row in bp.studio_graph_measure_fields("crm.lead")
+            }
+            self.assertNotIn("id", lead_measures)
+            self.assertNotIn("color", lead_measures)
+            self.assertIn("expected_revenue", lead_measures)
+
     @staticmethod
     def _menu_publish_would_confirm(payload):
         """Mirror Studio OWL publish() confirm gate (payload contract)."""

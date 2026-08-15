@@ -267,6 +267,31 @@ class IrModelFields(models.Model):
                 allowed |= field
         return allowed
 
+    @api.model
+    def dashboard_graph_measure_fields(self, model_name):
+        """``ir.model.fields`` allowed in Measure pickers.
+
+        Same list as the model's standard graph Measures menu: numeric fields
+        with an aggregator, minus ``id`` and graph-arch ``invisible`` fields.
+        Count (``__count``) is not a field — leave the picker empty to count.
+        """
+        if not model_name or model_name not in self.env:
+            return self.browse()
+        names = self.env["base.dashboard.config.mixin"]._graph_measure_names_for_model(
+            model_name
+        )
+        if not names:
+            return self.browse()
+        return self.search([("model", "=", model_name), ("name", "in", names)])
+
+    def dashboard_graph_aggregator(self):
+        """Aggregator the standard graph uses for this field (usually sum)."""
+        self.ensure_one()
+        if not self.model or self.model not in self.env:
+            return "sum"
+        meta = self.env[self.model].fields_get([self.name]).get(self.name) or {}
+        return meta.get("aggregator") or "sum"
+
     def _get_date_field_values_from_field(self, model):
         """
         Build virtual dashboard date-period fields for all

@@ -107,6 +107,11 @@ class DashboardBlueprintGraphVariant(models.Model):
         "ir.model.fields",
         compute="_compute_graph_groupby_allowed_field_ids",
     )
+    graph_measure_allowed_field_ids = fields.Many2many(
+        "ir.model.fields",
+        compute="_compute_graph_measure_allowed_field_ids",
+        help="Measure picker domain: same as the graph Measures menu.",
+    )
     default_groupby_ids = fields.Many2many(
         "ir.model.fields",
         "dashboard_graph_variant_groupby_rel",
@@ -123,11 +128,7 @@ class DashboardBlueprintGraphVariant(models.Model):
         "ir.model.fields",
         string="Default Measure",
         ondelete="set null",
-        domain=(
-            "[('model_id', '=', graph_model_id), "
-            "('ttype', 'in', ['integer', 'float', 'monetary']), "
-            "('store', '=', True)]"
-        ),
+        domain="[('id', 'in', graph_measure_allowed_field_ids)]",
     )
     default_measure_aggregator = fields.Selection(
         VARIANT_AGGREGATORS,
@@ -271,6 +272,17 @@ class DashboardBlueprintGraphVariant(models.Model):
                 Fields.dashboard_groupby_allowed_fields(model)
             )
 
+    @api.depends("graph_model", "graph_model_id")
+    def _compute_graph_measure_allowed_field_ids(self):
+        Fields = self.env["ir.model.fields"]
+        for rec in self:
+            model = rec.graph_model or (
+                rec.graph_model_id.model if rec.graph_model_id else False
+            )
+            rec.graph_measure_allowed_field_ids = (
+                Fields.dashboard_graph_measure_fields(model)
+            )
+
     @api.depends(
         "graph_model",
         "blueprint_id.scope_ids",
@@ -290,6 +302,16 @@ class DashboardBlueprintGraphVariant(models.Model):
             rec.default_ordered_groupby_ids = compute_many2many_order(
                 rec.default_groupby_ids.ids,
                 rec.default_ordered_groupby_ids,
+            )
+
+    @api.onchange("default_measure_field_id")
+    def _onchange_default_measure_field_id(self):
+        for rec in self:
+            if not rec.default_measure_field_id:
+                rec.default_measure_aggregator = False
+                continue
+            rec.default_measure_aggregator = (
+                rec.default_measure_field_id.dashboard_graph_aggregator()
             )
 
     def _clear_stale_default_fields(self):

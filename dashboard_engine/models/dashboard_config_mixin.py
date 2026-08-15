@@ -380,30 +380,48 @@ class BaseDashboardConfigMixin(models.AbstractModel):
 
         :return: dict mapping measure name to measure definition
         """
-        # Collect graph-view specific attributes for fields
-        field_attrs = {}
-        # Resolve the model used for graph data
-        graph_model = self.env[self._get_graph_model()]
-        # Fetch full field definitions from the graph model
-        fields = graph_model.fields_get()
-        # Retrieve the graph view architecture (if defined)
-        graph_view = (graph_model.get_views([(False, "graph")])["views"]).get(
-            "graph"
+        graph_model_name = self._get_graph_model()
+        fields = self.env[graph_model_name].fields_get()
+        return self._compute_report_measures(
+            fields, self._graph_field_attrs_for_model(graph_model_name)
         )
+
+    @api.model
+    def _graph_field_attrs_for_model(self, model_name):
+        """Graph-view field attrs (invisible / label) for ``model_name``."""
+        field_attrs = {}
+        if not model_name or model_name not in self.env:
+            return field_attrs
+        graph_model = self.env[model_name]
+        try:
+            graph_view = (graph_model.get_views([(False, "graph")])["views"]).get(
+                "graph"
+            )
+        except Exception:
+            graph_view = None
         if graph_view and graph_view.get("arch"):
-            # Parse XML architecture to inspect field-level attributes
             view_tree = etree.fromstring(graph_view["arch"], None)
-            # Extract visibility and label overrides from graph view fields
             for field_element in view_tree.xpath(".//field"):
                 field_name = field_element.get("name")
-                if field_name:
-                    field_attrs[field_name] = {
-                        "isInvisible": field_element.get("invisible") == "1",
-                        "string": field_element.get("string"),
-                    }
-        # Compute final graph measures using field metadata and view rules
-        measures = self._compute_report_measures(fields, field_attrs)
-        return measures
+                if not field_name:
+                    continue
+                inv = field_element.get("invisible")
+                field_attrs[field_name] = {
+                    "isInvisible": inv in ("1", "True", "true"),
+                    "string": field_element.get("string"),
+                }
+        return field_attrs
+
+    @api.model
+    def _graph_measure_names_for_model(self, model_name):
+        """Measure field names like the standard graph Measures menu (no Count)."""
+        if not model_name or model_name not in self.env:
+            return []
+        fields = self.env[model_name].fields_get()
+        measures = self._compute_report_measures(
+            fields, self._graph_field_attrs_for_model(model_name)
+        )
+        return [name for name in measures if name != "__count"]
 
     def _get_currency_id(self):
         """

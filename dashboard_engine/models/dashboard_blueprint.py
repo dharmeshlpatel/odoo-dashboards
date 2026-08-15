@@ -2745,6 +2745,31 @@ class DashboardBlueprint(models.Model):
             for field in allowed
         ]
 
+    def studio_graph_measure_fields(self, model_name=None):
+        """Measure catalog — same list as the model's graph Measures menu."""
+        self.ensure_one()
+        model_name = model_name or self.graph_model or self.host_model_name
+        Fields = self.env["ir.model.fields"]
+        allowed = Fields.dashboard_graph_measure_fields(model_name)
+        meta_all = {}
+        if model_name in self.env and allowed:
+            meta_all = self.env[model_name].fields_get(allowed.mapped("name"))
+        rows = [
+            {
+                "id": field.id,
+                "name": field.name,
+                "string": field.field_description or field.name,
+                "field_description": field.field_description,
+                "ttype": field.ttype,
+                "store": field.store,
+                "aggregator": (meta_all.get(field.name) or {}).get("aggregator")
+                or "sum",
+            }
+            for field in allowed
+        ]
+        rows.sort(key=lambda r: (r["string"] or "").lower())
+        return rows
+
     def studio_search_menus(self, term="", limit=20):
         """Parent menu picker for Setup."""
         self.ensure_one()
@@ -6257,7 +6282,13 @@ class DashboardBlueprintSlot(models.Model):
         store=True,
         readonly=False,
         ondelete="set null",
+        domain="[('id', 'in', amount_measure_allowed_field_ids)]",
         help="Optional monetary total displayed beside the figure.",
+    )
+    amount_measure_allowed_field_ids = fields.Many2many(
+        "ir.model.fields",
+        compute="_compute_amount_measure_allowed_field_ids",
+        help="Amount Shown picker: same as the source model's graph Measures menu.",
     )
     amount_aggregator_type = fields.Selection(
         AGGREGATORS,
@@ -6409,6 +6440,17 @@ class DashboardBlueprintSlot(models.Model):
             rec.amount_aggregator = "%s:%s" % (
                 rec.amount_measure_field_id.name,
                 rec.amount_aggregator_type or "sum",
+            )
+
+    @api.depends("compute_model", "compute_model_id")
+    def _compute_amount_measure_allowed_field_ids(self):
+        Fields = self.env["ir.model.fields"]
+        for rec in self:
+            model = rec.compute_model or (
+                rec.compute_model_id.model if rec.compute_model_id else False
+            )
+            rec.amount_measure_allowed_field_ids = (
+                Fields.dashboard_graph_measure_fields(model)
             )
 
     @api.depends("count_field", "host_model_name")
@@ -8051,8 +8093,14 @@ class DashboardUserPref(models.Model):
         "ir.model.fields",
         string="Measures",
         ondelete="cascade",
+        domain="[('id', 'in', measure_allowed_field_ids)]",
         help="Select the value that the graph should calculate and display "
-        "(such as count or expected revenue). Leave empty to count records.",
+        "(such as Count or expected revenue). Count is the empty choice.",
+    )
+    measure_allowed_field_ids = fields.Many2many(
+        "ir.model.fields",
+        compute="_compute_measure_allowed_field_ids",
+        help="Measure picker domain: same as the graph Measures menu.",
     )
     measure_aggregator = fields.Selection(
         AGGREGATORS,
@@ -8327,6 +8375,24 @@ class DashboardUserPref(models.Model):
                 model
             )
 
+    @api.depends(
+        "graph_model",
+        "graph_model_id",
+        "preferred_graph_variant_id",
+        "blueprint_id.graph_model",
+    )
+    def _compute_measure_allowed_field_ids(self):
+        Fields = self.env["ir.model.fields"]
+        for rec in self:
+            model = (
+                rec.graph_model
+                or (rec.graph_model_id.model if rec.graph_model_id else False)
+                or rec.blueprint_id.graph_model
+            )
+            rec.measure_allowed_field_ids = Fields.dashboard_graph_measure_fields(
+                model
+            )
+
     @api.onchange("groupby_ids")
     def _onchange_groupby_ids(self):
         for rec in self:
@@ -8334,6 +8400,14 @@ class DashboardUserPref(models.Model):
                 rec.groupby_ids.ids, rec.ordered_groupby_ids
             )
             rec._apply_legacy_groupby_mirror_on_cache()
+
+    @api.onchange("measure_field_id")
+    def _onchange_measure_field_id(self):
+        for rec in self:
+            if not rec.measure_field_id:
+                rec.measure_aggregator = False
+                continue
+            rec.measure_aggregator = rec.measure_field_id.dashboard_graph_aggregator()
 
     def _parse_ordered_ids(self, order_char, records):
         """Preserve user tag order from a comma-separated id list."""
