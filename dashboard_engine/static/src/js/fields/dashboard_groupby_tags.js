@@ -30,6 +30,15 @@ const GRANULARITY_LABELS = {
  * selection list — that was the gear-form UncaughtPromise TypeError.
  */
 export class DashboardGroupbyTagsField extends Many2ManyOrderedTagsField {
+    getTagProps(record) {
+        const props = super.getTagProps(record);
+        const label = record.data?.field_description;
+        if (label) {
+            props.text = label;
+        }
+        return props;
+    }
+
     get tags() {
         const tags = super.tags;
         if (!Array.isArray(tags) || !tags.length) {
@@ -92,7 +101,7 @@ export const dashboardGroupbyTagsField = {
                 ? stock(fieldInfo || { options: {} })
                 : [{ name: "display_name", type: "char" }];
         // char — never selection — see class docstring.
-        return [...(base || []), { name: "ttype", type: "char" }];
+        return [...(base || []), { name: "ttype", type: "char" }, { name: "field_description", type: "char" }];
     },
 };
 

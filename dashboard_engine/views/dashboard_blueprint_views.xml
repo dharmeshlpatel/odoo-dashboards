@@ -114,7 +114,7 @@
                                         </div>
                                         <div class="mt16">
                                             <field name="allowed_graph_variant_ids" invisible="1"/>
-                                            <field name="preferred_graph_variant_id" nolabel="1" options="{'no_create': True, 'no_open': True}" domain="[('id', 'in', allowed_graph_variant_ids)]" placeholder="Dashboard default"/>
+                                            <field name="preferred_graph_variant_id" nolabel="1" widget="dashboard_many2one" options="{'no_create': True, 'no_open': True}" domain="[('id', 'in', allowed_graph_variant_ids)]" placeholder="Dashboard default"/>
                                         </div>
                                     </div>
                                 </div>
@@ -132,7 +132,7 @@
                                         </div>
                                         <div class="mt16">
                                             <field name="groupby_allowed_field_ids" invisible="1"/>
-                                            <field name="groupby_ids" nolabel="1" widget="dashboard_groupby_tags" options="{'no_create': True}" domain="[('id', 'in', groupby_allowed_field_ids)]"/>
+                                            <field name="groupby_ids" nolabel="1" widget="dashboard_groupby_tags" options="{'no_create': True}" context="{'hide_model': True}" domain="[('id', 'in', groupby_allowed_field_ids)]"/>
                                         </div>
                                     </div>
                                 </div>
@@ -142,12 +142,12 @@
                                         <div class="o_dashboard_engine_subsection_title">Measures</div>
                                         <div class="text-muted">
                                             Choose what number the chart shows — for
-                                            example how many records, or expected revenue.
-                                            Leave empty to count records.
+                                            example Count, or expected revenue.
                                         </div>
                                         <div class="mt16">
-                                            <field name="measure_field_id" nolabel="1" options="{'no_create': True}" domain="[('model_id', '=', graph_model_id),                                                             ('ttype', 'in', ['integer', 'float', 'monetary']),                                                             ('store', '=', True)]"/>
-                                            <field name="measure_aggregator" invisible="not measure_field_id"/>
+                                            <field name="measure_allowed_field_ids" invisible="1"/>
+                                            <field name="measure_field_id" nolabel="1" widget="dashboard_measure_many2one" options="{'no_create': True, 'no_open': True}" context="{'hide_model': True}" domain="[('id', 'in', measure_allowed_field_ids)]"/>
+                                            <field name="measure_aggregator" invisible="1"/>
                                         </div>
                                     </div>
                                 </div>
@@ -358,7 +358,8 @@
                                     <field name="value_mode" string="Shows"/>
                                     <field name="compute_model_id" options="{'no_create': True}" domain="[('id', 'in', parent.host_link_model_ids)]" string="Source Model"/>
                                     <field name="relate_field" widget="dashboard_relation_path" options="{'model': 'compute_model', 'follow_relations': True}" placeholder="Link to Host (or leave empty)" string="Link to Host"/>
-                                    <field name="amount_measure_field_id" invisible="value_mode == 'count'" required="value_mode in ('amount', 'count_amount')" options="{'no_create': True}" domain="[('model_id', '=', compute_model_id),                                                     ('ttype', 'in', ['integer', 'float', 'monetary']),                                                     ('store', '=', True)]" string="Amount Shown"/>
+                                    <field name="amount_measure_allowed_field_ids" column_invisible="1"/>
+                                    <field name="amount_measure_field_id" invisible="value_mode == 'count'" required="value_mode in ('amount', 'count_amount')" options="{'no_create': True}" domain="[('id', 'in', amount_measure_allowed_field_ids)]" string="Amount Shown"/>
                                     <field name="condition_ids" optional="show" widget="many2many_tags" options="{'no_create_edit': False}" domain="[('model', '=', compute_model)]" string="Conditions"/>
                                     <field name="action_id" options="{'no_create': True}" domain="['|', '|', '|',                                                     ('res_model', '=', action_model),                                                     ('res_model', '=', compute_model),                                                     ('res_model', '=', host_model_name),                                                     ('res_model', '=', False)]" string="Action"/>
                                     <field name="action_context" widget="dashboard_context_kv" string="When Opened" optional="hide"/>
@@ -391,7 +392,8 @@
                                             <field name="section" invisible="1"/>
                                             <field name="compute_model_id" string="Source Model" options="{'no_create': True}" domain="[('id', 'in', parent.host_link_model_ids)]"/>
                                             <field name="relate_field" string="Link to Host" widget="dashboard_relation_path" options="{'model': 'compute_model', 'follow_relations': True}"/>
-                                            <field name="amount_measure_field_id" string="Amount Shown" invisible="value_mode == 'count'" options="{'no_create': True}" domain="[('model_id', '=', compute_model_id),                               ('ttype', 'in', ['integer', 'float', 'monetary']),                               ('store', '=', True)]"/>
+                                            <field name="amount_measure_allowed_field_ids" column_invisible="1"/>
+                                    <field name="amount_measure_field_id" string="Amount Shown" invisible="value_mode == 'count'" options="{'no_create': True}" domain="[('id', 'in', amount_measure_allowed_field_ids)]"/>
                                             <field name="amount_aggregator_type" string="Amount As" invisible="value_mode == 'count' or not amount_measure_field_id"/>
                                             <field name="compute_domain" string="Domain" widget="dashboard_domain" options="{'model': 'compute_model', 'in_dialog': True, 'allow_expressions': True}"/>
                                             <field name="condition_ids" string="Conditions" widget="many2many_tags" options="{'no_create_edit': False}" domain="[('model', '=', compute_model)]"/>
@@ -437,7 +439,8 @@
                                     <field name="icon" string="Icon"/>
                                     <field name="compute_model_id" invisible="not ui_number_from_related" options="{'no_create': True}" domain="[('id', 'in', parent.host_link_model_ids)]" string="Source Model"/>
                                     <field name="relate_field" invisible="not ui_number_from_related" widget="dashboard_relation_path" options="{'model': 'compute_model', 'follow_relations': True}" placeholder="Link to Host (or leave empty)" string="Link to Host"/>
-                                    <field name="amount_measure_field_id" invisible="not ui_number_from_related" options="{'no_create': True}" domain="[('model_id', '=', compute_model_id),                                                     ('ttype', 'in', ['integer', 'float', 'monetary']),                                                     ('store', '=', True)]" string="Amount Shown"/>
+                                    <field name="amount_measure_allowed_field_ids" column_invisible="1"/>
+                                    <field name="amount_measure_field_id" invisible="not ui_number_from_related" options="{'no_create': True}" domain="[('id', 'in', amount_measure_allowed_field_ids)]" string="Amount Shown"/>
                                     <field name="count_field_id" invisible="not ui_number_from_host" options="{'no_create': True}" domain="[('model', '=', host_model_name),                                                     ('ttype', 'in', ['integer', 'float', 'monetary'])]" string="Count Field"/>
                                     <field name="amount_field_id" invisible="not ui_number_from_host" options="{'no_create': True}" domain="[('model', '=', host_model_name),                                                     ('ttype', 'in', ['integer', 'float', 'monetary'])]" string="Amount Field"/>
                                     <field name="condition_ids" optional="show" widget="many2many_tags" options="{'no_create_edit': False}" domain="[('model', '=', compute_model)]" string="Conditions"/>
@@ -475,7 +478,8 @@
                                             <field name="value_mode" invisible="1"/>
                                             <field name="compute_model_id" string="Source Model" options="{'no_create': True}" domain="[('id', 'in', parent.host_link_model_ids)]"/>
                                             <field name="relate_field" string="Link to Host" widget="dashboard_relation_path" options="{'model': 'compute_model', 'follow_relations': True}" invisible="not ui_number_from_related"/>
-                                            <field name="amount_measure_field_id" string="Amount Shown" invisible="not ui_number_from_related" options="{'no_create': True}" domain="[('model_id', '=', compute_model_id),                               ('ttype', 'in', ['integer', 'float', 'monetary']),                               ('store', '=', True)]"/>
+                                            <field name="amount_measure_allowed_field_ids" column_invisible="1"/>
+                                    <field name="amount_measure_field_id" string="Amount Shown" invisible="not ui_number_from_related" options="{'no_create': True}" domain="[('id', 'in', amount_measure_allowed_field_ids)]"/>
                                             <field name="amount_aggregator_type" string="Amount As" invisible="not ui_number_from_related or not amount_measure_field_id"/>
                                             <field name="count_field_id" string="Count Field" invisible="not ui_number_from_host" options="{'no_create': True}" domain="[('model', '=', host_model_name),                               ('ttype', 'in', ['integer', 'float', 'monetary'])]"/>
                                             <field name="amount_field_id" string="Amount Field" invisible="not ui_number_from_host" options="{'no_create': True}" domain="[('model', '=', host_model_name),                               ('ttype', 'in', ['integer', 'float', 'monetary'])]"/>
@@ -523,7 +527,8 @@
                                     <field name="icon" string="Icon"/>
                                     <field name="compute_model_id" invisible="not ui_number_from_related" options="{'no_create': True}" domain="[('id', 'in', parent.host_link_model_ids)]" string="Source Model"/>
                                     <field name="relate_field" invisible="not ui_number_from_related" widget="dashboard_relation_path" options="{'model': 'compute_model', 'follow_relations': True}" placeholder="Link to Host (or leave empty)" string="Link to Host"/>
-                                    <field name="amount_measure_field_id" invisible="not ui_number_from_related" options="{'no_create': True}" domain="[('model_id', '=', compute_model_id),                                                     ('ttype', 'in', ['integer', 'float', 'monetary']),                                                     ('store', '=', True)]" string="Amount Shown"/>
+                                    <field name="amount_measure_allowed_field_ids" column_invisible="1"/>
+                                    <field name="amount_measure_field_id" invisible="not ui_number_from_related" options="{'no_create': True}" domain="[('id', 'in', amount_measure_allowed_field_ids)]" string="Amount Shown"/>
                                     <field name="count_field_id" invisible="not ui_number_from_host" options="{'no_create': True}" domain="[('model', '=', host_model_name),                                                     ('ttype', 'in', ['integer', 'float', 'monetary'])]" string="Count Field"/>
                                     <field name="amount_field_id" invisible="not ui_number_from_host" options="{'no_create': True}" domain="[('model', '=', host_model_name),                                                     ('ttype', 'in', ['integer', 'float', 'monetary'])]" string="Amount Field"/>
                                     <field name="condition_ids" optional="show" widget="many2many_tags" options="{'no_create_edit': False}" domain="[('model', '=', compute_model)]" string="Conditions"/>
@@ -555,7 +560,8 @@
                                             <field name="value_mode" invisible="1"/>
                                             <field name="compute_model_id" string="Source Model" options="{'no_create': True}" domain="[('id', 'in', parent.host_link_model_ids)]"/>
                                             <field name="relate_field" string="Link to Host" widget="dashboard_relation_path" options="{'model': 'compute_model', 'follow_relations': True}" invisible="not ui_number_from_related"/>
-                                            <field name="amount_measure_field_id" string="Amount Shown" invisible="not ui_number_from_related" options="{'no_create': True}" domain="[('model_id', '=', compute_model_id),                               ('ttype', 'in', ['integer', 'float', 'monetary']),                               ('store', '=', True)]"/>
+                                            <field name="amount_measure_allowed_field_ids" column_invisible="1"/>
+                                    <field name="amount_measure_field_id" string="Amount Shown" invisible="not ui_number_from_related" options="{'no_create': True}" domain="[('id', 'in', amount_measure_allowed_field_ids)]"/>
                                             <field name="amount_aggregator_type" string="Amount As" invisible="not ui_number_from_related or not amount_measure_field_id"/>
                                             <field name="count_field_id" string="Count Field" invisible="not ui_number_from_host" options="{'no_create': True}" domain="[('model', '=', host_model_name),                               ('ttype', 'in', ['integer', 'float', 'monetary'])]"/>
                                             <field name="amount_field_id" string="Amount Field" invisible="not ui_number_from_host" options="{'no_create': True}" domain="[('model', '=', host_model_name),                               ('ttype', 'in', ['integer', 'float', 'monetary'])]"/>
@@ -820,7 +826,7 @@
                                         <list editable="bottom" open_form_view="1">
                                             <field name="sequence" widget="handle"/>
                                             <field name="is_default" string="Default"/>
-                                            <field name="graph_model_id" string="Chart Model" options="{'no_create': True}" domain="[('id', 'in', parent.host_link_model_ids)]"/>
+                                            <field name="graph_model_id" string="Chart Model" widget="dashboard_many2one" options="{'no_create': True}" domain="[('id', 'in', parent.host_link_model_ids)]"/>
                                             <field name="graph_model" column_invisible="1"/>
                                             <field name="graph_data_field" string="Link to Host" widget="dashboard_relation_path" options="{'model': 'graph_model', 'follow_relations': True}" placeholder="Drill into related records until this card’s model"/>
                                             <field name="primary_button_label" string="Primary Button"/>
@@ -828,10 +834,11 @@
                                             <field name="primary_action_xmlid" column_invisible="1"/>
                                             <field name="primary_action_context" optional="hide" column_invisible="1"/>
                                             <field name="graph_groupby_allowed_field_ids" column_invisible="1"/>
+                                            <field name="graph_measure_allowed_field_ids" column_invisible="1"/>
                                             <field name="applicable_include_scope_ids" column_invisible="1"/>
                                             <field name="default_ordered_groupby_ids" column_invisible="1"/>
-                                            <field name="default_groupby_ids" widget="dashboard_groupby_tags" options="{'no_create': True}" context="{'dashboard_hide_date_period_fields': False}" domain="[('id', 'in', graph_groupby_allowed_field_ids)]" string="Group By" column_invisible="1"/>
-                                            <field name="default_measure_field_id" options="{'no_create': True}" domain="[('model_id', '=', graph_model_id),                                                                     ('ttype', 'in', ['integer', 'float', 'monetary']),                                                                     ('store', '=', True)]" string="Measure" column_invisible="1"/>
+                                            <field name="default_groupby_ids" widget="dashboard_groupby_tags" options="{'no_create': True}" context="{'dashboard_hide_date_period_fields': False, 'hide_model': True}" domain="[('id', 'in', graph_groupby_allowed_field_ids)]" string="Group By" column_invisible="1"/>
+                                            <field name="default_measure_field_id" widget="dashboard_measure_many2one" options="{'no_create': True, 'no_open': True}" context="{'hide_model': True}" domain="[('id', 'in', graph_measure_allowed_field_ids)]" string="Measure" column_invisible="1"/>
                                             <field name="default_measure_aggregator" string="Measured As" column_invisible="1"/>
                                             <field name="default_scope_ids" widget="many2many_tags" options="{'no_create': True}" domain="[('id', 'in', applicable_include_scope_ids)]" string="Data to Include" column_invisible="1"/>
                                             <field name="scope_warning" string="Scope Warning" optional="show" placeholder="Warning if all Include scopes off" column_invisible="1"/>
@@ -843,7 +850,7 @@
                                             <group>
                                                 <group string="Chart">
                                                     <field name="is_default" string="Default"/>
-                                                    <field name="graph_model_id" string="Chart Model" options="{'no_create': True}" domain="[('id', 'in', parent.host_link_model_ids)]"/>
+                                                    <field name="graph_model_id" string="Chart Model" widget="dashboard_many2one" options="{'no_create': True}" domain="[('id', 'in', parent.host_link_model_ids)]"/>
                                                     <field name="graph_model" invisible="1"/>
                                                     <field name="graph_data_field" string="Link to Host" widget="dashboard_relation_path" options="{'model': 'graph_model', 'follow_relations': True}" placeholder="Drill into related records until this card’s model"/>
                                                     <field name="primary_button_label" string="Primary Button"/>
@@ -912,11 +919,12 @@
                                             <group>
                                                 <group string="Chart Defaults">
                                                     <field name="graph_groupby_allowed_field_ids" invisible="1"/>
+                                                    <field name="graph_measure_allowed_field_ids" invisible="1"/>
                                                     <field name="applicable_include_scope_ids" invisible="1"/>
                                                     <field name="default_ordered_groupby_ids" invisible="1"/>
-                                                    <field name="default_groupby_ids" string="Group By" widget="dashboard_groupby_tags" options="{'no_create': True}" context="{'dashboard_hide_date_period_fields': False}" domain="[('id', 'in', graph_groupby_allowed_field_ids)]"/>
-                                                    <field name="default_measure_field_id" string="Measure" options="{'no_create': True}" domain="[('model_id', '=', graph_model_id),                               ('ttype', 'in', ['integer', 'float', 'monetary']),                               ('store', '=', True)]"/>
-                                                    <field name="default_measure_aggregator" string="Measured As" invisible="not default_measure_field_id"/>
+                                                    <field name="default_groupby_ids" string="Group By" widget="dashboard_groupby_tags" options="{'no_create': True}" context="{'dashboard_hide_date_period_fields': False, 'hide_model': True}" domain="[('id', 'in', graph_groupby_allowed_field_ids)]"/>
+                                                    <field name="default_measure_field_id" string="Measure" widget="dashboard_measure_many2one" options="{'no_create': True, 'no_open': True}" context="{'hide_model': True}" domain="[('id', 'in', graph_measure_allowed_field_ids)]"/>
+                                                    <field name="default_measure_aggregator" string="Measured As" invisible="1"/>
                                                 </group>
                                                 <group/>
                                             </group>
@@ -963,21 +971,21 @@
                                                         <list editable="bottom" open_form_view="1">
                                                             <field name="sequence" widget="handle"/>
                                                             <field name="label" string="Label"/>
-                                                            <field name="field_id" string="Date Field" options="{'no_create': True}" domain="[('model_id', '=', parent.graph_model_id),                                       ('ttype', 'in', ['date', 'datetime'])]"/>
+                                                            <field name="field_id" string="Date Field" widget="dashboard_many2one" options="{'no_create': True}" domain="[('model_id', '=', parent.graph_model_id),                                       ('ttype', 'in', ['date', 'datetime'])]"/>
                                                             <field name="field_name" column_invisible="1"/>
-                                                            <field name="default_period_mq_ids" string="Default Months / Quarters" widget="many2many_tags" options="{'no_create': True}" optional="show"/>
-                                                            <field name="default_period_year_ids" string="Default Years" widget="many2many_tags" options="{'no_create': True}" optional="show"/>
+                                                            <field name="default_period_mq_ids" string="Default Months / Quarters" widget="dashboard_many2many_tags" options="{'no_create': True}" optional="show"/>
+                                                            <field name="default_period_year_ids" string="Default Years" widget="dashboard_many2many_tags" options="{'no_create': True}" optional="show"/>
                                                         </list>
                                                         <form string="Date Field">
                                                             <group>
                                                                 <group>
                                                                     <field name="label" string="Label"/>
-                                                                    <field name="field_id" string="Date Field" options="{'no_create': True}" domain="[('model_id', '=', parent.graph_model_id),                                               ('ttype', 'in', ['date', 'datetime'])]"/>
+                                                                    <field name="field_id" string="Date Field" widget="dashboard_many2one" options="{'no_create': True}" domain="[('model_id', '=', parent.graph_model_id),                                               ('ttype', 'in', ['date', 'datetime'])]"/>
                                                                     <field name="field_name" invisible="1"/>
                                                                 </group>
                                                                 <group>
-                                                                    <field name="default_period_mq_ids" string="Default Months / Quarters" widget="many2many_tags" options="{'no_create': True}"/>
-                                                                    <field name="default_period_year_ids" string="Default Years" widget="many2many_tags" options="{'no_create': True}"/>
+                                                                    <field name="default_period_mq_ids" string="Default Months / Quarters" widget="dashboard_many2many_tags" options="{'no_create': True}"/>
+                                                                    <field name="default_period_year_ids" string="Default Years" widget="dashboard_many2many_tags" options="{'no_create': True}"/>
                                                                 </group>
                                                             </group>
                                                         </form>
