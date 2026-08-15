@@ -5,6 +5,7 @@ import {
     many2ManyTagsField,
     Many2ManyTagsField,
 } from "@web/views/fields/many2many_tags/many2many_tags_field";
+import { DashboardMany2XAutocomplete } from "@dashboard_engine/js/fields/dashboard_no_search_more";
 
 /**
  * Many2ManyOrderedTagsField
@@ -22,6 +23,10 @@ import {
  */
 export class Many2ManyOrderedTagsField extends Many2ManyTagsField {
     static template = "dashboard_engine.Many2ManyOrderedTagsField";
+    static components = {
+        ...Many2ManyTagsField.components,
+        Many2XAutocomplete: DashboardMany2XAutocomplete,
+    };
     static props = {
         ...Many2ManyTagsField.props,
         separator: { type: [String, Boolean], optional: true },

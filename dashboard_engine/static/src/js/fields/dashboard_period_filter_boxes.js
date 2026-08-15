@@ -6,7 +6,7 @@ import { _t } from "@web/core/l10n/translation";
 import { registry } from "@web/core/registry";
 import { useService } from "@web/core/utils/hooks";
 import { useRecordObserver } from "@web/model/relational_model/utils";
-import { Many2ManyTagsField } from "@web/views/fields/many2many_tags/many2many_tags_field";
+import { DashboardMany2ManyTagsField } from "@dashboard_engine/js/fields/dashboard_no_search_more";
 import { standardFieldProps } from "@web/views/fields/standard_field_props";
 
 function customFilterFromPeriodPayload(raw) {
@@ -73,7 +73,7 @@ function x2mIds(value) {
  */
 export class DashboardPeriodFilterBoxesField extends Component {
     static template = "dashboard_engine.DashboardPeriodFilterBoxesField";
-    static components = { Many2ManyTagsField };
+    static components = { Many2ManyTagsField: DashboardMany2ManyTagsField };
     static props = {
         ...standardFieldProps,
         relatedFields: { type: Object, optional: true },

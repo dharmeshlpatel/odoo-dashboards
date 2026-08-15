@@ -17,8 +17,10 @@
  */
 
 import { CheckBox } from "@web/core/checkbox/checkbox";
-import { RecordSelector } from "@web/core/record_selectors/record_selector";
-import { MultiRecordSelector } from "@web/core/record_selectors/multi_record_selector";
+import {
+    DashboardRecordSelector as RecordSelector,
+    DashboardMultiRecordSelector as MultiRecordSelector,
+} from "@dashboard_engine/js/fields/dashboard_no_search_more";
 
 export { CheckBox, RecordSelector, MultiRecordSelector };
 
